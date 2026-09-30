@@ -101,16 +101,19 @@ paths:
       summary: Generación y aprobación de carga de ruta
       description: '`accion=generar` (permiso `carga_ruta:generar`) crea un plan en `borrador` con `cantidad_sugerida
         = min(demanda predicha, stock disponible)`; 400 `CARGA_VIGENTE_EXISTENTE` si ya hay una carga
-        vigente para la ruta y fecha. `accion=aprobar|rechazar` (permiso `carga_ruta:aprobar`) opera sobre
+        vigente para la ruta y fecha. `accion=enviar` (permiso `carga_ruta:generar`) pasa un `borrador`
+        a `pendiente_aprobacion`. `accion=aprobar|rechazar` (permiso `carga_ruta:aprobar`) opera sobre
         `carga_id`: aprobar reserva stock y registra el kardex (400 `CANTIDAD_EXCEDE_STOCK` si una cantidad
         excede el disponible); rechazar exige `motivo_rechazo` y libera las reservas existentes.'
       operationId: gestionar_carga_api_v1_routes_load_plans_post
+      security:
+      - HTTPBearer: []
       requestBody:
+        required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/LoadPlanRequest'
-        required: true
       responses:
         '200':
           description: Successful Response
@@ -124,8 +127,43 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - Routes
+      summary: Carga vigente de una ruta y fecha
+      description: Requiere `carga_ruta:generar` o `carga_ruta:aprobar`. Devuelve la carga vigente (borrador,
+        pendiente o aprobada) o 404 `CARGA_NO_ENCONTRADA`.
+      operationId: obtener_carga_vigente_api_v1_routes_load_plans_get
       security:
       - HTTPBearer: []
+      parameters:
+      - name: ruta_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Ruta Id
+      - name: fecha_operacion
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date
+          title: Fecha Operacion
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoadPlanResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/inventory:
     get:
       tags:
@@ -258,6 +296,248 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/ml/metrics:
+    get:
+      tags:
+      - ML
+      summary: Consulta de precisión y degradación
+      description: Requiere permiso `ml:metricas:leer`. Si se omite `modelo_id` se usa el modelo en producción
+        (400 `SIN_MODELO_PRODUCTIVO` si no hay). `resumen` = periodo más reciente de `serie`; `peores_productos`
+        = top por MAPE del último periodo en el rango. 422 si `desde` > `hasta`.
+      operationId: consultar_metricas_api_v1_ml_metrics_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: desde
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date
+          title: Desde
+      - name: hasta
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date
+          title: Hasta
+      - name: modelo_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Modelo Id
+      - name: tipo_evaluacion
+        in: query
+        required: false
+        schema:
+          $ref: '#/components/schemas/TipoEvaluacion'
+          default: produccion
+      - name: producto_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Producto Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricsResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/ml/models/retrain:
+    post:
+      tags:
+      - ML
+      summary: Disparo de reentrenamiento
+      description: Requiere permiso `ml:reentrenar` (403 `PERMISO_DENEGADO` en caso contrario, sin crear
+        job). Encola un job asíncrono y responde con `job_id` y estado `en_cola`; el candidato solo se
+        promueve si mejora al modelo en producción. 400 `REENTRENAMIENTO_EN_CURSO` si ya hay uno activo.
+      operationId: reentrenar_api_v1_ml_models_retrain_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RetrainRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RetrainResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/v1/ml/models:
+    get:
+      tags:
+      - ML
+      summary: Historial de modelos
+      description: Requiere permiso `ml:metricas:leer`. Más reciente primero (máx. 20).
+      operationId: listar_modelos_api_v1_ml_models_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelList'
+      security:
+      - HTTPBearer: []
+  /api/v1/ml/jobs/{job_id}:
+    get:
+      tags:
+      - ML
+      summary: Estado de un job asíncrono
+      description: Requiere permiso `ml:metricas:leer`. Muestra el progreso del reentrenamiento.
+      operationId: estado_job_api_v1_ml_jobs__job_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Job Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobStatus'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/ml/config:
+    get:
+      tags:
+      - ML
+      summary: Umbral de degradación vigente
+      description: Requiere permiso `ml:metricas:leer`. Lee `ml.mape_umbral` y periodos.
+      operationId: obtener_config_api_v1_ml_config_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MlConfig'
+      security:
+      - HTTPBearer: []
+    put:
+      tags:
+      - ML
+      summary: Guardar umbral de degradación
+      description: Requiere permiso `ml:reentrenar`. Actualiza `parametros_sistema` (ADR-08).
+      operationId: guardar_config_api_v1_ml_config_put
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MlConfig'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MlConfig'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/v1/alerts:
+    get:
+      tags:
+      - Alerts
+      summary: Bandeja de alertas
+      description: Requiere permiso `alertas:leer`. Críticas primero, luego las más recientes.
+      operationId: listar_alertas_api_v1_alerts_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: estado
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/EstadoAlerta'
+          - type: 'null'
+          default: abierta
+          title: Estado
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 20
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertList'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/catalog/routes:
+    get:
+      tags:
+      - Catalog
+      summary: Rutas activas
+      description: Cualquier usuario autenticado. Alimenta el filtro de ruta del dashboard.
+      operationId: listar_rutas_api_v1_catalog_routes_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/RouteItem'
+                type: array
+                title: Response Listar Rutas Api V1 Catalog Routes Get
+      security:
+      - HTTPBearer: []
   /health:
     get:
       tags:
@@ -295,6 +575,68 @@ components:
       - producto_id
       - cantidad_aprobada
       title: AjusteCarga
+    AlertItem:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        tipo:
+          $ref: '#/components/schemas/TipoAlerta'
+        severidad:
+          $ref: '#/components/schemas/Severidad'
+        mensaje:
+          type: string
+          title: Mensaje
+        estado:
+          $ref: '#/components/schemas/EstadoAlerta'
+        producto_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Producto Id
+        modelo_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Modelo Id
+        creada_en:
+          type: string
+          format: date-time
+          title: Creada En
+      type: object
+      required:
+      - id
+      - tipo
+      - severidad
+      - mensaje
+      - estado
+      - creada_en
+      title: AlertItem
+    AlertList:
+      properties:
+        total:
+          type: integer
+          title: Total
+        alertas:
+          items:
+            $ref: '#/components/schemas/AlertItem'
+          type: array
+          title: Alertas
+      type: object
+      required:
+      - total
+      - alertas
+      title: AlertList
+    Algoritmo:
+      type: string
+      enum:
+      - sklearn
+      - xgboost
+      - lstm
+      title: Algoritmo
     Body_upload_excel_api_v1_etl_upload_excel_post:
       properties:
         file:
@@ -327,6 +669,38 @@ components:
       - TIPOS_INVALIDOS
       - DATOS_INVALIDOS
       title: CodigoErrorEtl
+    Degradacion:
+      properties:
+        umbral_mape:
+          type: number
+          title: Umbral Mape
+        periodos_consecutivos_requeridos:
+          type: integer
+          title: Periodos Consecutivos Requeridos
+        periodos_consecutivos_actuales:
+          type: integer
+          title: Periodos Consecutivos Actuales
+        requiere_reentrenamiento:
+          type: boolean
+          title: Requiere Reentrenamiento
+        ultimo_reentrenamiento:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Ultimo Reentrenamiento
+        ultimo_reentrenamiento_resultado:
+          anyOf:
+          - $ref: '#/components/schemas/EstadoModelo'
+          - type: 'null'
+          description: Estado final del candidato del último reentrenamiento
+      type: object
+      required:
+      - umbral_mape
+      - periodos_consecutivos_requeridos
+      - periodos_consecutivos_actuales
+      - requiere_reentrenamiento
+      title: Degradacion
     DemandModelInfo:
       properties:
         id:
@@ -475,6 +849,13 @@ components:
       - mensaje
       title: ErrorFila
       description: Error de validación localizado por fila/columna (fila = número de fila en Excel).
+    EstadoAlerta:
+      type: string
+      enum:
+      - abierta
+      - reconocida
+      - resuelta
+      title: EstadoAlerta
     EstadoCarga:
       type: string
       enum:
@@ -484,6 +865,22 @@ components:
       - rechazada
       - despachada
       title: EstadoCarga
+    EstadoJob:
+      type: string
+      enum:
+      - en_cola
+      - en_ejecucion
+      - completado
+      - fallido
+      title: EstadoJob
+    EstadoModelo:
+      type: string
+      enum:
+      - candidato
+      - produccion
+      - archivado
+      - descartado
+      title: EstadoModelo
     EtlResult:
       properties:
         lote_id:
@@ -554,6 +951,55 @@ components:
           title: Detail
       type: object
       title: HTTPValidationError
+    JobStatus:
+      properties:
+        job_id:
+          type: string
+          format: uuid
+          title: Job Id
+        tipo:
+          $ref: '#/components/schemas/TipoJob'
+        estado:
+          $ref: '#/components/schemas/EstadoJob'
+        parametros:
+          additionalProperties: true
+          type: object
+          title: Parametros
+        resultado_modelo_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Resultado Modelo Id
+        solicitado_en:
+          type: string
+          format: date-time
+          title: Solicitado En
+        iniciado_en:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Iniciado En
+        finalizado_en:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Finalizado En
+        error:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error
+      type: object
+      required:
+      - job_id
+      - tipo
+      - estado
+      - parametros
+      - solicitado_en
+      title: JobStatus
     KardexEntry:
       properties:
         id:
@@ -634,6 +1080,11 @@ components:
         sku:
           type: string
           title: Sku
+        producto_nombre:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Producto Nombre
         cantidad_predicha:
           type: string
           pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
@@ -672,6 +1123,7 @@ components:
           type: string
           enum:
           - generar
+          - enviar
           - aprobar
           - rechazar
           title: Accion
@@ -695,7 +1147,7 @@ components:
             format: uuid
           - type: 'null'
           title: Carga Id
-          description: Obligatorio si accion=aprobar|rechazar
+          description: Obligatorio si accion=enviar|aprobar|rechazar
         ajustes:
           anyOf:
           - items:
@@ -774,12 +1226,219 @@ components:
       - email
       - password
       title: LoginRequest
+    MetricPoint:
+      properties:
+        periodo_desde:
+          type: string
+          format: date
+          title: Periodo Desde
+        periodo_hasta:
+          type: string
+          format: date
+          title: Periodo Hasta
+        mae:
+          type: number
+          title: Mae
+        rmse:
+          type: number
+          title: Rmse
+        mape:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Mape
+        n_muestras:
+          type: integer
+          title: N Muestras
+        supera_umbral:
+          type: boolean
+          title: Supera Umbral
+          default: false
+      type: object
+      required:
+      - periodo_desde
+      - periodo_hasta
+      - mae
+      - rmse
+      - n_muestras
+      title: MetricPoint
+    MetricsResponse:
+      properties:
+        modelo_id:
+          type: string
+          format: uuid
+          title: Modelo Id
+        modelo:
+          $ref: '#/components/schemas/ModeloInfo'
+        resumen:
+          $ref: '#/components/schemas/ResumenMetricas'
+        serie:
+          items:
+            $ref: '#/components/schemas/MetricPoint'
+          type: array
+          title: Serie
+        peores_productos:
+          items:
+            $ref: '#/components/schemas/PeorProducto'
+          type: array
+          title: Peores Productos
+        degradacion:
+          $ref: '#/components/schemas/Degradacion'
+      type: object
+      required:
+      - modelo_id
+      - modelo
+      - resumen
+      - serie
+      - degradacion
+      title: MetricsResponse
+    MlConfig:
+      properties:
+        umbral_mape:
+          type: number
+          maximum: 1000.0
+          exclusiveMinimum: 0.0
+          title: Umbral Mape
+        periodos_consecutivos:
+          type: integer
+          maximum: 52.0
+          minimum: 1.0
+          title: Periodos Consecutivos
+      type: object
+      required:
+      - umbral_mape
+      - periodos_consecutivos
+      title: MlConfig
+    ModelList:
+      properties:
+        modelos:
+          items:
+            $ref: '#/components/schemas/ModeloResumen'
+          type: array
+          title: Modelos
+      type: object
+      required:
+      - modelos
+      title: ModelList
+    ModeloInfo:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        nombre:
+          type: string
+          title: Nombre
+        algoritmo:
+          $ref: '#/components/schemas/Algoritmo'
+        version:
+          type: string
+          title: Version
+        estado:
+          $ref: '#/components/schemas/EstadoModelo'
+      type: object
+      required:
+      - id
+      - nombre
+      - algoritmo
+      - version
+      - estado
+      title: ModeloInfo
+    ModeloResumen:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        version:
+          type: string
+          title: Version
+        algoritmo:
+          $ref: '#/components/schemas/Algoritmo'
+        estado:
+          $ref: '#/components/schemas/EstadoModelo'
+        motivo_entrenamiento:
+          $ref: '#/components/schemas/MotivoEntrenamiento'
+        entrenado_en:
+          type: string
+          format: date-time
+          title: Entrenado En
+        promovido_en:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Promovido En
+        mape_holdout:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Mape Holdout
+      type: object
+      required:
+      - id
+      - version
+      - algoritmo
+      - estado
+      - motivo_entrenamiento
+      - entrenado_en
+      title: ModeloResumen
     ModoCarga:
       type: string
       enum:
       - estricto
       - parcial
       title: ModoCarga
+    MotivoEntrenamiento:
+      type: string
+      enum:
+      - programado
+      - manual
+      - degradacion
+      title: MotivoEntrenamiento
+    PeorProducto:
+      properties:
+        producto_id:
+          type: string
+          format: uuid
+          title: Producto Id
+        sku:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Sku
+        nombre:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Nombre
+        mae:
+          type: number
+          title: Mae
+        rmse:
+          type: number
+          title: Rmse
+        mape:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Mape
+        tendencia:
+          anyOf:
+          - type: string
+            enum:
+            - sube
+            - baja
+            - estable
+          - type: 'null'
+          title: Tendencia
+          description: MAPE del último periodo frente al anterior
+      type: object
+      required:
+      - producto_id
+      - mae
+      - rmse
+      title: PeorProducto
     RangoFechas:
       properties:
         desde:
@@ -803,6 +1462,110 @@ components:
       - ajuste
       - etl
       title: ReferenciaTipo
+    ResumenMetricas:
+      properties:
+        mae:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Mae
+        rmse:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Rmse
+        mape:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Mape
+      type: object
+      title: ResumenMetricas
+      description: Valores del periodo más reciente de la serie (KPI del panel).
+    RetrainRequest:
+      properties:
+        algoritmos:
+          items:
+            $ref: '#/components/schemas/Algoritmo'
+          type: array
+          minItems: 1
+          title: Algoritmos
+        motivo:
+          $ref: '#/components/schemas/MotivoEntrenamiento'
+        ventana_desde:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Ventana Desde
+        ventana_hasta:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Ventana Hasta
+        promover_automaticamente:
+          type: boolean
+          title: Promover Automaticamente
+          description: Promueve si el candidato mejora el MAPE del modelo en producción
+          default: true
+      type: object
+      required:
+      - algoritmos
+      - motivo
+      title: RetrainRequest
+    RetrainResponse:
+      properties:
+        job_id:
+          type: string
+          format: uuid
+          title: Job Id
+        estado:
+          type: string
+          enum:
+          - en_cola
+          - en_ejecucion
+          title: Estado
+        solicitado_en:
+          type: string
+          format: date-time
+          title: Solicitado En
+      type: object
+      required:
+      - job_id
+      - estado
+      - solicitado_en
+      title: RetrainResponse
+    RouteItem:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        codigo:
+          type: string
+          title: Codigo
+        nombre:
+          type: string
+          title: Nombre
+        zona:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Zona
+      type: object
+      required:
+      - id
+      - codigo
+      - nombre
+      title: RouteItem
+    Severidad:
+      type: string
+      enum:
+      - info
+      - advertencia
+      - critica
+      title: Severidad
     StockItem:
       properties:
         producto_id:
@@ -868,6 +1631,28 @@ components:
       - limit
       - offset
       title: StockPage
+    TipoAlerta:
+      type: string
+      enum:
+      - stock_bajo
+      - quiebre_proyectado
+      - mape_umbral
+      - etl_error
+      title: TipoAlerta
+    TipoEvaluacion:
+      type: string
+      enum:
+      - holdout
+      - backtest
+      - produccion
+      title: TipoEvaluacion
+    TipoJob:
+      type: string
+      enum:
+      - reentrenamiento
+      - evaluacion_produccion
+      - pronostico_nocturno
+      title: TipoJob
     TipoMovimiento:
       type: string
       enum:

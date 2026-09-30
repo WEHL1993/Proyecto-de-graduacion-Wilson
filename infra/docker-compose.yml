@@ -50,7 +50,11 @@ services:
       ML_ARTIFACTS_DIR: /app/ml_artifacts
       DATA_DIR: /app/data
     # Hot reload en desarrollo: el código se monta sobre la imagen.
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    # Aplica migraciones y seeds (idempotentes) antes de servir; el worker espera a este healthcheck.
+    command: >
+      sh -c "alembic upgrade head
+      && python -m app.db.seeds.seed_rbac
+      && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
     ports:
       - "8000:8000"
     volumes:
@@ -62,7 +66,54 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 15s
+      start_period: 40s
+    networks:
+      - ds-net
+
+  # Worker Predictivo (ADR-04): evalúa MAPE en producción y ejecuta reentrenamientos de jobs_ml.
+  worker:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    image: ds-predictive-backend:dev
+    container_name: ds-worker
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ds_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ds_password}
+      POSTGRES_DB: ${POSTGRES_DB:-ds_predictive}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-cambiar-en-produccion-local}
+      ENVIRONMENT: ${ENVIRONMENT:-local}
+      ML_ARTIFACTS_DIR: /app/ml_artifacts
+      DATA_DIR: /app/data
+      WORKER_POLL_SEGUNDOS: ${WORKER_POLL_SEGUNDOS:-15}
+      WORKER_EVALUACION_INTERVALO_SEGUNDOS: ${WORKER_EVALUACION_INTERVALO_SEGUNDOS:-21600}
+    command: python -m app.workers.main
+    volumes:
+      - ../backend:/app
+      - ml_artifacts:/app/ml_artifacts
+      - ../data:/app/data
+    networks:
+      - ds-net
+
+  # SPA React servida por nginx; /api se reenvía al backend (mismo origen, sin CORS).
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    image: ds-predictive-frontend:dev
+    container_name: ds-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_PORT:-5173}:80"
     networks:
       - ds-net
 

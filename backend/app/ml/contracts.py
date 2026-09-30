@@ -14,7 +14,8 @@ import pandas as pd
 from sqlalchemy.orm import Session
 
 from app.domain.enums import TipoEvaluacion
-from app.ml.evaluation.metrics import Metricas
+from app.ml.evaluation.metrics import MAPE_MAXIMO, Metricas
+from app.ml.evaluation.metrics import calcular_metricas as _calcular_metricas
 
 if TYPE_CHECKING:
     from app.domain.models.ml import ModeloML
@@ -91,6 +92,14 @@ class Predictor(Protocol):
 
 
 # ------------------------------------------------------------------ fachada
+def calcular_metricas(y_real: Any, y_pred: Any) -> Metricas:
+    """MAE/RMSE/MAPE (definición única); el MAPE se satura a `MAPE_MAXIMO` (numeric(7,3))."""
+    m = _calcular_metricas(y_real, y_pred)
+    if m.mape is not None and m.mape > MAPE_MAXIMO:
+        return Metricas(mae=m.mae, rmse=m.rmse, mape=MAPE_MAXIMO, n_muestras=m.n_muestras)
+    return m
+
+
 def entrenar_y_evaluar(
     ventas: pd.DataFrame, algoritmo: str, hiperparametros: dict[str, Any] | None = None
 ) -> ResultadoEntrenamiento:

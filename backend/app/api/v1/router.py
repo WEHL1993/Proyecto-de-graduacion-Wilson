@@ -3,7 +3,7 @@ registra aquí a medida que se implementa, conforme a docs/architecture/openapi.
 
 from fastapi import APIRouter
 
-from app.api.v1 import auth, etl, inventory, predictions, routes
+from app.api.v1 import alerts, auth, catalog, etl, inventory, ml, predictions, routes
 
 api_router = APIRouter()
 api_router.include_router(auth.router)
@@ -11,3 +11,6 @@ api_router.include_router(etl.router)
 api_router.include_router(predictions.router)
 api_router.include_router(routes.router)
 api_router.include_router(inventory.router)
+api_router.include_router(ml.router)
+api_router.include_router(alerts.router)
+api_router.include_router(catalog.router)

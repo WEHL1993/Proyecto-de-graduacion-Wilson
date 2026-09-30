@@ -16,11 +16,11 @@ class AjusteCarga(BaseModel):
 
 
 class LoadPlanRequest(BaseModel):
-    accion: Literal["generar", "aprobar", "rechazar"]
+    accion: Literal["generar", "enviar", "aprobar", "rechazar"]
     ruta_id: UUID | None = Field(default=None, description="Obligatorio si accion=generar")
     fecha_operacion: date | None = Field(default=None, description="Obligatorio si accion=generar")
     carga_id: UUID | None = Field(
-        default=None, description="Obligatorio si accion=aprobar|rechazar"
+        default=None, description="Obligatorio si accion=enviar|aprobar|rechazar"
     )
     ajustes: list[AjusteCarga] | None = Field(
         default=None, description="Cantidades aprobadas editadas (solo accion=aprobar)"
@@ -47,6 +47,7 @@ class LoadPlanRequest(BaseModel):
 class LoadPlanItem(BaseModel):
     producto_id: UUID
     sku: str
+    producto_nombre: str | None = None
     cantidad_predicha: Decimal
     stock_disponible: Decimal = Field(description="Stock disponible al generar el plan")
     cantidad_sugerida: Decimal

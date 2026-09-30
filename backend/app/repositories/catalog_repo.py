@@ -64,3 +64,18 @@ def skus_de(db: Session, producto_ids: Iterable[uuid.UUID]) -> dict[uuid.UUID, s
 
 def ruta_existe(db: Session, ruta_id: uuid.UUID) -> bool:
     return db.scalar(select(Ruta.id).where(Ruta.id == ruta_id)) is not None
+
+
+def productos_resumen(
+    db: Session, producto_ids: Iterable[uuid.UUID]
+) -> dict[uuid.UUID, tuple[str, str]]:
+    """`producto_id -> (sku, nombre)`."""
+    ids = set(producto_ids)
+    if not ids:
+        return {}
+    stmt = select(Producto.id, Producto.sku, Producto.nombre).where(Producto.id.in_(ids))
+    return {pid: (sku, nombre) for pid, sku, nombre in db.execute(stmt)}
+
+
+def listar_rutas_activas(db: Session) -> list[Ruta]:
+    return list(db.scalars(select(Ruta).where(Ruta.activa.is_(True)).order_by(Ruta.codigo)))

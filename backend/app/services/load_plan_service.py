@@ -29,6 +29,8 @@ _ESTADOS_DECIDIBLES = (EstadoCarga.BORRADOR, EstadoCarga.PENDIENTE_APROBACION)
 def gestionar(db: Session, solicitud: LoadPlanRequest, usuario_id: uuid.UUID) -> LoadPlanResponse:
     if solicitud.accion == "generar":
         return generar(db, solicitud, usuario_id)
+    if solicitud.accion == "enviar":
+        return enviar(db, solicitud)
     if solicitud.accion == "aprobar":
         return aprobar(db, solicitud, usuario_id)
     return rechazar(db, solicitud, usuario_id)
@@ -107,6 +109,7 @@ def _predecir_demanda(
                 fecha_base=fecha_operacion - timedelta(days=1),
                 horizonte_dias=1,
                 incluir_intervalo=False,
+                persistir=True,  # alimenta el monitoreo de degradación (evaluate_production)
             ),
         )
         modelo_id = respuesta.modelo.id
@@ -115,6 +118,28 @@ def _predecir_demanda(
             demanda[pron.producto_id] = max(Decimal(0), valor).quantize(_CENTESIMA)
     assert modelo_id is not None
     return modelo_id, demanda
+
+
+# ------------------------------------------------------------------ consultar / enviar
+def obtener_vigente(db: Session, ruta_id: uuid.UUID, fecha_operacion: date) -> LoadPlanResponse:
+    carga = carga_repo.vigente_de_ruta(db, ruta_id, fecha_operacion)
+    if carga is None:
+        raise AppError(
+            "CARGA_NO_ENCONTRADA",
+            "No hay una carga vigente para la ruta y fecha indicadas.",
+            status_code=404,
+        )
+    return _respuesta(db, carga)
+
+
+def enviar(db: Session, solicitud: LoadPlanRequest) -> LoadPlanResponse:
+    """`borrador → pendiente_aprobacion` (Ventas envía el plan a aprobación)."""
+    carga = _cargar_para_decidir(db, solicitud.carga_id, (EstadoCarga.BORRADOR,), "enviar")
+    carga.estado = EstadoCarga.PENDIENTE_APROBACION
+    if solicitud.observaciones:
+        carga.observaciones = solicitud.observaciones
+    db.commit()
+    return _respuesta(db, carga)
 
 
 # ------------------------------------------------------------------ aprobar
@@ -211,18 +236,19 @@ def _carga_vigente_existente() -> AppError:
 def _respuesta(
     db: Session, carga: CargaRuta, alertas: list[uuid.UUID] | None = None
 ) -> LoadPlanResponse:
-    skus = catalog_repo.skus_de(db, [d.producto_id for d in carga.detalles])
+    catalogo = catalog_repo.productos_resumen(db, [d.producto_id for d in carga.detalles])
     items = [
         LoadPlanItem(
             producto_id=d.producto_id,
-            sku=skus[d.producto_id],
+            sku=catalogo[d.producto_id][0],
+            producto_nombre=catalogo[d.producto_id][1],
             cantidad_predicha=d.cantidad_predicha,
             stock_disponible=d.stock_disponible_al_generar,
             cantidad_sugerida=d.cantidad_sugerida,
             cantidad_aprobada=d.cantidad_aprobada,
             ajustado_por_stock=d.ajustado_por_stock,
         )
-        for d in sorted(carga.detalles, key=lambda d: skus[d.producto_id])
+        for d in sorted(carga.detalles, key=lambda d: catalogo[d.producto_id][0])
     ]
     return LoadPlanResponse(
         carga_id=carga.id,

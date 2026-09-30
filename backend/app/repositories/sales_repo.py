@@ -128,6 +128,7 @@ def productos_de_ruta(db: Session, ruta_id: uuid.UUID) -> list[uuid.UUID]:
 def ventas_diarias(
     db: Session,
     *,
+    desde: date | None = None,
     hasta: date | None = None,
     producto_ids: Sequence[uuid.UUID] | None = None,
     ruta_id: uuid.UUID | None = None,
@@ -139,6 +140,8 @@ def ventas_diarias(
         VentaHistorica.ruta_id,
         func.sum(VentaHistorica.cantidad),
     ).group_by(VentaHistorica.fecha_venta, VentaHistorica.producto_id, VentaHistorica.ruta_id)
+    if desde is not None:
+        stmt = stmt.where(VentaHistorica.fecha_venta >= desde)
     if hasta is not None:
         stmt = stmt.where(VentaHistorica.fecha_venta <= hasta)
     if producto_ids is not None:
@@ -146,3 +149,7 @@ def ventas_diarias(
     if ruta_id is not None:
         stmt = stmt.where(VentaHistorica.ruta_id == ruta_id)
     return [tuple(fila) for fila in db.execute(stmt.order_by(VentaHistorica.fecha_venta))]
+
+
+def ultima_fecha_venta(db: Session) -> date | None:
+    return db.scalar(select(func.max(VentaHistorica.fecha_venta)))

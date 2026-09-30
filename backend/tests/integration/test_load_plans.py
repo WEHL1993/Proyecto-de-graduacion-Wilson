@@ -553,3 +553,38 @@ def test_stock_disponible_y_salida_fisica_de_despacho(entorno):
             e.db, {e.a.id: Decimal("1")}, referencia_id=carga_id, usuario_id=e.usuario.id
         )
     assert exc.value.codigo == "STOCK_INSUFICIENTE"
+
+
+def test_enviar_pasa_borrador_a_pendiente_y_luego_se_puede_aprobar(entorno):
+    e = entorno
+    carga_id = _generar(e).json()["carga_id"]
+    solo_aprobar = ("carga_ruta:aprobar",)
+    assert _decidir(e, "enviar", carga_id, permisos=solo_aprobar).status_code == 403
+
+    r = _decidir(e, "enviar", carga_id, observaciones="listo para revisión")
+    assert r.status_code == 200 and r.json()["estado"] == "pendiente_aprobacion"
+    assert e.db.get(CargaRuta, uuid.UUID(carga_id)).observaciones == "listo para revisión"
+
+    repetido = _decidir(e, "enviar", carga_id)
+    assert (repetido.status_code, repetido.json()["codigo"]) == (400, "ESTADO_CARGA_INVALIDO")
+    assert _decidir(e, "aprobar", carga_id).json()["estado"] == "aprobada"
+
+
+def test_consultar_carga_vigente_por_ruta_y_fecha(entorno):
+    e = entorno
+    params = {"ruta_id": str(e.ruta.id), "fecha_operacion": str(FECHA)}
+    headers = _headers(e.usuario, *VENTAS)
+
+    vacio = e.client.get(URL, params=params, headers=headers)
+    assert (vacio.status_code, vacio.json()["codigo"]) == (404, "CARGA_NO_ENCONTRADA")
+
+    generada = _generar(e).json()
+    r = e.client.get(URL, params=params, headers=headers)
+    assert r.status_code == 200 and r.json()["carga_id"] == generada["carga_id"]
+    assert all(item["producto_nombre"] for item in r.json()["items"])
+
+    assert e.client.get(URL, params=params).status_code == 401
+    sin_permiso = _headers(e.usuario, "inventario:leer")
+    assert e.client.get(URL, params=params, headers=sin_permiso).status_code == 403
+    solo_aprobar = _headers(e.usuario, "carga_ruta:aprobar")
+    assert e.client.get(URL, params=params, headers=solo_aprobar).status_code == 200

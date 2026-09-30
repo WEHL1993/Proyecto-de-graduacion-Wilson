@@ -4,6 +4,7 @@ El modelo queda como `candidato`; solo pasa a `produccion` con `promover=True` (
 """
 
 import uuid
+from datetime import date
 
 import pandas as pd
 from sqlalchemy.orm import Session
@@ -24,9 +25,11 @@ def entrenar_modelo(
     motivo: MotivoEntrenamiento = MotivoEntrenamiento.MANUAL,
     entrenado_por: uuid.UUID | None = None,
     promover: bool = False,
+    ventana_desde: date | None = None,
+    ventana_hasta: date | None = None,
 ) -> ModeloML:
     settings = get_settings()
-    filas = sales_repo.ventas_diarias(db)
+    filas = sales_repo.ventas_diarias(db, desde=ventana_desde, hasta=ventana_hasta)
     ventas = pd.DataFrame(
         {
             "fecha": pd.to_datetime([f[0] for f in filas]),

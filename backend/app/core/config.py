@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     ml_artifacts_dir: Path = PROJECT_ROOT / "ml_artifacts"
     data_dir: Path = PROJECT_ROOT / "data"
 
+    # Worker predictivo (ADR-04): sondeo de la cola `jobs_ml` y cadencia de la evaluación
+    worker_poll_segundos: int = Field(default=15, ge=1)
+    worker_evaluacion_intervalo_segundos: int = Field(default=6 * 3600, ge=60)
+
     # ML: familia lógica (`modelos_ml.nombre`) que atiende /predictions/demand
     ml_modelo_nombre: str = "demanda_diaria"
 
