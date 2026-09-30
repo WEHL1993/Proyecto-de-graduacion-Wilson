@@ -6,7 +6,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Any, NamedTuple
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -108,3 +108,27 @@ def upsert_comisiones(db: Session, filas: Sequence[dict[str, Any]]) -> int:
         )
         db.execute(stmt)
     return len(filas)
+
+
+# ------------------------------------------------------------------ serie diaria para ML
+def ventas_diarias(
+    db: Session,
+    *,
+    hasta: date | None = None,
+    producto_ids: Sequence[uuid.UUID] | None = None,
+    ruta_id: uuid.UUID | None = None,
+) -> list[tuple[date, uuid.UUID, uuid.UUID, Decimal]]:
+    """`(fecha, producto_id, ruta_id, cantidad)` sumando vendedores, ordenado por fecha."""
+    stmt = select(
+        VentaHistorica.fecha_venta,
+        VentaHistorica.producto_id,
+        VentaHistorica.ruta_id,
+        func.sum(VentaHistorica.cantidad),
+    ).group_by(VentaHistorica.fecha_venta, VentaHistorica.producto_id, VentaHistorica.ruta_id)
+    if hasta is not None:
+        stmt = stmt.where(VentaHistorica.fecha_venta <= hasta)
+    if producto_ids is not None:
+        stmt = stmt.where(VentaHistorica.producto_id.in_(producto_ids))
+    if ruta_id is not None:
+        stmt = stmt.where(VentaHistorica.ruta_id == ruta_id)
+    return [tuple(fila) for fila in db.execute(stmt.order_by(VentaHistorica.fecha_venta))]

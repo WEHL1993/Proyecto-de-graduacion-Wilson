@@ -41,3 +41,15 @@ def mapear_rutas(db: Session, claves: Iterable[str]) -> dict[str, RutaResuelta]:
             if clave in buscadas:
                 resueltas.setdefault(clave, RutaResuelta(ruta_id, vendedor_id))
     return resueltas
+
+
+def productos_existentes(db: Session, producto_ids: Iterable[uuid.UUID]) -> set[uuid.UUID]:
+    """Subconjunto de `producto_ids` que existe en el catálogo."""
+    ids = set(producto_ids)
+    if not ids:
+        return set()
+    return set(db.scalars(select(Producto.id).where(Producto.id.in_(ids))))
+
+
+def ruta_existe(db: Session, ruta_id: uuid.UUID) -> bool:
+    return db.scalar(select(Ruta.id).where(Ruta.id == ruta_id)) is not None

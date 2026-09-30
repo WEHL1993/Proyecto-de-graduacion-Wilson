@@ -64,6 +64,36 @@ paths:
                 $ref: '#/components/schemas/EtlValidationError'
       security:
       - HTTPBearer: []
+  /api/v1/predictions/demand:
+    post:
+      tags:
+      - Predictions
+      summary: Inferencia de demanda por producto/ruta/horizonte
+      description: Requiere permiso `prediccion:consultar`. Usa el modelo en estado `produccion` (400
+        `SIN_MODELO_PRODUCTIVO` si no existe). El intervalo es al 95 %. Con `persistir=true` guarda los
+        puntos en `pronosticos_demanda` (idempotente).
+      operationId: predecir_demanda_api_v1_predictions_demand_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DemandRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DemandResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
   /health:
     get:
       tags:
@@ -115,6 +145,126 @@ components:
       - TIPOS_INVALIDOS
       - DATOS_INVALIDOS
       title: CodigoErrorEtl
+    DemandModelInfo:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        algoritmo:
+          type: string
+          title: Algoritmo
+        version:
+          type: string
+          title: Version
+      type: object
+      required:
+      - id
+      - algoritmo
+      - version
+      title: DemandModelInfo
+    DemandPoint:
+      properties:
+        fecha_objetivo:
+          type: string
+          format: date
+          title: Fecha Objetivo
+        demanda_predicha:
+          type: number
+          title: Demanda Predicha
+        limite_inferior:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Limite Inferior
+        limite_superior:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Limite Superior
+      type: object
+      required:
+      - fecha_objetivo
+      - demanda_predicha
+      title: DemandPoint
+    DemandProductForecast:
+      properties:
+        producto_id:
+          type: string
+          format: uuid
+          title: Producto Id
+        serie:
+          items:
+            $ref: '#/components/schemas/DemandPoint'
+          type: array
+          title: Serie
+      type: object
+      required:
+      - producto_id
+      - serie
+      title: DemandProductForecast
+    DemandRequest:
+      properties:
+        producto_ids:
+          items:
+            type: string
+            format: uuid
+          type: array
+          maxItems: 200
+          minItems: 1
+          title: Producto Ids
+        ruta_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Ruta Id
+          description: Si se omite, la demanda es agregada (suma de todas las rutas)
+        fecha_base:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Fecha Base
+          description: Por defecto hoy
+        horizonte_dias:
+          type: integer
+          maximum: 30.0
+          minimum: 1.0
+          title: Horizonte Dias
+        incluir_intervalo:
+          type: boolean
+          title: Incluir Intervalo
+          default: true
+        persistir:
+          type: boolean
+          title: Persistir
+          description: Guarda los pronósticos en la BD
+          default: false
+      type: object
+      required:
+      - producto_ids
+      - horizonte_dias
+      title: DemandRequest
+    DemandResponse:
+      properties:
+        modelo:
+          $ref: '#/components/schemas/DemandModelInfo'
+        generado_en:
+          type: string
+          format: date-time
+          title: Generado En
+        pronosticos:
+          items:
+            $ref: '#/components/schemas/DemandProductForecast'
+          type: array
+          title: Pronosticos
+      type: object
+      required:
+      - modelo
+      - generado_en
+      - pronosticos
+      title: DemandResponse
     ErrorFila:
       properties:
         fila:

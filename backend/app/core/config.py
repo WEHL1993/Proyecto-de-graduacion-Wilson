@@ -43,6 +43,9 @@ class Settings(BaseSettings):
     ml_artifacts_dir: Path = PROJECT_ROOT / "ml_artifacts"
     data_dir: Path = PROJECT_ROOT / "data"
 
+    # ML: familia lógica (`modelos_ml.nombre`) que atiende /predictions/demand
+    ml_modelo_nombre: str = "demanda_diaria"
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def _cors_origins_desde_csv(cls, value: object) -> object:
