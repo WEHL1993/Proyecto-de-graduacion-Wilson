@@ -207,6 +207,25 @@ def rechazar(db: Session, solicitud: LoadPlanRequest, usuario_id: uuid.UUID) -> 
     return _respuesta(db, carga)
 
 
+# ------------------------------------------------------------------ despachar
+def despachar(db: Session, carga_id: uuid.UUID, usuario_id: uuid.UUID) -> LoadPlanResponse:
+    """`aprobada → despachada` (Bodega confirma la salida física del camión, ADR-06).
+
+    Consume la reserva y descuenta `stock_actual` con la cantidad aprobada de cada producto, y
+    registra la salida en el kardex. Atómico con el cambio de estado.
+    """
+    carga = _cargar_para_decidir(db, carga_id, (EstadoCarga.APROBADA,), "despachar")
+    inventory_service.confirmar_salida(
+        db,
+        {d.producto_id: d.cantidad_aprobada or Decimal(0) for d in carga.detalles},
+        referencia_id=carga.id,
+        usuario_id=usuario_id,
+    )
+    carga.estado = EstadoCarga.DESPACHADA
+    db.commit()
+    return _respuesta(db, carga)
+
+
 # ------------------------------------------------------------------ utilidades
 def _cargar_para_decidir(
     db: Session,

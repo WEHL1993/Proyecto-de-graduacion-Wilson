@@ -2,15 +2,17 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Form, UploadFile, status
+from fastapi import APIRouter, Depends, Form, Query, UploadFile, status
 from fastapi.responses import JSONResponse
 
 from app.api.deps import DBSession, require_permission
+from app.domain.enums import EstadoLoteEtl
 from app.schemas.auth import UsuarioAutenticado
 from app.schemas.etl import (
     TAMANO_MAXIMO_BYTES,
     EtlResult,
     EtlValidationError,
+    LotePage,
     ModoCarga,
 )
 from app.services import etl_service
@@ -67,3 +69,22 @@ def upload_excel(
             content=resultado.model_dump(mode="json", exclude_none=True),
         )
     return resultado
+
+
+@router.get(
+    "/batches",
+    response_model=LotePage,
+    summary="Historial de lotes ETL",
+    description=(
+        "Requiere permiso `etl:cargar`. Auditoría de cargas: fecha, filas válidas/rechazadas y "
+        "estado de cada lote, del más reciente al más antiguo."
+    ),
+)
+def listar_lotes(
+    db: DBSession,
+    _usuario: PuedeCargar,
+    estado: EstadoLoteEtl | None = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 20,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> LotePage:
+    return etl_service.listar_lotes(db, estado=estado, limit=limit, offset=offset)

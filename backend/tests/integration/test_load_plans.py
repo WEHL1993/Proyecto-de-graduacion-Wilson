@@ -588,3 +588,57 @@ def test_consultar_carga_vigente_por_ruta_y_fecha(entorno):
     assert e.client.get(URL, params=params, headers=sin_permiso).status_code == 403
     solo_aprobar = _headers(e.usuario, "carga_ruta:aprobar")
     assert e.client.get(URL, params=params, headers=solo_aprobar).status_code == 200
+
+
+# ------------------------------------------------------------------ despacho (Bodega)
+def _url_despacho(carga_id) -> str:
+    return f"{URL}/{carga_id}/dispatch"
+
+
+def test_despachar_carga_aprobada_descuenta_stock_y_registra_salida(entorno):
+    e = entorno
+    carga_id = _carga_pendiente(e)
+    ajustes = [{"producto_id": str(e.a.id), "cantidad_aprobada": 100}]
+    assert _decidir(e, "aprobar", carga_id, ajustes=ajustes).status_code == 200
+
+    r = e.client.post(_url_despacho(carga_id), headers=_headers(e.usuario, "carga_ruta:despachar"))
+    assert r.status_code == 200, r.text
+    assert r.json()["estado"] == "despachada"
+
+    inv = _inventario(e, e.a)
+    assert (inv.stock_actual, inv.stock_reservado) == (50, 0)
+    (salida,) = _movimientos(e, TipoMovimiento.SALIDA)  # B aprobó 0: sin movimiento
+    assert (salida.producto_id, salida.cantidad, salida.saldo_resultante) == (e.a.id, 100, 50)
+    assert (salida.referencia_tipo, str(salida.referencia_id)) == ("carga_ruta", carga_id)
+    assert salida.usuario_id == e.usuario.id
+    assert e.db.get(CargaRuta, uuid.UUID(carga_id)).estado == EstadoCarga.DESPACHADA
+
+
+def test_despachar_exige_estado_aprobada_y_no_se_repite(entorno):
+    e = entorno
+    headers = _headers(e.usuario, "carga_ruta:despachar")
+    carga_id = _carga_pendiente(e)
+
+    r = e.client.post(_url_despacho(carga_id), headers=headers)  # aún pendiente
+    assert (r.status_code, r.json()["codigo"]) == (400, "ESTADO_CARGA_INVALIDO")
+
+    assert _decidir(e, "aprobar", carga_id).status_code == 200
+    assert e.client.post(_url_despacho(carga_id), headers=headers).status_code == 200
+    r = e.client.post(_url_despacho(carga_id), headers=headers)  # segunda vez
+    assert (r.status_code, r.json()["codigo"]) == (400, "ESTADO_CARGA_INVALIDO")
+    assert len(_movimientos(e, TipoMovimiento.SALIDA)) == 1
+
+    r = e.client.post(_url_despacho(uuid.uuid4()), headers=headers)
+    assert (r.status_code, r.json()["codigo"]) == (400, "CARGA_NO_ENCONTRADA")
+
+
+def test_despachar_requiere_permiso_de_bodega(entorno):
+    e = entorno
+    carga_id = _carga_pendiente(e)
+    assert _decidir(e, "aprobar", carga_id).status_code == 200
+
+    r = e.client.post(_url_despacho(carga_id), headers=_headers(e.usuario, *VENTAS))
+    assert (r.status_code, r.json()["codigo"]) == (403, "PERMISO_DENEGADO")
+    assert e.client.post(_url_despacho(carga_id)).status_code == 401
+    assert e.db.get(CargaRuta, uuid.UUID(carga_id)).estado == EstadoCarga.APROBADA
+    assert _movimientos(e, TipoMovimiento.SALIDA) == []

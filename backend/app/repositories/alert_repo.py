@@ -1,7 +1,7 @@
 """Persistencia de alertas del sistema."""
 
 import uuid
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from datetime import UTC, datetime
 
 from sqlalchemy import case, func, select, update
@@ -71,11 +71,27 @@ def resolver_abiertas_de_modelo(db: Session, *, tipo: TipoAlerta, modelo_id: uui
     return resultado.rowcount
 
 
+def obtener(db: Session, alerta_id: uuid.UUID) -> Alerta | None:
+    return db.get(Alerta, alerta_id)
+
+
+def reconocer(alerta: Alerta) -> None:
+    alerta.estado = EstadoAlerta.RECONOCIDA
+
+
 def listar(
-    db: Session, *, estado: EstadoAlerta | None, limite: int
+    db: Session,
+    *,
+    estado: EstadoAlerta | None,
+    limite: int,
+    tipos: Collection[TipoAlerta] | None = None,
 ) -> tuple[Sequence[Alerta], int]:
-    """Alertas (críticas primero, luego las más recientes) y el total que cumple el filtro."""
+    """Alertas (críticas primero, luego las más recientes) y el total que cumple el filtro.
+
+    `tipos` restringe a los tipos visibles para el usuario (`None` = sin restricción)."""
     filtro = [] if estado is None else [Alerta.estado == estado]
+    if tipos is not None:
+        filtro.append(Alerta.tipo.in_([t.value for t in tipos]))
     total = db.scalar(select(func.count()).select_from(Alerta).where(*filtro)) or 0
     orden_severidad = case(
         {Severidad.CRITICA.value: 0, Severidad.ADVERTENCIA.value: 1},

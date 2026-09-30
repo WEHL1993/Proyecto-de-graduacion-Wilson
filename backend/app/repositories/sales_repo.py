@@ -11,6 +11,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from app.domain.enums import EstadoLoteEtl
+from app.domain.models.auth import Usuario
 from app.domain.models.catalog import Producto
 from app.domain.models.sales import Comision, EtlLote, VentaHistorica
 
@@ -67,6 +68,23 @@ def actualizar_lote(
     lote.filas_validas = filas_validas
     lote.filas_rechazadas = filas_rechazadas
     lote.errores = errores
+
+
+def listar_lotes(
+    db: Session, *, estado: EstadoLoteEtl | None, limit: int, offset: int
+) -> tuple[list[tuple[EtlLote, str]], int]:
+    """Lotes más recientes primero, con el nombre de quien los cargó, y el total filtrado."""
+    filtros = [] if estado is None else [EtlLote.estado == estado]
+    total = db.scalar(select(func.count()).select_from(EtlLote).where(*filtros)) or 0
+    filas = db.execute(
+        select(EtlLote, Usuario.nombre_completo)
+        .join(Usuario, Usuario.id == EtlLote.usuario_id)
+        .where(*filtros)
+        .order_by(EtlLote.creado_en.desc(), EtlLote.id)
+        .limit(limit)
+        .offset(offset)
+    ).all()
+    return [(lote, nombre) for lote, nombre in filas], total
 
 
 # ------------------------------------------------------------------ ventas_historicas

@@ -38,6 +38,7 @@ PERMISOS: dict[str, str] = {
     "ml:metricas:leer": "Consulta de métricas y degradación de modelos.",
     "ml:reentrenar": "Solicitud de reentrenamiento de modelos.",
     "alertas:leer": "Consulta de alertas del sistema.",
+    "reportes:leer": "Reportes gerenciales: rotación, quiebres, comisiones y exportación.",
 }
 
 # Matriz 1.4 de la especificación (columna Worker se excluye: no es un rol de login).
@@ -71,6 +72,7 @@ MATRIZ_ROL_PERMISO: dict[str, tuple[str, ...]] = {
         "alertas:leer",
     ),
     "Gerente": (
+        "reportes:leer",
         "prediccion:consultar",
         "carga_ruta:aprobar",
         "inventario:leer",

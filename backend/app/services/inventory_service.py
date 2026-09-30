@@ -3,8 +3,9 @@
 `stock_disponible = stock_actual - stock_reservado`. Convención de `kardex.saldo_resultante`:
 es el `stock_actual` físico tras el movimiento (las reservas y liberaciones no lo alteran).
 
-Las operaciones que mutan (`reservar`, `liberar`, `confirmar_salida`) solo hacen `flush`: el
-commit lo decide el caso de uso que las orquesta, para que reserva + estado sean atómicos.
+Las operaciones que mutan (`reservar`, `liberar`, `confirmar_salida`, `registrar_entrada`) solo
+hacen `flush`: el commit lo decide el caso de uso que las orquesta, para que el movimiento y
+el cambio de estado sean atómicos.
 """
 
 import uuid
@@ -155,6 +156,26 @@ def confirmar_salida(
         _mover(db, inv, TipoMovimiento.SALIDA, cantidad, referencia_id, usuario_id)
 
 
+def registrar_entrada(
+    db: Session,
+    cantidades: Mapping[uuid.UUID, Decimal],
+    *,
+    referencia_tipo: ReferenciaTipo,
+    referencia_id: uuid.UUID,
+    usuario_id: uuid.UUID,
+) -> None:
+    """Ingreso físico (recepción de pedido): incrementa `stock_actual` y registra la entrada en
+    el kardex. Crea la fila de `inventario` si el producto aún no tenía existencia."""
+    positivas = {pid: q for pid, q in cantidades.items() if q > 0}
+    existencias = inventory_repo.obtener_por_productos(db, positivas, bloquear=True)
+    for pid, cantidad in positivas.items():
+        inv = existencias.get(pid) or inventory_repo.crear_existencia(db, pid)
+        inv.stock_actual += cantidad
+        _mover(
+            db, inv, TipoMovimiento.ENTRADA, cantidad, referencia_id, usuario_id, referencia_tipo
+        )
+
+
 def _disponible(existencias: Mapping[uuid.UUID, Inventario], pid: uuid.UUID) -> Decimal:
     return existencias[pid].stock_disponible if pid in existencias else CERO
 
@@ -166,6 +187,7 @@ def _mover(
     cantidad: Decimal,
     referencia_id: uuid.UUID,
     usuario_id: uuid.UUID,
+    referencia_tipo: ReferenciaTipo = ReferenciaTipo.CARGA_RUTA,
 ) -> None:
     db.flush()  # que la CHECK de `inventario` falle aquí y no en el commit
     inventory_repo.registrar_movimiento(
@@ -174,7 +196,7 @@ def _mover(
         tipo=tipo,
         cantidad=cantidad,
         saldo_resultante=inv.stock_actual,
-        referencia_tipo=ReferenciaTipo.CARGA_RUTA,
+        referencia_tipo=referencia_tipo,
         referencia_id=referencia_id,
         usuario_id=usuario_id,
     )

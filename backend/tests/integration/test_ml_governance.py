@@ -690,7 +690,8 @@ def test_config_de_degradacion_se_guarda_y_afecta_la_evaluacion(entorno):
 
 def test_bandeja_de_alertas_ordena_criticas_primero(entorno):
     db = entorno.db
-    headers, _ = _usuario(db, ["alertas:leer"])
+    # `mape_umbral` solo se muestra a quien tiene permisos de ML (visibilidad por rol, fase 8).
+    headers, _ = _usuario(db, ["alertas:leer", "ml:metricas:leer"])
     modelo = _modelo(db, EstadoModelo.PRODUCCION)
     for severidad in (Severidad.INFO, Severidad.CRITICA, Severidad.ADVERTENCIA):
         db.add(

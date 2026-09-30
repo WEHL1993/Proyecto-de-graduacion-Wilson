@@ -64,6 +64,55 @@ paths:
                 $ref: '#/components/schemas/EtlValidationError'
       security:
       - HTTPBearer: []
+  /api/v1/etl/batches:
+    get:
+      tags:
+      - ETL
+      summary: Historial de lotes ETL
+      description: 'Requiere permiso `etl:cargar`. Auditoría de cargas: fecha, filas válidas/rechazadas
+        y estado de cada lote, del más reciente al más antiguo.'
+      operationId: listar_lotes_api_v1_etl_batches_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: estado
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/EstadoLoteEtl'
+          - type: 'null'
+          title: Estado
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 200
+          minimum: 1
+          default: 20
+          title: Limit
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+          title: Offset
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LotePage'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/predictions/demand:
     post:
       tags:
@@ -151,6 +200,38 @@ paths:
           type: string
           format: date
           title: Fecha Operacion
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoadPlanResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/routes/load-plans/{carga_id}/dispatch:
+    post:
+      tags:
+      - Routes
+      summary: Despacho físico de una carga aprobada
+      description: Requiere `carga_ruta:despachar` (Bodega). Solo una carga `aprobada` puede despacharse
+        (400 `ESTADO_CARGA_INVALIDO`); descuenta `stock_reservado` y `stock_actual` con la cantidad aprobada
+        y registra la salida en el kardex (400 `STOCK_INSUFICIENTE` si la existencia física no alcanza).
+      operationId: despachar_carga_api_v1_routes_load_plans__carga_id__dispatch_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: carga_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Carga Id
       responses:
         '200':
           description: Successful Response
@@ -483,7 +564,9 @@ paths:
       tags:
       - Alerts
       summary: Bandeja de alertas
-      description: Requiere permiso `alertas:leer`. Críticas primero, luego las más recientes.
+      description: Requiere permiso `alertas:leer`. Solo devuelve los tipos que corresponden al rol del
+        usuario (stock/quiebre → inventario y compras; `mape_umbral` → Gerente/Admin; `etl_error` → quienes
+        cargan datos). Críticas primero, luego las más recientes.
       operationId: listar_alertas_api_v1_alerts_get
       security:
       - HTTPBearer: []
@@ -519,6 +602,37 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/alerts/{alerta_id}/acknowledge:
+    patch:
+      tags:
+      - Alerts
+      summary: Reconocer una alerta abierta
+      description: Requiere `alertas:leer`. Pasa la alerta a `reconocida`. 404 `ALERTA_NO_ENCONTRADA`
+        (inexistente o de un tipo no visible para el rol); 409 `ALERTA_NO_ABIERTA`.
+      operationId: reconocer_alerta_api_v1_alerts__alerta_id__acknowledge_patch
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: alerta_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Alerta Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertItem'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/catalog/routes:
     get:
       tags:
@@ -538,6 +652,703 @@ paths:
                 title: Response Listar Rutas Api V1 Catalog Routes Get
       security:
       - HTTPBearer: []
+  /api/v1/purchasing/suggestions:
+    get:
+      tags:
+      - Purchasing
+      summary: Sugerencias de reabastecimiento
+      description: Requiere `pedido_proveedor:gestionar`. `cantidad_sugerida = max(0, (demanda proyectada
+        de los próximos N días + stock mínimo) - stock actual)`, solo para productos con proveedor. Sin
+        modelo productivo o sin historial se sugiere por punto de reorden y se informa en `advertencias`.
+      operationId: sugerir_api_v1_purchasing_suggestions_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: horizonte_dias
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 30
+          minimum: 1
+          default: 7
+          title: Horizonte Dias
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SugerenciasResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/purchasing/orders:
+    post:
+      tags:
+      - Purchasing
+      summary: Crear (y opcionalmente enviar) una orden de compra
+      description: Requiere `pedido_proveedor:gestionar`. Nace en `borrador`, o en `enviado` si `enviar=true`.
+        400 `PRODUCTO_AJENO_A_PROVEEDOR` si un producto no es del proveedor.
+      operationId: crear_orden_api_v1_purchasing_orders_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PedidoCreate'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PedidoOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - Purchasing
+      summary: Pedidos a proveedor
+      description: 'Requiere `pedido_proveedor:gestionar` o `inventario:ajustar` (Bodega, para recibir):
+        todos los pedidos; o `pedido_proveedor:confirmar`: solo los del proveedor del usuario.'
+      operationId: listar_ordenes_api_v1_purchasing_orders_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: estado
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/EstadoPedido'
+          - type: 'null'
+          title: Estado
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 200
+          minimum: 1
+          default: 50
+          title: Limit
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+          title: Offset
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PedidoPage'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/purchasing/orders/{pedido_id}:
+    get:
+      tags:
+      - Purchasing
+      summary: Detalle de un pedido
+      description: Mismos permisos y aislamiento que el listado; 404 si es de otro proveedor.
+      operationId: obtener_orden_api_v1_purchasing_orders__pedido_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: pedido_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Pedido Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PedidoOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/purchasing/orders/{pedido_id}/send:
+    post:
+      tags:
+      - Purchasing
+      summary: Aprobar y enviar la orden al proveedor (borrador → enviado)
+      description: Requiere `pedido_proveedor:gestionar`.
+      operationId: enviar_orden_api_v1_purchasing_orders__pedido_id__send_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: pedido_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Pedido Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PedidoOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/purchasing/orders/{pedido_id}/cancel:
+    post:
+      tags:
+      - Purchasing
+      summary: Cancelar una orden (borrador|enviado → cancelado)
+      description: Requiere `pedido_proveedor:gestionar`.
+      operationId: cancelar_orden_api_v1_purchasing_orders__pedido_id__cancel_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: pedido_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Pedido Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PedidoOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/purchasing/orders/{pedido_id}/confirm:
+    patch:
+      tags:
+      - Purchasing
+      summary: Confirmación del proveedor (enviado → confirmado)
+      description: 'Requiere `pedido_proveedor:confirmar`. Aislamiento por `proveedor_id`: un pedido de
+        otro proveedor responde 404 `PEDIDO_NO_ENCONTRADO`.'
+      operationId: confirmar_orden_api_v1_purchasing_orders__pedido_id__confirm_patch
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: pedido_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Pedido Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PedidoConfirmacion'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PedidoOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/purchasing/orders/{pedido_id}/receive:
+    post:
+      tags:
+      - Purchasing
+      summary: Recepción física en bodega (confirmado → recibido)
+      description: Requiere `inventario:ajustar` (Bodega). Registra la entrada en el kardex e incrementa
+        `stock_actual` en `inventario`.
+      operationId: recibir_orden_api_v1_purchasing_orders__pedido_id__receive_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: pedido_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Pedido Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PedidoOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/users/roles:
+    get:
+      tags:
+      - Users
+      summary: Roles asignables
+      operationId: listar_roles_api_v1_users_roles_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/RolItem'
+                type: array
+                title: Response Listar Roles Api V1 Users Roles Get
+      security:
+      - HTTPBearer: []
+  /api/v1/users:
+    get:
+      tags:
+      - Users
+      summary: Listar usuarios
+      description: Requiere `usuarios:gestionar`. Filtros por texto (correo/nombre), estado y rol.
+      operationId: listar_usuarios_api_v1_users_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: q
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Q
+      - name: activo
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Activo
+      - name: rol
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Rol
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 200
+          minimum: 1
+          default: 50
+          title: Limit
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+          title: Offset
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsuarioPage'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - Users
+      summary: Crear usuario
+      description: 409 `EMAIL_DUPLICADO`; 400 `ROL_INVALIDO`, `RUTA_INVALIDA` o `PROVEEDOR_REQUERIDO`.
+      operationId: crear_usuario_api_v1_users_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UsuarioCreate'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsuarioOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/users/{usuario_id}:
+    patch:
+      tags:
+      - Users
+      summary: Actualizar usuario (parcial)
+      description: Edita nombre, contraseña, roles y rutas comerciales. 404 `USUARIO_NO_ENCONTRADO`; 409
+        `ULTIMO_ADMIN` / `AUTOMODIFICACION_NO_PERMITIDA` al retirar el rol Admin.
+      operationId: actualizar_usuario_api_v1_users__usuario_id__patch
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: usuario_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Usuario Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UsuarioUpdate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsuarioOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/users/{usuario_id}/status:
+    patch:
+      tags:
+      - Users
+      summary: Activar / desactivar usuario
+      description: Un usuario inactivo no puede iniciar sesión. No permite autodesactivarse.
+      operationId: cambiar_estado_usuario_api_v1_users__usuario_id__status_patch
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: usuario_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Usuario Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UsuarioEstado'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsuarioOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/reports/inventory-turnover:
+    get:
+      tags:
+      - Reports
+      summary: Rotación de inventario e índice de quiebres por ruta
+      description: Requiere `reportes:leer`. Rotación = costo de ventas del periodo / valor del inventario
+        actual. Índice de quiebre = % de líneas de carga limitadas por stock (`ajustado_por_stock`). Sin
+        `desde`/`hasta` usa los últimos 30 días hasta la última venta registrada.
+      operationId: rotacion_api_v1_reports_inventory_turnover_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: desde
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Desde
+      - name: hasta
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Hasta
+      - name: ruta_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Ruta Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RotacionReporte'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/reports/commissions:
+    get:
+      tags:
+      - Reports
+      summary: Liquidación de comisiones por vendedor y periodo
+      description: Requiere `reportes:leer`. Agrupa `comisiones` sobre `ventas_historicas` por vendedor
+        y periodo (`YYYY-MM`). Sin periodos usa el mes de la última actividad.
+      operationId: comisiones_api_v1_reports_commissions_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: periodo_desde
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            pattern: ^\d{4}-(0[1-9]|1[0-2])$
+          - type: 'null'
+          title: Periodo Desde
+      - name: periodo_hasta
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            pattern: ^\d{4}-(0[1-9]|1[0-2])$
+          - type: 'null'
+          title: Periodo Hasta
+      - name: vendedor_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Vendedor Id
+      - name: ruta_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Ruta Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComisionReporte'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/reports/sales-vs-forecast:
+    get:
+      tags:
+      - Reports
+      summary: Volumen de venta real vs. proyectado por ruta
+      description: Requiere `reportes:leer`. Unidades reales (`ventas_historicas`) frente a la proyección
+        más reciente por producto/ruta/día (`pronosticos_demanda`). Sin `desde`/`hasta` usa los últimos
+        30 días hasta la última fecha con venta o proyección.
+      operationId: ventas_vs_proyeccion_api_v1_reports_sales_vs_forecast_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: desde
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Desde
+      - name: hasta
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Hasta
+      - name: ruta_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Ruta Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VentasProyeccionReporte'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/reports/export:
+    get:
+      tags:
+      - Reports
+      summary: Exportar reportes en CSV o Excel
+      description: Requiere `reportes:leer`. `tipo=consolidado` reúne los tres reportes (una hoja por
+        reporte en Excel; secciones separadas en CSV).
+      operationId: exportar_api_v1_reports_export_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: tipo
+        in: query
+        required: false
+        schema:
+          $ref: '#/components/schemas/TipoReporte'
+          default: consolidado
+      - name: formato
+        in: query
+        required: false
+        schema:
+          $ref: '#/components/schemas/FormatoReporte'
+          default: xlsx
+      - name: desde
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Desde
+      - name: hasta
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Hasta
+      - name: periodo_desde
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            pattern: ^\d{4}-(0[1-9]|1[0-2])$
+          - type: 'null'
+          title: Periodo Desde
+      - name: periodo_hasta
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            pattern: ^\d{4}-(0[1-9]|1[0-2])$
+          - type: 'null'
+          title: Periodo Hasta
+      - name: ruta_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Ruta Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+            text/csv: {}
+            application/octet-stream: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /health:
     get:
       tags:
@@ -669,6 +1480,73 @@ components:
       - TIPOS_INVALIDOS
       - DATOS_INVALIDOS
       title: CodigoErrorEtl
+    ComisionReporte:
+      properties:
+        periodo_desde:
+          type: string
+          title: Periodo Desde
+        periodo_hasta:
+          type: string
+          title: Periodo Hasta
+        total_vendido:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Total Vendido
+        total_comisiones:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Total Comisiones
+        liquidaciones:
+          items:
+            $ref: '#/components/schemas/ComisionVendedor'
+          type: array
+          title: Liquidaciones
+      type: object
+      required:
+      - periodo_desde
+      - periodo_hasta
+      - total_vendido
+      - total_comisiones
+      - liquidaciones
+      title: ComisionReporte
+    ComisionVendedor:
+      properties:
+        vendedor_id:
+          type: string
+          format: uuid
+          title: Vendedor Id
+        vendedor:
+          type: string
+          title: Vendedor
+        periodo:
+          type: string
+          title: Periodo
+        ventas_registradas:
+          type: integer
+          title: Ventas Registradas
+        monto_vendido:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Monto Vendido
+        comision_total:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Comision Total
+        porcentaje_efectivo:
+          anyOf:
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          - type: 'null'
+          title: Porcentaje Efectivo
+      type: object
+      required:
+      - vendedor_id
+      - vendedor
+      - periodo
+      - ventas_registradas
+      - monto_vendido
+      - comision_total
+      title: ComisionVendedor
     Degradacion:
       properties:
         umbral_mape:
@@ -873,6 +1751,14 @@ components:
       - completado
       - fallido
       title: EstadoJob
+    EstadoLoteEtl:
+      type: string
+      enum:
+      - recibido
+      - validado
+      - rechazado
+      - cargado
+      title: EstadoLoteEtl
     EstadoModelo:
       type: string
       enum:
@@ -881,6 +1767,15 @@ components:
       - archivado
       - descartado
       title: EstadoModelo
+    EstadoPedido:
+      type: string
+      enum:
+      - borrador
+      - enviado
+      - confirmado
+      - recibido
+      - cancelado
+      title: EstadoPedido
     EtlResult:
       properties:
         lote_id:
@@ -942,6 +1837,12 @@ components:
       - errores
       - total_errores
       title: EtlValidationError
+    FormatoReporte:
+      type: string
+      enum:
+      - csv
+      - xlsx
+      title: FormatoReporte
     HTTPValidationError:
       properties:
         detail:
@@ -1226,6 +2127,61 @@ components:
       - email
       - password
       title: LoginRequest
+    LoteItem:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        archivo_nombre:
+          type: string
+          title: Archivo Nombre
+        estado:
+          type: string
+          title: Estado
+        filas_totales:
+          type: integer
+          title: Filas Totales
+        filas_validas:
+          type: integer
+          title: Filas Validas
+        filas_rechazadas:
+          type: integer
+          title: Filas Rechazadas
+        cargado_por:
+          type: string
+          title: Cargado Por
+        creado_en:
+          type: string
+          format: date-time
+          title: Creado En
+      type: object
+      required:
+      - id
+      - archivo_nombre
+      - estado
+      - filas_totales
+      - filas_validas
+      - filas_rechazadas
+      - cargado_por
+      - creado_en
+      title: LoteItem
+      description: Fila del historial de lotes (`etl_lotes`) para la auditoría de cargas.
+    LotePage:
+      properties:
+        total:
+          type: integer
+          title: Total
+        lotes:
+          items:
+            $ref: '#/components/schemas/LoteItem'
+          type: array
+          title: Lotes
+      type: object
+      required:
+      - total
+      - lotes
+      title: LotePage
     MetricPoint:
       properties:
         periodo_desde:
@@ -1396,6 +2352,184 @@ components:
       - manual
       - degradacion
       title: MotivoEntrenamiento
+    PedidoConfirmacion:
+      properties:
+        fecha_esperada:
+          type: string
+          format: date
+          title: Fecha Esperada
+          description: Fecha estimada de entrega informada por el proveedor
+      type: object
+      required:
+      - fecha_esperada
+      title: PedidoConfirmacion
+    PedidoCreate:
+      properties:
+        proveedor_id:
+          type: string
+          format: uuid
+          title: Proveedor Id
+        items:
+          items:
+            $ref: '#/components/schemas/PedidoItemIn'
+          type: array
+          maxItems: 200
+          minItems: 1
+          title: Items
+        fecha_esperada:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Fecha Esperada
+        enviar:
+          type: boolean
+          title: Enviar
+          description: Aprobar y enviar de inmediato al proveedor
+          default: false
+      type: object
+      required:
+      - proveedor_id
+      - items
+      title: PedidoCreate
+    PedidoItemIn:
+      properties:
+        producto_id:
+          type: string
+          format: uuid
+          title: Producto Id
+        cantidad:
+          anyOf:
+          - type: number
+            exclusiveMinimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*(?:\d{0,10}|(?=[\d.]{1,13}0*$)\d{0,10}\.\d{0,2}0*$)
+          title: Cantidad
+        costo_unitario:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*(?:\d{0,12}|(?=[\d.]{1,15}0*$)\d{0,12}\.\d{0,2}0*$)
+          - type: 'null'
+          title: Costo Unitario
+          description: Por defecto el del catálogo
+        alerta_origen_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Alerta Origen Id
+      type: object
+      required:
+      - producto_id
+      - cantidad
+      title: PedidoItemIn
+    PedidoItemOut:
+      properties:
+        producto_id:
+          type: string
+          format: uuid
+          title: Producto Id
+        sku:
+          type: string
+          title: Sku
+        producto_nombre:
+          type: string
+          title: Producto Nombre
+        cantidad:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Cantidad
+        costo_unitario:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Costo Unitario
+        subtotal:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Subtotal
+      type: object
+      required:
+      - producto_id
+      - sku
+      - producto_nombre
+      - cantidad
+      - costo_unitario
+      - subtotal
+      title: PedidoItemOut
+    PedidoOut:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        proveedor_id:
+          type: string
+          format: uuid
+          title: Proveedor Id
+        proveedor_nombre:
+          type: string
+          title: Proveedor Nombre
+        estado:
+          $ref: '#/components/schemas/EstadoPedido'
+        fecha_pedido:
+          type: string
+          format: date
+          title: Fecha Pedido
+        fecha_esperada:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Fecha Esperada
+        total:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Total
+        creado_por:
+          type: string
+          format: uuid
+          title: Creado Por
+        items:
+          items:
+            $ref: '#/components/schemas/PedidoItemOut'
+          type: array
+          title: Items
+      type: object
+      required:
+      - id
+      - proveedor_id
+      - proveedor_nombre
+      - estado
+      - fecha_pedido
+      - total
+      - creado_por
+      - items
+      title: PedidoOut
+    PedidoPage:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/PedidoOut'
+          type: array
+          title: Items
+        total:
+          type: integer
+          title: Total
+        limit:
+          type: integer
+          title: Limit
+        offset:
+          type: integer
+          title: Offset
+      type: object
+      required:
+      - items
+      - total
+      - limit
+      - offset
+      title: PedidoPage
     PeorProducto:
       properties:
         producto_id:
@@ -1536,6 +2670,135 @@ components:
       - estado
       - solicitado_en
       title: RetrainResponse
+    RolItem:
+      properties:
+        id:
+          type: integer
+          title: Id
+        nombre:
+          type: string
+          title: Nombre
+        descripcion:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Descripcion
+      type: object
+      required:
+      - id
+      - nombre
+      title: RolItem
+    RotacionReporte:
+      properties:
+        desde:
+          type: string
+          format: date
+          title: Desde
+        hasta:
+          type: string
+          format: date
+          title: Hasta
+        valor_inventario:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Valor Inventario
+        costo_ventas_total:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Costo Ventas Total
+        rotacion_global:
+          anyOf:
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          - type: 'null'
+          title: Rotacion Global
+        dias_inventario:
+          anyOf:
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          - type: 'null'
+          title: Dias Inventario
+        indice_quiebre_global:
+          anyOf:
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          - type: 'null'
+          title: Indice Quiebre Global
+        rutas:
+          items:
+            $ref: '#/components/schemas/RotacionRuta'
+          type: array
+          title: Rutas
+      type: object
+      required:
+      - desde
+      - hasta
+      - valor_inventario
+      - costo_ventas_total
+      - rutas
+      title: RotacionReporte
+    RotacionRuta:
+      properties:
+        ruta_id:
+          type: string
+          format: uuid
+          title: Ruta Id
+        ruta_codigo:
+          type: string
+          title: Ruta Codigo
+        ruta_nombre:
+          type: string
+          title: Ruta Nombre
+        unidades_vendidas:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Unidades Vendidas
+        monto_vendido:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Monto Vendido
+        costo_ventas:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Costo Ventas
+        rotacion:
+          anyOf:
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          - type: 'null'
+          title: Rotacion
+        cargas:
+          type: integer
+          title: Cargas
+        lineas_carga:
+          type: integer
+          title: Lineas Carga
+        lineas_ajustadas:
+          type: integer
+          title: Lineas Ajustadas
+        indice_quiebre:
+          anyOf:
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          - type: 'null'
+          title: Indice Quiebre
+        unidades_no_cubiertas:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Unidades No Cubiertas
+      type: object
+      required:
+      - ruta_id
+      - ruta_codigo
+      - ruta_nombre
+      - unidades_vendidas
+      - monto_vendido
+      - costo_ventas
+      - cargas
+      - lineas_carga
+      - lineas_ajustadas
+      - unidades_no_cubiertas
+      title: RotacionRuta
     RouteItem:
       properties:
         id:
@@ -1559,6 +2822,24 @@ components:
       - codigo
       - nombre
       title: RouteItem
+    RutaAsignada:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        codigo:
+          type: string
+          title: Codigo
+        nombre:
+          type: string
+          title: Nombre
+      type: object
+      required:
+      - id
+      - codigo
+      - nombre
+      title: RutaAsignada
     Severidad:
       type: string
       enum:
@@ -1631,6 +2912,95 @@ components:
       - limit
       - offset
       title: StockPage
+    SugerenciaCompra:
+      properties:
+        producto_id:
+          type: string
+          format: uuid
+          title: Producto Id
+        sku:
+          type: string
+          title: Sku
+        nombre:
+          type: string
+          title: Nombre
+        proveedor_id:
+          type: string
+          format: uuid
+          title: Proveedor Id
+        proveedor_nombre:
+          type: string
+          title: Proveedor Nombre
+        lead_time_dias:
+          type: integer
+          title: Lead Time Dias
+        stock_actual:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Stock Actual
+        stock_minimo:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Stock Minimo
+        demanda_proyectada:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Demanda Proyectada
+          description: Demanda agregada de los próximos N días
+        cantidad_sugerida:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Cantidad Sugerida
+          description: max(0, (demanda_proyectada + stock_minimo) - stock_actual)
+        costo_unitario:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Costo Unitario
+        pronostico_disponible:
+          type: boolean
+          title: Pronostico Disponible
+          description: False si no hubo pronóstico para el producto (demanda tomada como 0)
+      type: object
+      required:
+      - producto_id
+      - sku
+      - nombre
+      - proveedor_id
+      - proveedor_nombre
+      - lead_time_dias
+      - stock_actual
+      - stock_minimo
+      - demanda_proyectada
+      - cantidad_sugerida
+      - costo_unitario
+      - pronostico_disponible
+      title: SugerenciaCompra
+    SugerenciasResponse:
+      properties:
+        horizonte_dias:
+          type: integer
+          title: Horizonte Dias
+        generado_en:
+          type: string
+          format: date-time
+          title: Generado En
+        sugerencias:
+          items:
+            $ref: '#/components/schemas/SugerenciaCompra'
+          type: array
+          title: Sugerencias
+        advertencias:
+          items:
+            type: string
+          type: array
+          title: Advertencias
+          default: []
+      type: object
+      required:
+      - horizonte_dias
+      - generado_en
+      - sugerencias
+      title: SugerenciasResponse
     TipoAlerta:
       type: string
       enum:
@@ -1662,6 +3032,14 @@ components:
       - reserva
       - liberacion
       title: TipoMovimiento
+    TipoReporte:
+      type: string
+      enum:
+      - consolidado
+      - rotacion
+      - comisiones
+      - ventas_proyeccion
+      title: TipoReporte
     TokenResponse:
       properties:
         access_token:
@@ -1682,6 +3060,129 @@ components:
       - expires_in
       - usuario
       title: TokenResponse
+    UsuarioCreate:
+      properties:
+        email:
+          type: string
+          format: email
+          title: Email
+        nombre_completo:
+          type: string
+          maxLength: 150
+          minLength: 3
+          title: Nombre Completo
+        password:
+          type: string
+          maxLength: 128
+          minLength: 8
+          title: Password
+        roles:
+          items:
+            type: string
+          type: array
+          minItems: 1
+          title: Roles
+          description: Nombres de rol (`GET /users/roles`)
+        ruta_ids:
+          items:
+            type: string
+            format: uuid
+          type: array
+          title: Ruta Ids
+        proveedor_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Proveedor Id
+          description: Obligatorio con rol Proveedor
+        activo:
+          type: boolean
+          title: Activo
+          default: true
+      type: object
+      required:
+      - email
+      - nombre_completo
+      - password
+      - roles
+      title: UsuarioCreate
+    UsuarioEstado:
+      properties:
+        activo:
+          type: boolean
+          title: Activo
+      type: object
+      required:
+      - activo
+      title: UsuarioEstado
+    UsuarioOut:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        email:
+          type: string
+          format: email
+          title: Email
+        nombre_completo:
+          type: string
+          title: Nombre Completo
+        activo:
+          type: boolean
+          title: Activo
+        roles:
+          items:
+            type: string
+          type: array
+          title: Roles
+        rutas:
+          items:
+            $ref: '#/components/schemas/RutaAsignada'
+          type: array
+          title: Rutas
+        proveedor_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Proveedor Id
+        ultimo_login:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Ultimo Login
+        creado_en:
+          type: string
+          format: date-time
+          title: Creado En
+      type: object
+      required:
+      - id
+      - email
+      - nombre_completo
+      - activo
+      - roles
+      - rutas
+      - creado_en
+      title: UsuarioOut
+    UsuarioPage:
+      properties:
+        total:
+          type: integer
+          title: Total
+        usuarios:
+          items:
+            $ref: '#/components/schemas/UsuarioOut'
+          type: array
+          title: Usuarios
+      type: object
+      required:
+      - total
+      - usuarios
+      title: UsuarioPage
     UsuarioToken:
       properties:
         id:
@@ -1708,6 +3209,47 @@ components:
       - roles
       - permisos
       title: UsuarioToken
+    UsuarioUpdate:
+      properties:
+        nombre_completo:
+          anyOf:
+          - type: string
+            maxLength: 150
+            minLength: 3
+          - type: 'null'
+          title: Nombre Completo
+        password:
+          anyOf:
+          - type: string
+            maxLength: 128
+            minLength: 8
+          - type: 'null'
+          title: Password
+        roles:
+          anyOf:
+          - items:
+              type: string
+            type: array
+            minItems: 1
+          - type: 'null'
+          title: Roles
+        ruta_ids:
+          anyOf:
+          - items:
+              type: string
+              format: uuid
+            type: array
+          - type: 'null'
+          title: Ruta Ids
+        proveedor_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Proveedor Id
+      type: object
+      title: UsuarioUpdate
+      description: 'Actualización parcial: solo se modifican los campos presentes.'
     ValidationError:
       properties:
         loc:
@@ -1734,6 +3276,97 @@ components:
       - msg
       - type
       title: ValidationError
+    VentaProyeccionDia:
+      properties:
+        fecha:
+          type: string
+          format: date
+          title: Fecha
+        real:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Real
+        proyectada:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Proyectada
+      type: object
+      required:
+      - fecha
+      - real
+      - proyectada
+      title: VentaProyeccionDia
+    VentaProyeccionRuta:
+      properties:
+        ruta_id:
+          type: string
+          format: uuid
+          title: Ruta Id
+        ruta_codigo:
+          type: string
+          title: Ruta Codigo
+        ruta_nombre:
+          type: string
+          title: Ruta Nombre
+        real:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Real
+        proyectada:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Proyectada
+        desviacion_pct:
+          anyOf:
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          - type: 'null'
+          title: Desviacion Pct
+      type: object
+      required:
+      - ruta_id
+      - ruta_codigo
+      - ruta_nombre
+      - real
+      - proyectada
+      title: VentaProyeccionRuta
+    VentasProyeccionReporte:
+      properties:
+        desde:
+          type: string
+          format: date
+          title: Desde
+        hasta:
+          type: string
+          format: date
+          title: Hasta
+        total_real:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Total Real
+        total_proyectado:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Total Proyectado
+        rutas:
+          items:
+            $ref: '#/components/schemas/VentaProyeccionRuta'
+          type: array
+          title: Rutas
+        serie:
+          items:
+            $ref: '#/components/schemas/VentaProyeccionDia'
+          type: array
+          title: Serie
+      type: object
+      required:
+      - desde
+      - hasta
+      - total_real
+      - total_proyectado
+      - rutas
+      - serie
+      title: VentasProyeccionReporte
   securitySchemes:
     HTTPBearer:
       type: http

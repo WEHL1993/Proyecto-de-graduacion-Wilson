@@ -28,6 +28,16 @@ def obtener_por_productos(
     return {inv.producto_id: inv for inv in db.scalars(stmt)}
 
 
+def crear_existencia(db: Session, producto_id: uuid.UUID) -> Inventario:
+    """Fila de inventario en 0 para un producto que aún no tenía existencia."""
+    inv = Inventario(
+        producto_id=producto_id, stock_actual=Decimal("0"), stock_reservado=Decimal("0")
+    )
+    db.add(inv)
+    db.flush()
+    return inv
+
+
 def registrar_movimiento(
     db: Session,
     *,

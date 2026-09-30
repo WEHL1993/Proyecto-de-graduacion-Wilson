@@ -41,6 +41,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/etl/batches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Historial de lotes ETL
+         * @description Requiere permiso `etl:cargar`. Auditoría de cargas: fecha, filas válidas/rechazadas y estado de cada lote, del más reciente al más antiguo.
+         */
+        get: operations["listar_lotes_api_v1_etl_batches_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/predictions/demand": {
         parameters: {
             query?: never;
@@ -79,6 +99,26 @@ export interface paths {
          * @description `accion=generar` (permiso `carga_ruta:generar`) crea un plan en `borrador` con `cantidad_sugerida = min(demanda predicha, stock disponible)`; 400 `CARGA_VIGENTE_EXISTENTE` si ya hay una carga vigente para la ruta y fecha. `accion=enviar` (permiso `carga_ruta:generar`) pasa un `borrador` a `pendiente_aprobacion`. `accion=aprobar|rechazar` (permiso `carga_ruta:aprobar`) opera sobre `carga_id`: aprobar reserva stock y registra el kardex (400 `CANTIDAD_EXCEDE_STOCK` si una cantidad excede el disponible); rechazar exige `motivo_rechazo` y libera las reservas existentes.
          */
         post: operations["gestionar_carga_api_v1_routes_load_plans_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/routes/load-plans/{carga_id}/dispatch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Despacho físico de una carga aprobada
+         * @description Requiere `carga_ruta:despachar` (Bodega). Solo una carga `aprobada` puede despacharse (400 `ESTADO_CARGA_INVALIDO`); descuenta `stock_reservado` y `stock_actual` con la cantidad aprobada y registra la salida en el kardex (400 `STOCK_INSUFICIENTE` si la existencia física no alcanza).
+         */
+        post: operations["despachar_carga_api_v1_routes_load_plans__carga_id__dispatch_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -238,7 +278,7 @@ export interface paths {
         };
         /**
          * Bandeja de alertas
-         * @description Requiere permiso `alertas:leer`. Críticas primero, luego las más recientes.
+         * @description Requiere permiso `alertas:leer`. Solo devuelve los tipos que corresponden al rol del usuario (stock/quiebre → inventario y compras; `mape_umbral` → Gerente/Admin; `etl_error` → quienes cargan datos). Críticas primero, luego las más recientes.
          */
         get: operations["listar_alertas_api_v1_alerts_get"];
         put?: never;
@@ -247,6 +287,26 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/alerts/{alerta_id}/acknowledge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Reconocer una alerta abierta
+         * @description Requiere `alertas:leer`. Pasa la alerta a `reconocida`. 404 `ALERTA_NO_ENCONTRADA` (inexistente o de un tipo no visible para el rol); 409 `ALERTA_NO_ABIERTA`.
+         */
+        patch: operations["reconocer_alerta_api_v1_alerts__alerta_id__acknowledge_patch"];
         trace?: never;
     };
     "/api/v1/catalog/routes": {
@@ -261,6 +321,311 @@ export interface paths {
          * @description Cualquier usuario autenticado. Alimenta el filtro de ruta del dashboard.
          */
         get: operations["listar_rutas_api_v1_catalog_routes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/purchasing/suggestions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Sugerencias de reabastecimiento
+         * @description Requiere `pedido_proveedor:gestionar`. `cantidad_sugerida = max(0, (demanda proyectada de los próximos N días + stock mínimo) - stock actual)`, solo para productos con proveedor. Sin modelo productivo o sin historial se sugiere por punto de reorden y se informa en `advertencias`.
+         */
+        get: operations["sugerir_api_v1_purchasing_suggestions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/purchasing/orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Pedidos a proveedor
+         * @description Requiere `pedido_proveedor:gestionar` o `inventario:ajustar` (Bodega, para recibir): todos los pedidos; o `pedido_proveedor:confirmar`: solo los del proveedor del usuario.
+         */
+        get: operations["listar_ordenes_api_v1_purchasing_orders_get"];
+        put?: never;
+        /**
+         * Crear (y opcionalmente enviar) una orden de compra
+         * @description Requiere `pedido_proveedor:gestionar`. Nace en `borrador`, o en `enviado` si `enviar=true`. 400 `PRODUCTO_AJENO_A_PROVEEDOR` si un producto no es del proveedor.
+         */
+        post: operations["crear_orden_api_v1_purchasing_orders_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/purchasing/orders/{pedido_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Detalle de un pedido
+         * @description Mismos permisos y aislamiento que el listado; 404 si es de otro proveedor.
+         */
+        get: operations["obtener_orden_api_v1_purchasing_orders__pedido_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/purchasing/orders/{pedido_id}/send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Aprobar y enviar la orden al proveedor (borrador → enviado)
+         * @description Requiere `pedido_proveedor:gestionar`.
+         */
+        post: operations["enviar_orden_api_v1_purchasing_orders__pedido_id__send_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/purchasing/orders/{pedido_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancelar una orden (borrador|enviado → cancelado)
+         * @description Requiere `pedido_proveedor:gestionar`.
+         */
+        post: operations["cancelar_orden_api_v1_purchasing_orders__pedido_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/purchasing/orders/{pedido_id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Confirmación del proveedor (enviado → confirmado)
+         * @description Requiere `pedido_proveedor:confirmar`. Aislamiento por `proveedor_id`: un pedido de otro proveedor responde 404 `PEDIDO_NO_ENCONTRADO`.
+         */
+        patch: operations["confirmar_orden_api_v1_purchasing_orders__pedido_id__confirm_patch"];
+        trace?: never;
+    };
+    "/api/v1/purchasing/orders/{pedido_id}/receive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Recepción física en bodega (confirmado → recibido)
+         * @description Requiere `inventario:ajustar` (Bodega). Registra la entrada en el kardex e incrementa `stock_actual` en `inventario`.
+         */
+        post: operations["recibir_orden_api_v1_purchasing_orders__pedido_id__receive_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Roles asignables */
+        get: operations["listar_roles_api_v1_users_roles_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar usuarios
+         * @description Requiere `usuarios:gestionar`. Filtros por texto (correo/nombre), estado y rol.
+         */
+        get: operations["listar_usuarios_api_v1_users_get"];
+        put?: never;
+        /**
+         * Crear usuario
+         * @description 409 `EMAIL_DUPLICADO`; 400 `ROL_INVALIDO`, `RUTA_INVALIDA` o `PROVEEDOR_REQUERIDO`.
+         */
+        post: operations["crear_usuario_api_v1_users_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/{usuario_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Actualizar usuario (parcial)
+         * @description Edita nombre, contraseña, roles y rutas comerciales. 404 `USUARIO_NO_ENCONTRADO`; 409 `ULTIMO_ADMIN` / `AUTOMODIFICACION_NO_PERMITIDA` al retirar el rol Admin.
+         */
+        patch: operations["actualizar_usuario_api_v1_users__usuario_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/users/{usuario_id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Activar / desactivar usuario
+         * @description Un usuario inactivo no puede iniciar sesión. No permite autodesactivarse.
+         */
+        patch: operations["cambiar_estado_usuario_api_v1_users__usuario_id__status_patch"];
+        trace?: never;
+    };
+    "/api/v1/reports/inventory-turnover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Rotación de inventario e índice de quiebres por ruta
+         * @description Requiere `reportes:leer`. Rotación = costo de ventas del periodo / valor del inventario actual. Índice de quiebre = % de líneas de carga limitadas por stock (`ajustado_por_stock`). Sin `desde`/`hasta` usa los últimos 30 días hasta la última venta registrada.
+         */
+        get: operations["rotacion_api_v1_reports_inventory_turnover_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reports/commissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Liquidación de comisiones por vendedor y periodo
+         * @description Requiere `reportes:leer`. Agrupa `comisiones` sobre `ventas_historicas` por vendedor y periodo (`YYYY-MM`). Sin periodos usa el mes de la última actividad.
+         */
+        get: operations["comisiones_api_v1_reports_commissions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reports/sales-vs-forecast": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Volumen de venta real vs. proyectado por ruta
+         * @description Requiere `reportes:leer`. Unidades reales (`ventas_historicas`) frente a la proyección más reciente por producto/ruta/día (`pronosticos_demanda`). Sin `desde`/`hasta` usa los últimos 30 días hasta la última fecha con venta o proyección.
+         */
+        get: operations["ventas_vs_proyeccion_api_v1_reports_sales_vs_forecast_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reports/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Exportar reportes en CSV o Excel
+         * @description Requiere `reportes:leer`. `tipo=consolidado` reúne los tres reportes (una hoja por reporte en Excel; secciones separadas en CSV).
+         */
+        get: operations["exportar_api_v1_reports_export_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -359,6 +724,39 @@ export interface components {
          * @enum {string}
          */
         CodigoErrorEtl: "COLUMNAS_FALTANTES" | "TIPOS_INVALIDOS" | "DATOS_INVALIDOS";
+        /** ComisionReporte */
+        ComisionReporte: {
+            /** Periodo Desde */
+            periodo_desde: string;
+            /** Periodo Hasta */
+            periodo_hasta: string;
+            /** Total Vendido */
+            total_vendido: string;
+            /** Total Comisiones */
+            total_comisiones: string;
+            /** Liquidaciones */
+            liquidaciones: components["schemas"]["ComisionVendedor"][];
+        };
+        /** ComisionVendedor */
+        ComisionVendedor: {
+            /**
+             * Vendedor Id
+             * Format: uuid
+             */
+            vendedor_id: string;
+            /** Vendedor */
+            vendedor: string;
+            /** Periodo */
+            periodo: string;
+            /** Ventas Registradas */
+            ventas_registradas: number;
+            /** Monto Vendido */
+            monto_vendido: string;
+            /** Comision Total */
+            comision_total: string;
+            /** Porcentaje Efectivo */
+            porcentaje_efectivo?: string | null;
+        };
         /** Degradacion */
         Degradacion: {
             /** Umbral Mape */
@@ -481,10 +879,20 @@ export interface components {
          */
         EstadoJob: "en_cola" | "en_ejecucion" | "completado" | "fallido";
         /**
+         * EstadoLoteEtl
+         * @enum {string}
+         */
+        EstadoLoteEtl: "recibido" | "validado" | "rechazado" | "cargado";
+        /**
          * EstadoModelo
          * @enum {string}
          */
         EstadoModelo: "candidato" | "produccion" | "archivado" | "descartado";
+        /**
+         * EstadoPedido
+         * @enum {string}
+         */
+        EstadoPedido: "borrador" | "enviado" | "confirmado" | "recibido" | "cancelado";
         /** EtlResult */
         EtlResult: {
             /**
@@ -520,6 +928,11 @@ export interface components {
             /** Total Errores */
             total_errores: number;
         };
+        /**
+         * FormatoReporte
+         * @enum {string}
+         */
+        FormatoReporte: "csv" | "xlsx";
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -689,6 +1102,41 @@ export interface components {
             /** Password */
             password: string;
         };
+        /**
+         * LoteItem
+         * @description Fila del historial de lotes (`etl_lotes`) para la auditoría de cargas.
+         */
+        LoteItem: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Archivo Nombre */
+            archivo_nombre: string;
+            /** Estado */
+            estado: string;
+            /** Filas Totales */
+            filas_totales: number;
+            /** Filas Validas */
+            filas_validas: number;
+            /** Filas Rechazadas */
+            filas_rechazadas: number;
+            /** Cargado Por */
+            cargado_por: string;
+            /**
+             * Creado En
+             * Format: date-time
+             */
+            creado_en: string;
+        };
+        /** LotePage */
+        LotePage: {
+            /** Total */
+            total: number;
+            /** Lotes */
+            lotes: components["schemas"]["LoteItem"][];
+        };
         /** MetricPoint */
         MetricPoint: {
             /**
@@ -788,6 +1236,111 @@ export interface components {
          * @enum {string}
          */
         MotivoEntrenamiento: "programado" | "manual" | "degradacion";
+        /** PedidoConfirmacion */
+        PedidoConfirmacion: {
+            /**
+             * Fecha Esperada
+             * Format: date
+             * @description Fecha estimada de entrega informada por el proveedor
+             */
+            fecha_esperada: string;
+        };
+        /** PedidoCreate */
+        PedidoCreate: {
+            /**
+             * Proveedor Id
+             * Format: uuid
+             */
+            proveedor_id: string;
+            /** Items */
+            items: components["schemas"]["PedidoItemIn"][];
+            /** Fecha Esperada */
+            fecha_esperada?: string | null;
+            /**
+             * Enviar
+             * @description Aprobar y enviar de inmediato al proveedor
+             * @default false
+             */
+            enviar: boolean;
+        };
+        /** PedidoItemIn */
+        PedidoItemIn: {
+            /**
+             * Producto Id
+             * Format: uuid
+             */
+            producto_id: string;
+            /** Cantidad */
+            cantidad: number | string;
+            /**
+             * Costo Unitario
+             * @description Por defecto el del catálogo
+             */
+            costo_unitario?: number | string | null;
+            /** Alerta Origen Id */
+            alerta_origen_id?: string | null;
+        };
+        /** PedidoItemOut */
+        PedidoItemOut: {
+            /**
+             * Producto Id
+             * Format: uuid
+             */
+            producto_id: string;
+            /** Sku */
+            sku: string;
+            /** Producto Nombre */
+            producto_nombre: string;
+            /** Cantidad */
+            cantidad: string;
+            /** Costo Unitario */
+            costo_unitario: string;
+            /** Subtotal */
+            subtotal: string;
+        };
+        /** PedidoOut */
+        PedidoOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Proveedor Id
+             * Format: uuid
+             */
+            proveedor_id: string;
+            /** Proveedor Nombre */
+            proveedor_nombre: string;
+            estado: components["schemas"]["EstadoPedido"];
+            /**
+             * Fecha Pedido
+             * Format: date
+             */
+            fecha_pedido: string;
+            /** Fecha Esperada */
+            fecha_esperada?: string | null;
+            /** Total */
+            total: string;
+            /**
+             * Creado Por
+             * Format: uuid
+             */
+            creado_por: string;
+            /** Items */
+            items: components["schemas"]["PedidoItemOut"][];
+        };
+        /** PedidoPage */
+        PedidoPage: {
+            /** Items */
+            items: components["schemas"]["PedidoOut"][];
+            /** Total */
+            total: number;
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+        };
         /** PeorProducto */
         PeorProducto: {
             /**
@@ -875,6 +1428,70 @@ export interface components {
              */
             solicitado_en: string;
         };
+        /** RolItem */
+        RolItem: {
+            /** Id */
+            id: number;
+            /** Nombre */
+            nombre: string;
+            /** Descripcion */
+            descripcion?: string | null;
+        };
+        /** RotacionReporte */
+        RotacionReporte: {
+            /**
+             * Desde
+             * Format: date
+             */
+            desde: string;
+            /**
+             * Hasta
+             * Format: date
+             */
+            hasta: string;
+            /** Valor Inventario */
+            valor_inventario: string;
+            /** Costo Ventas Total */
+            costo_ventas_total: string;
+            /** Rotacion Global */
+            rotacion_global?: string | null;
+            /** Dias Inventario */
+            dias_inventario?: string | null;
+            /** Indice Quiebre Global */
+            indice_quiebre_global?: string | null;
+            /** Rutas */
+            rutas: components["schemas"]["RotacionRuta"][];
+        };
+        /** RotacionRuta */
+        RotacionRuta: {
+            /**
+             * Ruta Id
+             * Format: uuid
+             */
+            ruta_id: string;
+            /** Ruta Codigo */
+            ruta_codigo: string;
+            /** Ruta Nombre */
+            ruta_nombre: string;
+            /** Unidades Vendidas */
+            unidades_vendidas: string;
+            /** Monto Vendido */
+            monto_vendido: string;
+            /** Costo Ventas */
+            costo_ventas: string;
+            /** Rotacion */
+            rotacion?: string | null;
+            /** Cargas */
+            cargas: number;
+            /** Lineas Carga */
+            lineas_carga: number;
+            /** Lineas Ajustadas */
+            lineas_ajustadas: number;
+            /** Indice Quiebre */
+            indice_quiebre?: string | null;
+            /** Unidades No Cubiertas */
+            unidades_no_cubiertas: string;
+        };
         /** RouteItem */
         RouteItem: {
             /**
@@ -888,6 +1505,18 @@ export interface components {
             nombre: string;
             /** Zona */
             zona?: string | null;
+        };
+        /** RutaAsignada */
+        RutaAsignada: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Codigo */
+            codigo: string;
+            /** Nombre */
+            nombre: string;
         };
         /**
          * Severidad
@@ -927,6 +1556,65 @@ export interface components {
             /** Offset */
             offset: number;
         };
+        /** SugerenciaCompra */
+        SugerenciaCompra: {
+            /**
+             * Producto Id
+             * Format: uuid
+             */
+            producto_id: string;
+            /** Sku */
+            sku: string;
+            /** Nombre */
+            nombre: string;
+            /**
+             * Proveedor Id
+             * Format: uuid
+             */
+            proveedor_id: string;
+            /** Proveedor Nombre */
+            proveedor_nombre: string;
+            /** Lead Time Dias */
+            lead_time_dias: number;
+            /** Stock Actual */
+            stock_actual: string;
+            /** Stock Minimo */
+            stock_minimo: string;
+            /**
+             * Demanda Proyectada
+             * @description Demanda agregada de los próximos N días
+             */
+            demanda_proyectada: string;
+            /**
+             * Cantidad Sugerida
+             * @description max(0, (demanda_proyectada + stock_minimo) - stock_actual)
+             */
+            cantidad_sugerida: string;
+            /** Costo Unitario */
+            costo_unitario: string;
+            /**
+             * Pronostico Disponible
+             * @description False si no hubo pronóstico para el producto (demanda tomada como 0)
+             */
+            pronostico_disponible: boolean;
+        };
+        /** SugerenciasResponse */
+        SugerenciasResponse: {
+            /** Horizonte Dias */
+            horizonte_dias: number;
+            /**
+             * Generado En
+             * Format: date-time
+             */
+            generado_en: string;
+            /** Sugerencias */
+            sugerencias: components["schemas"]["SugerenciaCompra"][];
+            /**
+             * Advertencias
+             * @default []
+             */
+            advertencias: string[];
+        };
         /**
          * TipoAlerta
          * @enum {string}
@@ -947,6 +1635,11 @@ export interface components {
          * @enum {string}
          */
         TipoMovimiento: "entrada" | "salida" | "ajuste" | "reserva" | "liberacion";
+        /**
+         * TipoReporte
+         * @enum {string}
+         */
+        TipoReporte: "consolidado" | "rotacion" | "comisiones" | "ventas_proyeccion";
         /** TokenResponse */
         TokenResponse: {
             /** Access Token */
@@ -959,6 +1652,77 @@ export interface components {
             /** Expires In */
             expires_in: number;
             usuario: components["schemas"]["UsuarioToken"];
+        };
+        /** UsuarioCreate */
+        UsuarioCreate: {
+            /**
+             * Email
+             * Format: email
+             */
+            email: string;
+            /** Nombre Completo */
+            nombre_completo: string;
+            /** Password */
+            password: string;
+            /**
+             * Roles
+             * @description Nombres de rol (`GET /users/roles`)
+             */
+            roles: string[];
+            /** Ruta Ids */
+            ruta_ids?: string[];
+            /**
+             * Proveedor Id
+             * @description Obligatorio con rol Proveedor
+             */
+            proveedor_id?: string | null;
+            /**
+             * Activo
+             * @default true
+             */
+            activo: boolean;
+        };
+        /** UsuarioEstado */
+        UsuarioEstado: {
+            /** Activo */
+            activo: boolean;
+        };
+        /** UsuarioOut */
+        UsuarioOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Email
+             * Format: email
+             */
+            email: string;
+            /** Nombre Completo */
+            nombre_completo: string;
+            /** Activo */
+            activo: boolean;
+            /** Roles */
+            roles: string[];
+            /** Rutas */
+            rutas: components["schemas"]["RutaAsignada"][];
+            /** Proveedor Id */
+            proveedor_id?: string | null;
+            /** Ultimo Login */
+            ultimo_login?: string | null;
+            /**
+             * Creado En
+             * Format: date-time
+             */
+            creado_en: string;
+        };
+        /** UsuarioPage */
+        UsuarioPage: {
+            /** Total */
+            total: number;
+            /** Usuarios */
+            usuarios: components["schemas"]["UsuarioOut"][];
         };
         /** UsuarioToken */
         UsuarioToken: {
@@ -974,6 +1738,22 @@ export interface components {
             /** Permisos */
             permisos: string[];
         };
+        /**
+         * UsuarioUpdate
+         * @description Actualización parcial: solo se modifican los campos presentes.
+         */
+        UsuarioUpdate: {
+            /** Nombre Completo */
+            nombre_completo?: string | null;
+            /** Password */
+            password?: string | null;
+            /** Roles */
+            roles?: string[] | null;
+            /** Ruta Ids */
+            ruta_ids?: string[] | null;
+            /** Proveedor Id */
+            proveedor_id?: string | null;
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -986,6 +1766,57 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /** VentaProyeccionDia */
+        VentaProyeccionDia: {
+            /**
+             * Fecha
+             * Format: date
+             */
+            fecha: string;
+            /** Real */
+            real: string;
+            /** Proyectada */
+            proyectada: string;
+        };
+        /** VentaProyeccionRuta */
+        VentaProyeccionRuta: {
+            /**
+             * Ruta Id
+             * Format: uuid
+             */
+            ruta_id: string;
+            /** Ruta Codigo */
+            ruta_codigo: string;
+            /** Ruta Nombre */
+            ruta_nombre: string;
+            /** Real */
+            real: string;
+            /** Proyectada */
+            proyectada: string;
+            /** Desviacion Pct */
+            desviacion_pct?: string | null;
+        };
+        /** VentasProyeccionReporte */
+        VentasProyeccionReporte: {
+            /**
+             * Desde
+             * Format: date
+             */
+            desde: string;
+            /**
+             * Hasta
+             * Format: date
+             */
+            hasta: string;
+            /** Total Real */
+            total_real: string;
+            /** Total Proyectado */
+            total_proyectado: string;
+            /** Rutas */
+            rutas: components["schemas"]["VentaProyeccionRuta"][];
+            /** Serie */
+            serie: components["schemas"]["VentaProyeccionDia"][];
         };
     };
     responses: never;
@@ -1058,6 +1889,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EtlValidationError"];
+                };
+            };
+        };
+    };
+    listar_lotes_api_v1_etl_batches_get: {
+        parameters: {
+            query?: {
+                estado?: components["schemas"]["EstadoLoteEtl"] | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LotePage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -1139,6 +2003,37 @@ export interface operations {
                 "application/json": components["schemas"]["LoadPlanRequest"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoadPlanResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    despachar_carga_api_v1_routes_load_plans__carga_id__dispatch_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                carga_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -1434,6 +2329,37 @@ export interface operations {
             };
         };
     };
+    reconocer_alerta_api_v1_alerts__alerta_id__acknowledge_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alerta_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertItem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     listar_rutas_api_v1_catalog_routes_get: {
         parameters: {
             query?: never;
@@ -1450,6 +2376,559 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RouteItem"][];
+                };
+            };
+        };
+    };
+    sugerir_api_v1_purchasing_suggestions_get: {
+        parameters: {
+            query?: {
+                horizonte_dias?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SugerenciasResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listar_ordenes_api_v1_purchasing_orders_get: {
+        parameters: {
+            query?: {
+                estado?: components["schemas"]["EstadoPedido"] | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PedidoPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    crear_orden_api_v1_purchasing_orders_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PedidoCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PedidoOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    obtener_orden_api_v1_purchasing_orders__pedido_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pedido_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PedidoOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    enviar_orden_api_v1_purchasing_orders__pedido_id__send_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pedido_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PedidoOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancelar_orden_api_v1_purchasing_orders__pedido_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pedido_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PedidoOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    confirmar_orden_api_v1_purchasing_orders__pedido_id__confirm_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pedido_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PedidoConfirmacion"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PedidoOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recibir_orden_api_v1_purchasing_orders__pedido_id__receive_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pedido_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PedidoOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listar_roles_api_v1_users_roles_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RolItem"][];
+                };
+            };
+        };
+    };
+    listar_usuarios_api_v1_users_get: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                activo?: boolean | null;
+                rol?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UsuarioPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    crear_usuario_api_v1_users_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UsuarioCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UsuarioOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    actualizar_usuario_api_v1_users__usuario_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                usuario_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UsuarioUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UsuarioOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cambiar_estado_usuario_api_v1_users__usuario_id__status_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                usuario_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UsuarioEstado"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UsuarioOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rotacion_api_v1_reports_inventory_turnover_get: {
+        parameters: {
+            query?: {
+                desde?: string | null;
+                hasta?: string | null;
+                ruta_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RotacionReporte"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    comisiones_api_v1_reports_commissions_get: {
+        parameters: {
+            query?: {
+                periodo_desde?: string | null;
+                periodo_hasta?: string | null;
+                vendedor_id?: string | null;
+                ruta_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComisionReporte"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ventas_vs_proyeccion_api_v1_reports_sales_vs_forecast_get: {
+        parameters: {
+            query?: {
+                desde?: string | null;
+                hasta?: string | null;
+                ruta_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VentasProyeccionReporte"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    exportar_api_v1_reports_export_get: {
+        parameters: {
+            query?: {
+                tipo?: components["schemas"]["TipoReporte"];
+                formato?: components["schemas"]["FormatoReporte"];
+                desde?: string | null;
+                hasta?: string | null;
+                periodo_desde?: string | null;
+                periodo_hasta?: string | null;
+                ruta_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                    "text/csv": unknown;
+                    "application/octet-stream": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

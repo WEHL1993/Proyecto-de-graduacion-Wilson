@@ -1,6 +1,6 @@
 """DTOs del módulo ETL (`POST /etl/upload-excel`, sección 4 de `openapi.contract.yaml`)."""
 
-from datetime import date
+from datetime import date, datetime
 from enum import StrEnum
 from typing import Literal
 from uuid import UUID
@@ -56,3 +56,21 @@ class EtlValidationError(BaseModel):
     errores: list[ErrorFila]
     # Extensión al contrato: `errores` se trunca en MAX_ERRORES_DETALLADOS.
     total_errores: int
+
+
+class LoteItem(BaseModel):
+    """Fila del historial de lotes (`etl_lotes`) para la auditoría de cargas."""
+
+    id: UUID
+    archivo_nombre: str
+    estado: str
+    filas_totales: int
+    filas_validas: int
+    filas_rechazadas: int
+    cargado_por: str
+    creado_en: datetime
+
+
+class LotePage(BaseModel):
+    total: int
+    lotes: list[LoteItem]

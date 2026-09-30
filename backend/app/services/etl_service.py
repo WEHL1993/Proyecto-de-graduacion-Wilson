@@ -27,6 +27,8 @@ from app.schemas.etl import (
     ErrorFila,
     EtlResult,
     EtlValidationError,
+    LoteItem,
+    LotePage,
     ModoCarga,
     RangoFechas,
 )
@@ -389,3 +391,23 @@ def _generar_comisiones(db: Session, ventas: list[sales_repo.VentaPersistida]) -
     if sin_vendedor:
         return [f"{sin_vendedor} ventas sin vendedor no generaron comisión."]
     return []
+
+
+def listar_lotes(db: Session, *, estado: EstadoLoteEtl | None, limit: int, offset: int) -> LotePage:
+    filas, total = sales_repo.listar_lotes(db, estado=estado, limit=limit, offset=offset)
+    return LotePage(
+        total=total,
+        lotes=[
+            LoteItem(
+                id=lote.id,
+                archivo_nombre=lote.archivo_nombre,
+                estado=lote.estado,
+                filas_totales=lote.filas_totales,
+                filas_validas=lote.filas_validas,
+                filas_rechazadas=lote.filas_rechazadas,
+                cargado_por=nombre,
+                creado_en=lote.creado_en,
+            )
+            for lote, nombre in filas
+        ],
+    )

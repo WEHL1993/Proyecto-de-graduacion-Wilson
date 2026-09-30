@@ -58,3 +58,19 @@ def obtener_carga_vigente(
     if not {"carga_ruta:generar", "carga_ruta:aprobar"} & set(usuario.permisos):
         verificar_permiso(usuario, "carga_ruta:generar")
     return load_plan_service.obtener_vigente(db, ruta_id, fecha_operacion)
+
+
+@router.post(
+    "/load-plans/{carga_id}/dispatch",
+    response_model=LoadPlanResponse,
+    summary="Despacho físico de una carga aprobada",
+    description=(
+        "Requiere `carga_ruta:despachar` (Bodega). Solo una carga `aprobada` puede despacharse "
+        "(400 `ESTADO_CARGA_INVALIDO`); descuenta `stock_reservado` y `stock_actual` con la "
+        "cantidad aprobada y registra la salida en el kardex (400 `STOCK_INSUFICIENTE` si la "
+        "existencia física no alcanza)."
+    ),
+)
+def despachar_carga(db: DBSession, usuario: CurrentUser, carga_id: UUID) -> LoadPlanResponse:
+    verificar_permiso(usuario, "carga_ruta:despachar")
+    return load_plan_service.despachar(db, carga_id, usuario.id)
