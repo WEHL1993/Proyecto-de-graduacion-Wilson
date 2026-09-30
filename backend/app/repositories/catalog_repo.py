@@ -51,5 +51,16 @@ def productos_existentes(db: Session, producto_ids: Iterable[uuid.UUID]) -> set[
     return set(db.scalars(select(Producto.id).where(Producto.id.in_(ids))))
 
 
+def skus_de(db: Session, producto_ids: Iterable[uuid.UUID]) -> dict[uuid.UUID, str]:
+    """`producto_id -> sku`."""
+    ids = set(producto_ids)
+    if not ids:
+        return {}
+    return {
+        pid: sku
+        for pid, sku in db.execute(select(Producto.id, Producto.sku).where(Producto.id.in_(ids)))
+    }
+
+
 def ruta_existe(db: Session, ruta_id: uuid.UUID) -> bool:
     return db.scalar(select(Ruta.id).where(Ruta.id == ruta_id)) is not None

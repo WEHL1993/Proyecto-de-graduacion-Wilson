@@ -94,6 +94,170 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
       - HTTPBearer: []
+  /api/v1/routes/load-plans:
+    post:
+      tags:
+      - Routes
+      summary: Generación y aprobación de carga de ruta
+      description: '`accion=generar` (permiso `carga_ruta:generar`) crea un plan en `borrador` con `cantidad_sugerida
+        = min(demanda predicha, stock disponible)`; 400 `CARGA_VIGENTE_EXISTENTE` si ya hay una carga
+        vigente para la ruta y fecha. `accion=aprobar|rechazar` (permiso `carga_ruta:aprobar`) opera sobre
+        `carga_id`: aprobar reserva stock y registra el kardex (400 `CANTIDAD_EXCEDE_STOCK` si una cantidad
+        excede el disponible); rechazar exige `motivo_rechazo` y libera las reservas existentes.'
+      operationId: gestionar_carga_api_v1_routes_load_plans_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoadPlanRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoadPlanResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/v1/inventory:
+    get:
+      tags:
+      - Inventory
+      summary: Existencias por producto
+      description: Requiere permiso `inventario:leer`. `stock_disponible = stock_actual - stock_reservado`.
+        Un producto sin fila de inventario se reporta con existencias en 0.
+      operationId: listar_existencias_api_v1_inventory_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: producto_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Producto Id
+      - name: bajo_minimo
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Bajo Minimo
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 200
+          minimum: 1
+          default: 50
+          title: Limit
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+          title: Offset
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockPage'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/inventory/kardex:
+    get:
+      tags:
+      - Inventory
+      summary: Movimientos de kardex
+      description: 'Requiere permiso `inventario:leer`. Orden: más reciente primero.'
+      operationId: listar_kardex_api_v1_inventory_kardex_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: producto_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Producto Id
+      - name: tipo_movimiento
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/TipoMovimiento'
+          - type: 'null'
+          title: Tipo Movimiento
+      - name: desde
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Desde
+      - name: hasta
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Hasta
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 200
+          minimum: 1
+          default: 50
+          title: Limit
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+          title: Offset
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KardexPage'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /health:
     get:
       tags:
@@ -113,6 +277,24 @@ paths:
                 title: Response Health Health Get
 components:
   schemas:
+    AjusteCarga:
+      properties:
+        producto_id:
+          type: string
+          format: uuid
+          title: Producto Id
+        cantidad_aprobada:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*(?:\d{0,10}|(?=[\d.]{1,13}0*$)\d{0,10}\.\d{0,2}0*$)
+          title: Cantidad Aprobada
+      type: object
+      required:
+      - producto_id
+      - cantidad_aprobada
+      title: AjusteCarga
     Body_upload_excel_api_v1_etl_upload_excel_post:
       properties:
         file:
@@ -293,6 +475,15 @@ components:
       - mensaje
       title: ErrorFila
       description: Error de validación localizado por fila/columna (fila = número de fila en Excel).
+    EstadoCarga:
+      type: string
+      enum:
+      - borrador
+      - pendiente_aprobacion
+      - aprobada
+      - rechazada
+      - despachada
+      title: EstadoCarga
     EtlResult:
       properties:
         lote_id:
@@ -363,6 +554,211 @@ components:
           title: Detail
       type: object
       title: HTTPValidationError
+    KardexEntry:
+      properties:
+        id:
+          type: integer
+          title: Id
+        producto_id:
+          type: string
+          format: uuid
+          title: Producto Id
+        tipo_movimiento:
+          $ref: '#/components/schemas/TipoMovimiento'
+        cantidad:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Cantidad
+        saldo_resultante:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Saldo Resultante
+        referencia_tipo:
+          anyOf:
+          - $ref: '#/components/schemas/ReferenciaTipo'
+          - type: 'null'
+        referencia_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Referencia Id
+        usuario_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Usuario Id
+        fecha_movimiento:
+          type: string
+          format: date-time
+          title: Fecha Movimiento
+      type: object
+      required:
+      - id
+      - producto_id
+      - tipo_movimiento
+      - cantidad
+      - saldo_resultante
+      - fecha_movimiento
+      title: KardexEntry
+    KardexPage:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/KardexEntry'
+          type: array
+          title: Items
+        total:
+          type: integer
+          title: Total
+        limit:
+          type: integer
+          title: Limit
+        offset:
+          type: integer
+          title: Offset
+      type: object
+      required:
+      - items
+      - total
+      - limit
+      - offset
+      title: KardexPage
+    LoadPlanItem:
+      properties:
+        producto_id:
+          type: string
+          format: uuid
+          title: Producto Id
+        sku:
+          type: string
+          title: Sku
+        cantidad_predicha:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Cantidad Predicha
+        stock_disponible:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Stock Disponible
+          description: Stock disponible al generar el plan
+        cantidad_sugerida:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Cantidad Sugerida
+        cantidad_aprobada:
+          anyOf:
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          - type: 'null'
+          title: Cantidad Aprobada
+          description: Nula hasta que el plan se aprueba
+        ajustado_por_stock:
+          type: boolean
+          title: Ajustado Por Stock
+      type: object
+      required:
+      - producto_id
+      - sku
+      - cantidad_predicha
+      - stock_disponible
+      - cantidad_sugerida
+      - ajustado_por_stock
+      title: LoadPlanItem
+    LoadPlanRequest:
+      properties:
+        accion:
+          type: string
+          enum:
+          - generar
+          - aprobar
+          - rechazar
+          title: Accion
+        ruta_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Ruta Id
+          description: Obligatorio si accion=generar
+        fecha_operacion:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Fecha Operacion
+          description: Obligatorio si accion=generar
+        carga_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Carga Id
+          description: Obligatorio si accion=aprobar|rechazar
+        ajustes:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/AjusteCarga'
+            type: array
+          - type: 'null'
+          title: Ajustes
+          description: Cantidades aprobadas editadas (solo accion=aprobar)
+        motivo_rechazo:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Motivo Rechazo
+          description: Obligatorio si accion=rechazar
+        observaciones:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Observaciones
+      type: object
+      required:
+      - accion
+      title: LoadPlanRequest
+    LoadPlanResponse:
+      properties:
+        carga_id:
+          type: string
+          format: uuid
+          title: Carga Id
+        ruta_id:
+          type: string
+          format: uuid
+          title: Ruta Id
+        fecha_operacion:
+          type: string
+          format: date
+          title: Fecha Operacion
+        estado:
+          $ref: '#/components/schemas/EstadoCarga'
+        modelo_id:
+          type: string
+          format: uuid
+          title: Modelo Id
+        items:
+          items:
+            $ref: '#/components/schemas/LoadPlanItem'
+          type: array
+          title: Items
+        alertas_generadas:
+          items:
+            type: string
+            format: uuid
+          type: array
+          title: Alertas Generadas
+      type: object
+      required:
+      - carga_id
+      - ruta_id
+      - fecha_operacion
+      - estado
+      - modelo_id
+      - items
+      title: LoadPlanResponse
     LoginRequest:
       properties:
         email:
@@ -399,6 +795,88 @@ components:
       - desde
       - hasta
       title: RangoFechas
+    ReferenciaTipo:
+      type: string
+      enum:
+      - carga_ruta
+      - pedido
+      - ajuste
+      - etl
+      title: ReferenciaTipo
+    StockItem:
+      properties:
+        producto_id:
+          type: string
+          format: uuid
+          title: Producto Id
+        sku:
+          type: string
+          title: Sku
+        nombre:
+          type: string
+          title: Nombre
+        stock_actual:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Stock Actual
+        stock_reservado:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Stock Reservado
+        stock_disponible:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Stock Disponible
+        stock_minimo:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Stock Minimo
+        bajo_minimo:
+          type: boolean
+          title: Bajo Minimo
+      type: object
+      required:
+      - producto_id
+      - sku
+      - nombre
+      - stock_actual
+      - stock_reservado
+      - stock_disponible
+      - stock_minimo
+      - bajo_minimo
+      title: StockItem
+    StockPage:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/StockItem'
+          type: array
+          title: Items
+        total:
+          type: integer
+          title: Total
+        limit:
+          type: integer
+          title: Limit
+        offset:
+          type: integer
+          title: Offset
+      type: object
+      required:
+      - items
+      - total
+      - limit
+      - offset
+      title: StockPage
+    TipoMovimiento:
+      type: string
+      enum:
+      - entrada
+      - salida
+      - ajuste
+      - reserva
+      - liberacion
+      title: TipoMovimiento
     TokenResponse:
       properties:
         access_token:

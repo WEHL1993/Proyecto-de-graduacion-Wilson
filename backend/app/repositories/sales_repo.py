@@ -11,6 +11,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from app.domain.enums import EstadoLoteEtl
+from app.domain.models.catalog import Producto
 from app.domain.models.sales import Comision, EtlLote, VentaHistorica
 
 _TAMANO_LOTE = 2000
@@ -108,6 +109,19 @@ def upsert_comisiones(db: Session, filas: Sequence[dict[str, Any]]) -> int:
         )
         db.execute(stmt)
     return len(filas)
+
+
+# ------------------------------------------------------------------ catálogo por ruta
+def productos_de_ruta(db: Session, ruta_id: uuid.UUID) -> list[uuid.UUID]:
+    """Productos activos con ventas históricas en la ruta (los que puede cargar), por id."""
+    stmt = (
+        select(VentaHistorica.producto_id)
+        .join(Producto, Producto.id == VentaHistorica.producto_id)
+        .where(VentaHistorica.ruta_id == ruta_id, Producto.activo.is_(True))
+        .distinct()
+        .order_by(VentaHistorica.producto_id)
+    )
+    return list(db.scalars(stmt))
 
 
 # ------------------------------------------------------------------ serie diaria para ML
