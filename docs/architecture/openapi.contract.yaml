@@ -1,0 +1,465 @@
+openapi: 3.0.3
+info:
+  title: API Análisis Predictivo — Desarrollos Comerciales del Sur, S.A.
+  version: 1.0.0
+  description: Contrato del prototipo de tesis. Autenticación JWT y control de acceso RBAC.
+servers:
+  - url: http://localhost:8000
+    description: Desarrollo local
+tags:
+  - name: Auth
+  - name: ETL
+  - name: Predictions
+  - name: Routes
+  - name: ML
+
+security:
+  - bearerAuth: []
+
+paths:
+  /api/v1/auth/login:
+    post:
+      tags: [Auth]
+      summary: Autenticación y emisión de JWT
+      operationId: login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: Autenticación exitosa
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /api/v1/etl/upload-excel:
+    post:
+      tags: [ETL]
+      summary: Ingesta de histórico de ventas desde Excel
+      description: >
+        Requiere permiso `etl:cargar`. Valida estructura, tipos y reglas de negocio.
+        Si existen errores bloqueantes el lote se rechaza completo (modo estricto)
+        salvo `modo=parcial`. Un archivo con checksum ya cargado devuelve 400.
+      operationId: uploadExcel
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Archivo .xlsx (máx. 20 MB)
+                modo:
+                  type: string
+                  enum: [estricto, parcial]
+                  default: estricto
+                hoja:
+                  type: string
+                  description: Nombre de la hoja; por defecto la primera
+      responses:
+        '200':
+          description: Lote procesado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EtlResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422':
+          description: El archivo no cumple validaciones estructurales o de datos
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EtlValidationError' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /api/v1/predictions/demand:
+    post:
+      tags: [Predictions]
+      summary: Inferencia de demanda por producto/ruta/horizonte
+      description: Requiere permiso `prediccion:consultar`. Usa el modelo en estado `produccion`.
+      operationId: predictDemand
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DemandRequest' }
+      responses:
+        '200':
+          description: Pronóstico generado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DemandResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /api/v1/routes/load-plans:
+    post:
+      tags: [Routes]
+      summary: Generación y aprobación de carga de ruta
+      description: >
+        `accion=generar` crea un plan en borrador aplicando cantidad_sugerida = min(demanda, stock disponible).
+        `accion=aprobar|rechazar` opera sobre un plan existente (`carga_id` obligatorio).
+        Generar requiere `carga_ruta:generar`; aprobar/rechazar requiere `carga_ruta:aprobar`.
+      operationId: manageLoadPlan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoadPlanRequest' }
+      responses:
+        '200':
+          description: Operación aplicada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoadPlanResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /api/v1/ml/metrics:
+    get:
+      tags: [ML]
+      summary: Consulta de precisión y degradación
+      description: Requiere permiso `ml:metricas:leer`.
+      operationId: getMlMetrics
+      parameters:
+        - name: modelo_id
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Si se omite, se usa el modelo en producción
+        - name: tipo_evaluacion
+          in: query
+          schema: { type: string, enum: [holdout, backtest, produccion], default: produccion }
+        - name: desde
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: hasta
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: producto_id
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Métricas y estado de degradación
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MetricsResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /api/v1/ml/models/retrain:
+    post:
+      tags: [ML]
+      summary: Disparo de reentrenamiento
+      description: >
+        Requiere permiso `ml:reentrenar`. Crea un job asíncrono; responde 200 con `job_id`
+        y estado `en_cola`. El candidato solo se promueve si mejora al modelo en producción.
+      operationId: retrainModel
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RetrainRequest' }
+      responses:
+        '200':
+          description: Job de reentrenamiento aceptado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RetrainResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  responses:
+    BadRequest:
+      description: Solicitud inválida a nivel de negocio (400)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthorized:
+      description: Token ausente, inválido o expirado (401)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: Autenticado sin el permiso requerido (403)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ValidationError:
+      description: Error de validación de esquema (422)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ValidationErrorBody' }
+    InternalError:
+      description: Error interno del servidor (500)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+    Error:
+      type: object
+      required: [codigo, mensaje]
+      properties:
+        codigo: { type: string, example: STOCK_INSUFICIENTE }
+        mensaje: { type: string }
+        detalle: { type: object, additionalProperties: true }
+        request_id: { type: string }
+
+    ValidationErrorBody:
+      type: object
+      required: [codigo, errores]
+      properties:
+        codigo: { type: string, example: VALIDACION_FALLIDA }
+        errores:
+          type: array
+          items:
+            type: object
+            required: [campo, mensaje]
+            properties:
+              campo: { type: string }
+              mensaje: { type: string }
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, format: password, minLength: 8 }
+
+    TokenResponse:
+      type: object
+      required: [access_token, token_type, expires_in, usuario]
+      properties:
+        access_token: { type: string }
+        token_type: { type: string, enum: [bearer] }
+        expires_in: { type: integer, description: Segundos de vigencia }
+        usuario:
+          type: object
+          required: [id, nombre_completo, roles, permisos]
+          properties:
+            id: { type: string, format: uuid }
+            nombre_completo: { type: string }
+            roles: { type: array, items: { type: string } }
+            permisos: { type: array, items: { type: string } }
+
+    EtlResult:
+      type: object
+      required: [lote_id, estado, filas_totales, filas_validas, filas_rechazadas]
+      properties:
+        lote_id: { type: string, format: uuid }
+        estado: { type: string, enum: [cargado, rechazado] }
+        filas_totales: { type: integer }
+        filas_validas: { type: integer }
+        filas_rechazadas: { type: integer }
+        rango_fechas:
+          type: object
+          properties:
+            desde: { type: string, format: date }
+            hasta: { type: string, format: date }
+        advertencias: { type: array, items: { type: string } }
+
+    EtlValidationError:
+      type: object
+      required: [codigo, lote_id, errores]
+      properties:
+        codigo: { type: string, enum: [COLUMNAS_FALTANTES, TIPOS_INVALIDOS, DATOS_INVALIDOS] }
+        lote_id: { type: string, format: uuid }
+        errores:
+          type: array
+          items:
+            type: object
+            required: [fila, columna, mensaje]
+            properties:
+              fila: { type: integer }
+              columna: { type: string }
+              valor: { type: string }
+              mensaje: { type: string }
+
+    DemandRequest:
+      type: object
+      required: [producto_ids, horizonte_dias]
+      properties:
+        producto_ids:
+          type: array
+          minItems: 1
+          maxItems: 200
+          items: { type: string, format: uuid }
+        ruta_id: { type: string, format: uuid, nullable: true }
+        fecha_base: { type: string, format: date, description: Por defecto hoy }
+        horizonte_dias: { type: integer, minimum: 1, maximum: 30 }
+        incluir_intervalo: { type: boolean, default: true }
+
+    DemandPoint:
+      type: object
+      required: [fecha_objetivo, demanda_predicha]
+      properties:
+        fecha_objetivo: { type: string, format: date }
+        demanda_predicha: { type: number }
+        limite_inferior: { type: number }
+        limite_superior: { type: number }
+
+    DemandResponse:
+      type: object
+      required: [modelo, pronosticos]
+      properties:
+        modelo:
+          type: object
+          required: [id, algoritmo, version]
+          properties:
+            id: { type: string, format: uuid }
+            algoritmo: { type: string }
+            version: { type: string }
+        generado_en: { type: string, format: date-time }
+        pronosticos:
+          type: array
+          items:
+            type: object
+            required: [producto_id, serie]
+            properties:
+              producto_id: { type: string, format: uuid }
+              serie: { type: array, items: { $ref: '#/components/schemas/DemandPoint' } }
+
+    LoadPlanRequest:
+      type: object
+      required: [accion]
+      properties:
+        accion: { type: string, enum: [generar, aprobar, rechazar] }
+        ruta_id: { type: string, format: uuid, description: "Obligatorio si accion=generar" }
+        fecha_operacion: { type: string, format: date, description: "Obligatorio si accion=generar" }
+        carga_id: { type: string, format: uuid, description: "Obligatorio si accion=aprobar|rechazar" }
+        ajustes:
+          type: array
+          description: Cantidades aprobadas editadas (solo accion=aprobar)
+          items:
+            type: object
+            required: [producto_id, cantidad_aprobada]
+            properties:
+              producto_id: { type: string, format: uuid }
+              cantidad_aprobada: { type: number, minimum: 0 }
+        motivo_rechazo: { type: string, description: "Obligatorio si accion=rechazar" }
+        observaciones: { type: string }
+
+    LoadPlanItem:
+      type: object
+      required: [producto_id, cantidad_predicha, stock_disponible, cantidad_sugerida, cantidad_aprobada, ajustado_por_stock]
+      properties:
+        producto_id: { type: string, format: uuid }
+        sku: { type: string }
+        cantidad_predicha: { type: number }
+        stock_disponible: { type: number }
+        cantidad_sugerida: { type: number }
+        cantidad_aprobada: { type: number }
+        ajustado_por_stock: { type: boolean }
+
+    LoadPlanResponse:
+      type: object
+      required: [carga_id, estado, items]
+      properties:
+        carga_id: { type: string, format: uuid }
+        ruta_id: { type: string, format: uuid }
+        fecha_operacion: { type: string, format: date }
+        estado: { type: string, enum: [borrador, pendiente_aprobacion, aprobada, rechazada, despachada] }
+        modelo_id: { type: string, format: uuid }
+        items: { type: array, items: { $ref: '#/components/schemas/LoadPlanItem' } }
+        alertas_generadas: { type: array, items: { type: string, format: uuid } }
+
+    MetricPoint:
+      type: object
+      required: [periodo_hasta, mae, rmse, n_muestras]
+      properties:
+        periodo_desde: { type: string, format: date }
+        periodo_hasta: { type: string, format: date }
+        mae: { type: number }
+        rmse: { type: number }
+        mape: { type: number, nullable: true }
+        n_muestras: { type: integer }
+        supera_umbral: { type: boolean }
+
+    MetricsResponse:
+      type: object
+      required: [modelo_id, resumen, serie, degradacion]
+      properties:
+        modelo_id: { type: string, format: uuid }
+        resumen:
+          type: object
+          properties:
+            mae: { type: number }
+            rmse: { type: number }
+            mape: { type: number, nullable: true }
+        serie: { type: array, items: { $ref: '#/components/schemas/MetricPoint' } }
+        peores_productos:
+          type: array
+          items:
+            type: object
+            properties:
+              producto_id: { type: string, format: uuid }
+              mae: { type: number }
+              rmse: { type: number }
+              mape: { type: number, nullable: true }
+        degradacion:
+          type: object
+          required: [umbral_mape, periodos_consecutivos_requeridos, periodos_consecutivos_actuales, requiere_reentrenamiento]
+          properties:
+            umbral_mape: { type: number }
+            periodos_consecutivos_requeridos: { type: integer }
+            periodos_consecutivos_actuales: { type: integer }
+            requiere_reentrenamiento: { type: boolean }
+            ultimo_reentrenamiento: { type: string, format: date-time, nullable: true }
+
+    RetrainRequest:
+      type: object
+      required: [algoritmos, motivo]
+      properties:
+        algoritmos:
+          type: array
+          minItems: 1
+          items: { type: string, enum: [sklearn, xgboost, lstm] }
+        motivo: { type: string, enum: [manual, degradacion, programado] }
+        ventana_desde: { type: string, format: date }
+        ventana_hasta: { type: string, format: date }
+        promover_automaticamente:
+          type: boolean
+          default: true
+          description: Promueve si el candidato mejora el MAPE del modelo en producción
+
+    RetrainResponse:
+      type: object
+      required: [job_id, estado]
+      properties:
+        job_id: { type: string, format: uuid }
+        estado: { type: string, enum: [en_cola, en_ejecucion] }
+        solicitado_en: { type: string, format: date-time }

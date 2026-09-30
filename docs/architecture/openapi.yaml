@@ -1,0 +1,151 @@
+# ARCHIVO GENERADO por backend/scripts/export_openapi.py — no editar a mano.
+# Regenerar con `make openapi`. Diseño de referencia: openapi.contract.yaml
+openapi: 3.1.0
+info:
+  title: API Análisis Predictivo — Desarrollos Comerciales del Sur, S.A.
+  description: Contrato del prototipo de tesis. Autenticación JWT y control de acceso RBAC.
+  version: 1.0.0
+servers:
+- url: http://localhost:8000
+  description: Desarrollo local
+paths:
+  /api/v1/auth/login:
+    post:
+      tags:
+      - Auth
+      summary: Autenticación y emisión de JWT
+      operationId: login_api_v1_auth_login_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /health:
+    get:
+      tags:
+      - Health
+      summary: Liveness del servicio
+      description: Usado por el healthcheck de Docker; no consulta la base de datos.
+      operationId: health_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: string
+                type: object
+                title: Response Health Health Get
+components:
+  schemas:
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    LoginRequest:
+      properties:
+        email:
+          type: string
+          format: email
+          title: Email
+        password:
+          type: string
+          minLength: 8
+          title: Password
+      type: object
+      required:
+      - email
+      - password
+      title: LoginRequest
+    TokenResponse:
+      properties:
+        access_token:
+          type: string
+          title: Access Token
+        token_type:
+          type: string
+          title: Token Type
+          default: bearer
+        expires_in:
+          type: integer
+          title: Expires In
+        usuario:
+          $ref: '#/components/schemas/UsuarioToken'
+      type: object
+      required:
+      - access_token
+      - expires_in
+      - usuario
+      title: TokenResponse
+    UsuarioToken:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        nombre_completo:
+          type: string
+          title: Nombre Completo
+        roles:
+          items:
+            type: string
+          type: array
+          title: Roles
+        permisos:
+          items:
+            type: string
+          type: array
+          title: Permisos
+      type: object
+      required:
+      - id
+      - nombre_completo
+      - roles
+      - permisos
+      title: UsuarioToken
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError

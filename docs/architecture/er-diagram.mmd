@@ -1,0 +1,254 @@
+erDiagram
+    usuarios ||--o{ usuarios_roles : "tiene"
+    roles ||--o{ usuarios_roles : "asignado_a"
+    roles ||--o{ roles_permisos : "otorga"
+    permisos ||--o{ roles_permisos : "incluido_en"
+
+    categorias ||--o{ categorias : "subcategoria_de"
+    categorias ||--o{ productos : "clasifica"
+    proveedores ||--o{ productos : "suministra"
+    proveedores ||--o{ usuarios : "cuenta_de_acceso"
+    usuarios ||--o{ rutas : "vendedor_asignado"
+
+    productos ||--|| inventario : "existencia"
+    productos ||--o{ kardex : "movimientos"
+    usuarios ||--o{ kardex : "registra"
+
+    rutas ||--o{ cargas_ruta : "planifica"
+    usuarios ||--o{ cargas_ruta : "genera_aprueba"
+    modelos_ml ||--o{ cargas_ruta : "sugiere_con"
+    cargas_ruta ||--|{ detalle_cargas : "contiene"
+    productos ||--o{ detalle_cargas : "incluido"
+
+    proveedores ||--o{ pedidos_proveedor : "recibe"
+    usuarios ||--o{ pedidos_proveedor : "crea"
+    pedidos_proveedor ||--|{ detalle_pedidos : "contiene"
+    productos ||--o{ detalle_pedidos : "solicitado"
+    alertas |o--o{ detalle_pedidos : "origina"
+
+    usuarios ||--o{ etl_lotes : "carga"
+    etl_lotes ||--o{ ventas_historicas : "origina"
+    productos ||--o{ ventas_historicas : "vendido"
+    rutas ||--o{ ventas_historicas : "en_ruta"
+    usuarios ||--o{ ventas_historicas : "vendedor"
+    usuarios ||--o{ comisiones : "devenga"
+    ventas_historicas ||--o{ comisiones : "genera"
+
+    modelos_ml ||--o{ metricas_evaluacion : "evaluado_con"
+    modelos_ml ||--o{ pronosticos_demanda : "produce"
+    productos ||--o{ pronosticos_demanda : "pronosticado"
+    rutas ||--o{ pronosticos_demanda : "para_ruta"
+    modelos_ml ||--o{ alertas : "dispara"
+    productos ||--o{ alertas : "afecta"
+
+    usuarios {
+        uuid id PK
+        varchar email UK
+        varchar password_hash
+        varchar nombre_completo
+        uuid proveedor_id FK "nullable, solo rol Proveedor"
+        boolean activo
+        timestamptz ultimo_login
+        timestamptz creado_en
+        timestamptz actualizado_en
+    }
+    roles {
+        smallint id PK
+        varchar nombre UK
+        varchar descripcion
+    }
+    permisos {
+        smallint id PK
+        varchar codigo UK "recurso:accion"
+        varchar descripcion
+    }
+    roles_permisos {
+        smallint rol_id PK, FK
+        smallint permiso_id PK, FK
+    }
+    usuarios_roles {
+        uuid usuario_id PK, FK
+        smallint rol_id PK, FK
+        timestamptz asignado_en
+    }
+
+    categorias {
+        uuid id PK
+        varchar nombre UK
+        uuid categoria_padre_id FK "nullable"
+    }
+    proveedores {
+        uuid id PK
+        varchar nombre
+        varchar nit UK
+        varchar email
+        integer lead_time_dias
+        boolean activo
+    }
+    productos {
+        uuid id PK
+        varchar sku UK
+        varchar nombre
+        uuid categoria_id FK
+        uuid proveedor_id FK
+        varchar unidad_medida
+        numeric precio_venta
+        numeric costo_unitario
+        numeric stock_minimo
+        boolean activo
+        timestamptz creado_en
+    }
+    rutas {
+        uuid id PK
+        varchar codigo UK
+        varchar nombre
+        varchar zona
+        uuid vendedor_id FK "nullable"
+        boolean activa
+    }
+
+    inventario {
+        uuid id PK
+        uuid producto_id FK "UK"
+        numeric stock_actual
+        numeric stock_reservado
+        timestamptz actualizado_en
+    }
+    kardex {
+        bigint id PK
+        uuid producto_id FK
+        varchar tipo_movimiento "entrada|salida|ajuste|reserva|liberacion"
+        numeric cantidad
+        numeric saldo_resultante
+        varchar referencia_tipo "carga_ruta|pedido|ajuste|etl"
+        uuid referencia_id
+        uuid usuario_id FK
+        timestamptz fecha_movimiento
+    }
+    cargas_ruta {
+        uuid id PK
+        uuid ruta_id FK
+        date fecha_operacion
+        varchar estado "borrador|pendiente_aprobacion|aprobada|rechazada|despachada"
+        uuid modelo_id FK
+        uuid generado_por FK
+        uuid aprobado_por FK "nullable"
+        text observaciones
+        timestamptz generada_en
+        timestamptz aprobada_en
+    }
+    detalle_cargas {
+        uuid id PK
+        uuid carga_id FK
+        uuid producto_id FK
+        numeric cantidad_predicha
+        numeric stock_disponible_al_generar
+        numeric cantidad_sugerida
+        numeric cantidad_aprobada
+        boolean ajustado_por_stock
+    }
+    pedidos_proveedor {
+        uuid id PK
+        uuid proveedor_id FK
+        uuid creado_por FK
+        varchar estado "borrador|enviado|confirmado|recibido|cancelado"
+        date fecha_pedido
+        date fecha_esperada
+        numeric total
+    }
+    detalle_pedidos {
+        uuid id PK
+        uuid pedido_id FK
+        uuid producto_id FK
+        uuid alerta_origen_id FK "nullable"
+        numeric cantidad
+        numeric costo_unitario
+    }
+
+    etl_lotes {
+        uuid id PK
+        uuid usuario_id FK
+        varchar archivo_nombre
+        char checksum_sha256 UK
+        varchar estado "recibido|validado|rechazado|cargado"
+        integer filas_totales
+        integer filas_validas
+        integer filas_rechazadas
+        jsonb errores
+        timestamptz creado_en
+    }
+    ventas_historicas {
+        bigint id PK
+        uuid lote_id FK
+        date fecha_venta
+        uuid producto_id FK
+        uuid ruta_id FK
+        uuid vendedor_id FK "nullable"
+        numeric cantidad
+        numeric precio_unitario
+        numeric monto_total
+    }
+    comisiones {
+        uuid id PK
+        uuid vendedor_id FK
+        bigint venta_id FK
+        char periodo "YYYY-MM"
+        numeric porcentaje
+        numeric monto
+    }
+
+    modelos_ml {
+        uuid id PK
+        varchar nombre
+        varchar algoritmo "sklearn|xgboost|lstm"
+        varchar version
+        varchar estado "candidato|produccion|archivado|descartado"
+        varchar ruta_artefacto
+        char hash_artefacto
+        jsonb hiperparametros
+        jsonb esquema_features
+        date ventana_desde
+        date ventana_hasta
+        varchar motivo_entrenamiento "programado|manual|degradacion"
+        uuid entrenado_por FK "nullable si Worker"
+        timestamptz entrenado_en
+        timestamptz promovido_en
+    }
+    metricas_evaluacion {
+        uuid id PK
+        uuid modelo_id FK
+        uuid producto_id FK "nullable=global"
+        varchar tipo_evaluacion "holdout|backtest|produccion"
+        numeric mae
+        numeric rmse
+        numeric mape
+        integer n_muestras
+        date periodo_desde
+        date periodo_hasta
+        boolean supera_umbral
+        timestamptz evaluado_en
+    }
+    pronosticos_demanda {
+        bigint id PK
+        uuid modelo_id FK
+        uuid producto_id FK
+        uuid ruta_id FK "nullable"
+        date fecha_objetivo
+        integer horizonte_dias
+        numeric demanda_predicha
+        numeric limite_inferior
+        numeric limite_superior
+        numeric demanda_real "nullable, se completa a posteriori"
+        timestamptz generado_en
+    }
+    alertas {
+        uuid id PK
+        varchar tipo "stock_bajo|quiebre_proyectado|mape_umbral|etl_error"
+        varchar severidad "info|advertencia|critica"
+        uuid producto_id FK "nullable"
+        uuid modelo_id FK "nullable"
+        text mensaje
+        varchar estado "abierta|reconocida|resuelta"
+        timestamptz creada_en
+        timestamptz resuelta_en
+    }

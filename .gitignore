@@ -1,0 +1,104 @@
+# =========================================================== Secretos / entorno
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# =========================================================== Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+.installed.cfg
+*.egg
+
+# Entornos virtuales
+.venv/
+venv/
+env/
+ENV/
+.python-version
+
+# Pruebas, cobertura y linters
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.tox/
+.nox/
+
+# Jupyter (exploración de datos)
+.ipynb_checkpoints/
+
+# =========================================================== Node.js / Frontend
+node_modules/
+frontend/dist/
+frontend/build/
+.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+*.tsbuildinfo
+
+# =========================================================== Artefactos de ML
+# El volumen ml_artifacts está fuera de control de versiones (sección 2).
+ml_artifacts/**
+!ml_artifacts/models/
+!ml_artifacts/reports/
+!ml_artifacts/**/.gitkeep
+*.bin
+*.pkl
+*.pickle
+*.joblib
+*.h5
+*.keras
+*.onnx
+*.ubj
+mlruns/
+
+# Puntos de montaje que Docker crea dentro de backend/ al montar volúmenes anidados
+backend/ml_artifacts/
+backend/data/
+
+# =========================================================== Datos
+# data/raw contiene los Excel originales (inmutables) y SÍ se versiona.
+data/staging/*
+data/rejected/*
+data/processed/*
+!data/**/.gitkeep
+*.tmp
+*.temp
+~$*.xlsx
+*.parquet
+*.feather
+
+# =========================================================== Logs / BD local
+*.log
+logs/
+*.sqlite3
+*.db
+pgdata/
+
+# =========================================================== SO / IDE
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+*~
+
+CLAUDE.md
