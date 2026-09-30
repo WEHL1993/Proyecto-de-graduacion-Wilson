@@ -17,6 +17,10 @@
 | ADR-06 | La carga de ruta siempre pasa por estados `borrador → pendiente_aprobacion → aprobada/rechazada`; nunca se despacha automáticamente | El humano (Ventas) mantiene control; el modelo solo sugiere |
 | ADR-07 | El límite de carga por stock disponible prevalece sobre la demanda predicha | Evita compromisos de entrega sin existencia |
 | ADR-08 | Umbral de MAPE configurable en `parametros_sistema`; el Worker evalúa degradación y crea alerta + trigger | Reentrenamiento gobernado por datos, no manual |
+| ADR-09 | El ETL acepta dos formatos y ambos se normalizan al mismo registro `(fecha, ruta, sku, cantidad, precio_unitario[, vendedor])`: **tabular** (plantilla del contrato) y **ancho** (Excel comercial real `VENTAS DIARIAS`: una hoja por vendedor/ruta, columnas `ventas DD`). En el formato ancho la hoja identifica la ruta (`rutas.codigo` o `rutas.nombre`), el producto se identifica por `productos.sku = "<medida>-<SABOR>"` normalizado (p. ej. `3030-PINA`) porque el Excel no trae SKU, y sin `hoja` se procesan todas las hojas con ese layout (el checksum es por archivo). `periodo` (YYYY-MM) se infiere del nombre del archivo o se envía como campo opcional | Los datos reales son anchos y sin SKU; cargar solo la primera hoja impediría cargar el resto del archivo por el checksum único |
+| ADR-10 | Un lote `rechazado` no bloquea el reenvío del mismo archivo (se reutiliza su fila `etl_lotes`); solo `cargado`/`validado`/`recibido` devuelven 400 `LOTE_DUPLICADO`. Comisión = `monto_total × parametros_sistema['comisiones.porcentaje'] / 100` por venta con vendedor (recalculada por `ON CONFLICT`); si el parámetro no existe se carga sin comisiones y se advierte | Un rechazo por catálogo incompleto no debe volver inútil el archivo; el porcentaje no consta en los datos y lo define el negocio |
+
+Extensiones aditivas al contrato de `POST /etl/upload-excel` (ADR-09/10): campo de formulario `periodo`; `EtlValidationError.total_errores` (los `errores` se truncan en 1000) y `ErrorFila.hoja`; códigos 400 `LOTE_DUPLICADO`, `ARCHIVO_INVALIDO`, `HOJA_NO_ENCONTRADA`, `PERIODO_NO_DETECTADO`, `PERIODO_INVALIDO`.
 
 ---
 

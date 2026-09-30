@@ -15,7 +15,7 @@ from app.core.database import get_engine
 def conn():
     try:
         connection = get_engine().connect()
-    except OperationalError:
+    except (OperationalError, UnicodeDecodeError):  # psycopg2 en Windows
         pytest.skip("PostgreSQL no disponible")
     trans = connection.begin()
     try:

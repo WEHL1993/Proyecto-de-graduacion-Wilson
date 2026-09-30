@@ -34,6 +34,36 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/etl/upload-excel:
+    post:
+      tags:
+      - ETL
+      summary: Ingesta de histórico de ventas desde Excel
+      description: Requiere permiso `etl:cargar`. Valida estructura, tipos y reglas de negocio. Si existen
+        errores bloqueantes el lote se rechaza completo (modo estricto) salvo `modo=parcial`. Un archivo
+        con checksum ya cargado devuelve 400 `LOTE_DUPLICADO`.
+      operationId: upload_excel_api_v1_etl_upload_excel_post
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_upload_excel_api_v1_etl_upload_excel_post'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EtlResult'
+        '422':
+          description: El archivo no cumple validaciones estructurales o de datos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EtlValidationError'
+      security:
+      - HTTPBearer: []
   /health:
     get:
       tags:
@@ -53,6 +83,127 @@ paths:
                 title: Response Health Health Get
 components:
   schemas:
+    Body_upload_excel_api_v1_etl_upload_excel_post:
+      properties:
+        file:
+          type: string
+          contentMediaType: application/octet-stream
+          title: File
+        modo:
+          $ref: '#/components/schemas/ModoCarga'
+          default: estricto
+        hoja:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Hoja
+          description: Nombre de la hoja; por defecto la primera
+        periodo:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Periodo
+          description: YYYY-MM. Solo formato ancho; por defecto se infiere del nombre del archivo
+      type: object
+      required:
+      - file
+      title: Body_upload_excel_api_v1_etl_upload_excel_post
+    CodigoErrorEtl:
+      type: string
+      enum:
+      - COLUMNAS_FALTANTES
+      - TIPOS_INVALIDOS
+      - DATOS_INVALIDOS
+      title: CodigoErrorEtl
+    ErrorFila:
+      properties:
+        fila:
+          type: integer
+          title: Fila
+        columna:
+          type: string
+          title: Columna
+        valor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Valor
+        mensaje:
+          type: string
+          title: Mensaje
+        hoja:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Hoja
+      type: object
+      required:
+      - fila
+      - columna
+      - mensaje
+      title: ErrorFila
+      description: Error de validación localizado por fila/columna (fila = número de fila en Excel).
+    EtlResult:
+      properties:
+        lote_id:
+          type: string
+          format: uuid
+          title: Lote Id
+        estado:
+          type: string
+          enum:
+          - cargado
+          - rechazado
+          title: Estado
+        filas_totales:
+          type: integer
+          title: Filas Totales
+        filas_validas:
+          type: integer
+          title: Filas Validas
+        filas_rechazadas:
+          type: integer
+          title: Filas Rechazadas
+        rango_fechas:
+          anyOf:
+          - $ref: '#/components/schemas/RangoFechas'
+          - type: 'null'
+        advertencias:
+          items:
+            type: string
+          type: array
+          title: Advertencias
+      type: object
+      required:
+      - lote_id
+      - estado
+      - filas_totales
+      - filas_validas
+      - filas_rechazadas
+      title: EtlResult
+    EtlValidationError:
+      properties:
+        codigo:
+          $ref: '#/components/schemas/CodigoErrorEtl'
+        lote_id:
+          type: string
+          format: uuid
+          title: Lote Id
+        errores:
+          items:
+            $ref: '#/components/schemas/ErrorFila'
+          type: array
+          title: Errores
+        total_errores:
+          type: integer
+          title: Total Errores
+      type: object
+      required:
+      - codigo
+      - lote_id
+      - errores
+      - total_errores
+      title: EtlValidationError
     HTTPValidationError:
       properties:
         detail:
@@ -77,6 +228,27 @@ components:
       - email
       - password
       title: LoginRequest
+    ModoCarga:
+      type: string
+      enum:
+      - estricto
+      - parcial
+      title: ModoCarga
+    RangoFechas:
+      properties:
+        desde:
+          type: string
+          format: date
+          title: Desde
+        hasta:
+          type: string
+          format: date
+          title: Hasta
+      type: object
+      required:
+      - desde
+      - hasta
+      title: RangoFechas
     TokenResponse:
       properties:
         access_token:
@@ -149,3 +321,7 @@ components:
       - msg
       - type
       title: ValidationError
+  securitySchemes:
+    HTTPBearer:
+      type: http
+      scheme: bearer

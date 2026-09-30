@@ -20,7 +20,7 @@ from app.main import app
 def db_session():
     try:
         connection = get_engine().connect()
-    except OperationalError:
+    except (OperationalError, UnicodeDecodeError):  # psycopg2 en Windows
         pytest.skip("PostgreSQL no disponible")
     trans = connection.begin()
     session = Session(bind=connection, join_transaction_mode="create_savepoint")
