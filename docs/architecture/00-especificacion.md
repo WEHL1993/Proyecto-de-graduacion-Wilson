@@ -22,6 +22,9 @@
 | ADR-11 | Pipeline de demanda (Fase 4): una serie diaria por `(producto, ruta)`; un único modelo de 1 paso (XGBoost o RandomForest) con rezagos `Y(t-1,7,14)`, medias móviles 7/14/28, calendario y estacionalidad; pronóstico multi-paso **recursivo**. Intervalo al 95 % = cuantiles 2,5 %/97,5 % de residuos Walk-Forward, ensanchado por `sqrt(1+0.15·(h-1))`; la demanda agregada (`ruta_id` NULL) suma rutas y combina semi-amplitudes por raíz de suma de cuadrados. Métricas: `backtest` (Walk-Forward 1 paso) y `holdout` (últimos 14 días, recursivo, global y por producto); MAPE ignora `real = 0` (NULL si no hay ninguno). `hash_artefacto` = SHA-256 de `model.bin`; el de `preprocessor.bin` va en `esquema_features.preprocessor_sha256`; ambos se verifican **antes** de deserializar. Un modelo nuevo nace `candidato`; la promoción archiva el vigente de la familia en la misma transacción | Reproducible, auditable y coherente con ADR-02/03; el `ruta_id` NULL evita entrenar un modelo aparte por agregado |
 | ADR-12 | Gobernanza ML y frontend (Fase 6). **Periodo de evaluación** = 7 días consecutivos sin traslape; el Worker (`evaluate_production`) fija `demanda_real` cruzando `pronosticos_demanda` con `ventas_historicas` (día sin fila dentro de lo cargado = 0), guarda MAE/RMSE/MAPE global y por producto (`tipo=produccion`, idempotente por periodo) y marca `supera_umbral`. Degradación = N periodos **consecutivos** sobre umbral (`ml.mape_umbral`, `ml.periodos_consecutivos`): alerta `mape_umbral` crítica (sin duplicar si hay una abierta) + un único job `reentrenamiento` con `motivo=degradacion`. **Promoción**: el candidato de menor MAPE de holdout se promueve solo si su MAPE es estrictamente menor que la referencia del productivo (último MAPE observado en producción; si no existe, su holdout); si no, queda `descartado` con alerta informativa; al promover se resuelven las alertas abiertas del modelo anterior. Los planes de carga persisten sus pronósticos (`persistir=true`) para alimentar el monitoreo. Extensiones aditivas al contrato: `GET /ml/models`, `GET /ml/jobs/{id}`, `GET/PUT /ml/config`, `GET /alerts`, `GET /catalog/routes`, `GET /routes/load-plans`, acción `enviar` en `POST /routes/load-plans`, `producto_nombre` en `LoadPlanItem`, `modelo`/`sku`/`nombre`/`tendencia` en `MetricsResponse`; `resumen` = periodo más reciente de `serie`; 422 `RANGO_FECHAS_INVALIDO` y 400 `REENTRENAMIENTO_EN_CURSO`. La denegación RBAC se audita con el logger `app.auditoria`. Frontend: React + Vite + Tailwind 3 + React Router + TanStack Query, tipos generados con `openapi-typescript` (`npm run gen:api`); nginx sirve la SPA y hace proxy de `/api` | Cierra el ciclo de monitoreo, mantiene el contrato como fuente única y un solo origen (sin CORS) |
 | ADR-13 | Administración, reportes y alertas por rol (Fase 8). **Permiso nuevo `reportes:leer`** (Admin y Gerente; no consta en la matriz 1.4) para `GET /reports/*`. **Usuarios** (`/users`, `usuarios:gestionar`): la asignación de rutas vive en `rutas.vendedor_id` (una ruta = un vendedor; asignarla la quita del titular anterior); el rol Proveedor exige `proveedor_id`; 409 `EMAIL_DUPLICADO`, `ULTIMO_ADMIN` y `AUTOMODIFICACION_NO_PERMITIDA` (no se puede desactivar ni quitar el rol Admin a uno mismo ni al último admin activo). **Reportes**: rotación = costo de ventas del periodo / valor del inventario actual (el inventario no es por ruta, por eso la rotación por ruta es su aporte a la global); índice de quiebre = % de líneas de `detalle_cargas` (cargas no rechazadas) con `ajustado_por_stock`; comisiones = `comisiones` sobre `ventas_historicas` por vendedor y periodo `YYYY-MM`; venta real vs. proyectada usa la proyección **más reciente** por `(producto, ruta, fecha)` para no duplicar horizontes; exportación `GET /reports/export` (CSV UTF-8 con BOM o Excel; `consolidado` = una hoja por reporte). Sin fechas se usan los últimos 30 días hasta la última venta (real-vs-proyectado: hasta la última venta o proyección). **Alertas**: `GET /alerts` filtra por permisos del usuario (`stock_bajo` ← inventario; `quiebre_proyectado` ← predicción/compras; `mape_umbral` ← ML; `etl_error` ← `etl:cargar`) y `PATCH /alerts/{id}/acknowledge` la pasa a `reconocida` (404 si es de un tipo no visible, 409 `ALERTA_NO_ABIERTA`). Extensiones aditivas: `GET /etl/batches` (historial de `etl_lotes`, `etl:cargar`). Sin migraciones | Cierra los Módulos 1 y 7 sin alterar el modelo de datos; el filtrado por permiso evita mostrar a cada rol alertas que no puede atender |
+| ADR-14 | **Liquidación diaria de ventas** (unidades + dinero) como fuente de datos del modelo tras el arranque. **Política de datos**: el entrenamiento inicial usa los Excel (`etl_lotes.origen='excel_historico'`, línea base congelada); las ventas nuevas entran solo por la liquidación (`origen='liquidacion'`) y, con `etl.carga_excel_habilitada=false` (`PUT /etl/config`, permiso nuevo `etl:configurar`, auditado), `POST /etl/upload-excel` responde 409 `EXCEL_DESHABILITADO` (los datos ya cargados no se tocan). **Modelo**: `liquidaciones_diarias` (cabecera: venta, efectivo, transferencia, crédito, cobro de saldos, gastos, efectivo esperado/entregado, diferencia de caja, `version`, `lote_id`, `historial` jsonb de auditoría) y `liquidacion_detalles` (cargada/vendida/devuelta/merma, precio, `agotado`, justificación de lo cargado); única parcial `(fecha, ruta, vendedor) WHERE estado<>'anulada'`; CHECK de montos ≥ 0, `vendida+devuelta+merma ≤ cargada`, `monto = round(vendida×precio,2)`, caja coherente y, **solo si `cerrada`**, `venta_total = efectivo+transferencia+crédito` (un borrador puede guardarse incompleto; desviación del prompt original). **Estados** `borrador → cerrada → anulada`; cerrar es explícito y exige `cargada = vendida+devuelta+merma` por presentación (400 `UNIDADES_NO_CUADRAN`) y venta = pagos (400 `MONTOS_NO_CUADRAN`). La diferencia de caja no bloquea: se registra y, si `|dif| > liquidacion.umbral_diferencia_caja` (por defecto Q 10), alerta `diferencia_caja` visible a Administrador y Gerente (`liquidaciones:leer`). **Cierre transaccional**: un lote por liquidación (checksum = SHA-256 de `fecha, ruta, vendedor, líneas ordenadas`); UPSERT en `ventas_historicas` (solo líneas con venta>0) y comisiones; `demanda_real` de `pronosticos_demanda` de esa fecha/ruta/producto; alerta de caja; job `evaluacion_produccion` en cola (coalescido; lo ejecuta el Worker, nunca la petición); auditoría (`app.auditoria` + `historial`). **Corregir** (`liquidaciones:corregir`): nueva `version`, borra las ventas del lote que ya no están, UPSERT del resto, recalcula `demanda_real` y vuelve a encolar. **Anular**: motivo obligatorio; borra las ventas del lote, deja el lote `rechazado` con checksum re-sellado (libera el original) y limpia `demanda_real`; 409 `LIQUIDACION_YA_ANULADA`. Si la base Excel ya trae ventas de esa ruta/fecha, el cierre responde 409 `VENTAS_EXCEL_EXISTENTES` (la base no se pisa). Nunca se despacha ni se toca el stock (ADR-06): las devoluciones son «devolución esperada». Con carga despachada se precarga `cantidad_cargada` (suma de `cantidad_aprobada`); editarla exige justificación (400 `CARGA_REQUIERE_JUSTIFICACION`); sin carga solo se advierte. **Clientes/saldos**: los Excel no identifican clientes (`Saldo NN` es existencia remanente), por lo que no se crea `saldos_clientes`: el crédito y el cobro de saldos se guardan como totales por liquidación. **Integración con el modelo**: `ml.fuente_reentrenamiento` (`excel_historico` | `excel_mas_liquidacion` por defecto | `liquidacion`) rige los reentrenamientos; el entrenamiento inicial (script/`entrenar_modelo` por defecto) sigue siendo solo Excel y, sin liquidaciones cerradas, el pipeline es idéntico al anterior. Con liquidaciones el calendario se completa con ceros **solo dentro de los rangos cubiertos por ruta** (rango Excel + rango liquidado): el hueco entre ambos no es demanda cero y los rezagos se calculan por tramo contiguo (`segmento`). El último tramo debe tener ≥ 28 días de historia + 14 del holdout; si no, 400 `HISTORIAL_INSUFICIENTE` (con solo liquidaciones, ≥ 28 días por ruta). **Demanda censurada**: una línea `agotado` marca la observación como piso de la demanda; en el entrenamiento pesa 0,5 (`PESO_OBSERVACION_CENSURADA`), y `pronosticos_demanda.demanda_censurada` la excluye del MAE/RMSE/MAPE de `evaluate_production`, que sigue siendo el único que calcula métricas y degradación. Pasada la base Excel, un día sin liquidación de la ruta **no** cuenta como demanda 0 al fijar `demanda_real`. Trazabilidad: `modelos_ml.fuentes_datos` (jsonb) guarda fuente, filas y rango por origen, días liquidados y observaciones censuradas. Extensiones al contrato: `/liquidaciones` (POST, GET), `/liquidaciones/precarga`, `/liquidaciones/{id}` (GET), `/{id}/cerrar|corregir|anular`, `GET/PUT /liquidaciones/config`, `GET/PUT /etl/config`; el historial `GET /etl/batches` solo lista lotes Excel. Migración `0002`. Limitación: anular una liquidación no revierte métricas de producción ya calculadas. | El negocio exige que lo vendido y el dinero se capturen a diario; así `demanda_real`, el monitoreo (ADR-12) y el reentrenamiento (ADR-08) dejan de depender de cargas manuales de Excel, sin contaminar la línea base ni sesgar el modelo con demanda censurada |
+| ADR-15 | **Bitácora de auditoría y respaldo** (`bitacora`, migración `0003`): registro *append-only* (trigger que bloquea `UPDATE`/`DELETE`/`TRUNCATE`) de todo lo que ejecuta el sistema. Columnas: `ocurrido_en`, `nivel` (INFO/WARNING/ERROR), `origen` (`http`\|`servicio`\|`worker`), `operacion` (lectura/escritura), `accion` (`services.etl_service.procesar_excel` o `METODO /ruta`), `resultado`, `usuario_id` (sin FK: sobrevive al borrado del usuario), `ip`, `request_id`, `metodo`, `ruta`, `status_code`, `duracion_ms`, `parametros` jsonb (saneado: sin contraseñas/tokens/hash, textos truncados, binarios como `<n bytes>`), `codigo_error`, `mensaje`. **Mapeo**: (1) middleware HTTP: una fila por petición (incluye 401/403 y 5xx; omite `/health`, `/docs`, `/openapi.json`) y fija el contexto (`core/contexto.py`: usuario del JWT, IP, `request_id`, devuelto en `X-Request-ID`); (2) decorador `@auditar` (`services/bitacora_service.py`) en **cada caso de uso público** de `services/` con sesión `db` y en los jobs del Worker: registra éxito o error con argumentos y duración y relanza la excepción; (3) el planificador del Worker fija origen `worker` y un `request_id` por job. Los helpers puros (cálculos, validaciones) no se auditan. Se escribe en una sesión/conexión **independiente** con `commit` propio, de modo que un `rollback` del caso de uso no borra su rastro; un fallo al registrar nunca rompe la operación (se informa por el logger `app.bitacora`). Los logs `app.auditoria` existentes se conservan. Consulta: `GET /bitacora` (permiso nuevo `bitacora:leer`, solo Admin; filtros por fechas, usuario, acción, origen, resultado y `request_id`). Limitaciones: no hay retención/archivado automático ni UI en el frontend; las funciones de `ml/` se auditan a través del servicio que las invoca (`training_service`, `prediction_service`...). | Auditoría y respaldo exigidos por el negocio: trazabilidad de quién ejecutó qué y con qué resultado, inmutable y consultable, sin acoplar `ml/` ni los repositorios al mecanismo |
+| ADR-16 | **Administración de productos con baja lógica y ajuste manual de stock** (migración `0004`). **CRUD** `/products` (`GET` lista/detalle con `inventario:leer`; `POST` `productos:crear`; `PATCH` `productos:editar`; `DELETE` y `POST /{id}/reactivate` `productos:eliminar`). **Permisos nuevos** `productos:crear|editar|eliminar` (no constan en la matriz 1.4 original): Admin e Inventario. **Baja lógica**: `DELETE` marca `activo=false` y nunca borra la fila (el producto está referenciado por ventas, cargas, kardex, pedidos y pronósticos); es idempotente y responde 204; se bloquea con 409 `PRODUCTO_EN_USO` si hay `stock_reservado > 0` o el producto está en una carga vigente (`borrador|pendiente_aprobacion|aprobada`). Un producto inactivo no entra en cargas nuevas, pronósticos nuevos (409 `PRODUCTO_INACTIVO`), alertas de stock bajo ni compras; su historial y kardex siguen consultables; `reactivate` lo devuelve a operación. El alta crea también la fila de `inventario` en 0 (misma transacción); `sku` se normaliza a mayúsculas y es único sin distinguir mayúsculas (409 `SKU_DUPLICADO`); `PATCH` no modifica existencias ni estado. **Ajuste de stock** `POST /inventory/adjustments` (`inventario:ajustar`): `tipo` = `incremento|decremento|fijar`, `cantidad`, `motivo` (5–300 caracteres, obligatorio). Bloquea la fila de `inventario` (`FOR UPDATE`) y no deja `stock_actual` por debajo de `stock_reservado` ni negativo (400 `STOCK_INSUFICIENTE`); 400 `CANTIDAD_INVALIDA` y `AJUSTE_SIN_CAMBIO`; 404/409 `PRODUCTO_NO_ENCONTRADO`/`PRODUCTO_INACTIVO`. **Desviación del ER**: `kardex.motivo varchar(300)` nullable (solo los ajustes lo llenan) y, para `tipo_movimiento='ajuste'`, `cantidad` se guarda **con signo** (positivo suma, negativo resta; en `fijar` es la diferencia) mientras el resto de movimientos conserva cantidades positivas; `saldo_resultante` sigue siendo el stock físico tras el movimiento. Si tras el ajuste `stock_disponible < stock_minimo` se abre una alerta `stock_bajo` (sin duplicar una abierta). Extensiones aditivas de apoyo al formulario: `GET /catalog/categories` y `GET /catalog/suppliers` (cualquier usuario autenticado) | Cierra el módulo de inventario (alta, edición, baja y ajuste) sin romper la trazabilidad: la baja lógica preserva las claves foráneas y el historial que alimenta al modelo, y el motivo + usuario en kardex deja auditable cada corrección manual |
 
 Extensiones aditivas al contrato de `POST /predictions/demand` (ADR-11): campo opcional `persistir` (bool, por defecto `false`) que guarda los puntos en `pronosticos_demanda` con upsert idempotente; códigos 400 `SIN_MODELO_PRODUCTIVO`, `PRODUCTO_NO_ENCONTRADO`, `RUTA_NO_ENCONTRADA`, `HISTORIAL_INSUFICIENTE` (histórico < 28 días por serie) y 500 `ARTEFACTO_CORRUPTO`/`ARTEFACTO_NO_ENCONTRADO`. Entrenamiento: `python scripts/train_model.py --algoritmo xgboost [--promover]`.
 
@@ -129,6 +132,15 @@ stateDiagram-v2
 | `ml:reentrenar` | ✔ | | | | | ✔ | | ✔ |
 | `alertas:leer` | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | | ✔ |
 | `reportes:leer` (ADR-13) | ✔ | | | | | ✔ | | |
+| `liquidaciones:registrar` (ADR-14) | ✔ | | | | | | | |
+| `liquidaciones:cerrar` (ADR-14) | ✔ | | | | | | | |
+| `liquidaciones:corregir` (ADR-14; incluye anular y umbral de caja) | ✔ | | | | | | | |
+| `liquidaciones:leer` (ADR-14) | ✔ | | | | | ✔ | | |
+| `etl:configurar` (ADR-14; cierre del arranque y fuente de reentrenamiento) | ✔ | | | | | | | |
+| `bitacora:leer` (ADR-15; consulta de la bitácora de auditoría) | ✔ | | | | | | | |
+| `productos:crear` (ADR-16; alta de productos) | ✔ | ✔ | | | | | | |
+| `productos:editar` (ADR-16; edición de datos del producto) | ✔ | ✔ | | | | | | |
+| `productos:eliminar` (ADR-16; baja lógica y reactivación) | ✔ | ✔ | | | | | | |
 
 > El actor **Proveedor** accede únicamente a sus propios pedidos (restricción a nivel de fila por `proveedor_id` asociado a su usuario).
 
@@ -462,6 +474,11 @@ erDiagram
     usuarios ||--o{ ventas_historicas : "vendedor"
     usuarios ||--o{ comisiones : "devenga"
     ventas_historicas ||--o{ comisiones : "genera"
+    rutas ||--o{ liquidaciones_diarias : "se_liquida"
+    usuarios ||--o{ liquidaciones_diarias : "vendedor"
+    etl_lotes |o--o| liquidaciones_diarias : "origina (origen=liquidacion)"
+    liquidaciones_diarias ||--o{ liquidacion_detalles : "detalla"
+    productos ||--o{ liquidacion_detalles : "liquidado"
 
     modelos_ml ||--o{ metricas_evaluacion : "evaluado_con"
     modelos_ml ||--o{ pronosticos_demanda : "produce"
@@ -553,6 +570,7 @@ erDiagram
         uuid referencia_id
         uuid usuario_id FK
         timestamptz fecha_movimiento
+        varchar motivo "ajustes manuales (ADR-16); NULL en el resto"
     }
     cargas_ruta {
         uuid id PK
@@ -600,6 +618,7 @@ erDiagram
         varchar archivo_nombre
         char checksum_sha256 UK
         varchar estado "recibido|validado|rechazado|cargado"
+        varchar origen "excel_historico|liquidacion (ADR-14)"
         integer filas_totales
         integer filas_validas
         integer filas_rechazadas
@@ -616,6 +635,43 @@ erDiagram
         numeric cantidad
         numeric precio_unitario
         numeric monto_total
+    }
+    liquidaciones_diarias {
+        uuid id PK
+        date fecha
+        uuid ruta_id FK
+        uuid vendedor_id FK
+        varchar estado "borrador|cerrada|anulada"
+        integer version
+        uuid lote_id FK "nullable hasta cerrar"
+        numeric venta_total
+        numeric total_efectivo
+        numeric total_transferencia
+        numeric total_credito
+        numeric cobro_saldos_anteriores
+        numeric gastos_ruta
+        numeric efectivo_esperado "efectivo + cobro - gastos"
+        numeric efectivo_entregado
+        numeric diferencia_caja "entregado - esperado"
+        text observaciones
+        uuid creado_por FK
+        timestamptz cerrado_en
+        timestamptz anulado_en
+        text anulado_motivo
+        jsonb historial "auditoria"
+    }
+    liquidacion_detalles {
+        uuid id PK
+        uuid liquidacion_id FK
+        uuid producto_id FK
+        numeric cantidad_cargada
+        numeric cantidad_vendida
+        numeric cantidad_devuelta
+        numeric cantidad_merma
+        numeric precio_unitario
+        numeric monto_total
+        boolean agotado "demanda censurada"
+        text justificacion_carga
     }
     comisiones {
         uuid id PK
@@ -668,11 +724,12 @@ erDiagram
         numeric limite_inferior
         numeric limite_superior
         numeric demanda_real "nullable, se completa a posteriori"
+        boolean demanda_censurada "ADR-14: real es un piso (agotado)"
         timestamptz generado_en
     }
     alertas {
         uuid id PK
-        varchar tipo "stock_bajo|quiebre_proyectado|mape_umbral|etl_error"
+        varchar tipo "stock_bajo|quiebre_proyectado|mape_umbral|etl_error|diferencia_caja"
         varchar severidad "info|advertencia|critica"
         uuid producto_id FK "nullable"
         uuid modelo_id FK "nullable"
@@ -683,7 +740,7 @@ erDiagram
     }
 ```
 
-> Tablas de soporte adicionales (no dibujadas para no sobrecargar el ER): `parametros_sistema(clave PK, valor jsonb, actualizado_por FK, actualizado_en)` para umbrales como `ml.mape_umbral`, `ml.periodos_consecutivos`; y `jobs_ml(id uuid PK, tipo, estado, parametros jsonb, solicitado_por FK, resultado_modelo_id FK, iniciado_en, finalizado_en, error text)` para el seguimiento de reentrenamientos asíncronos.
+> Tablas de soporte adicionales (no dibujadas para no sobrecargar el ER): `parametros_sistema(clave PK, valor jsonb, actualizado_por FK, actualizado_en)` para umbrales como `ml.mape_umbral`, `ml.periodos_consecutivos`; y `jobs_ml(id uuid PK, tipo, estado, parametros jsonb, solicitado_por FK, resultado_modelo_id FK, iniciado_en, finalizado_en, error text)` para el seguimiento de reentrenamientos asíncronos. ADR-14 añade `modelos_ml.fuentes_datos jsonb` y los parámetros `etl.carga_excel_habilitada`, `ml.fuente_reentrenamiento` y `liquidacion.umbral_diferencia_caja`.
 
 ### 3.3 Restricciones e índices obligatorios
 
@@ -700,6 +757,10 @@ erDiagram
 | `metricas_evaluacion` | Índice `(modelo_id, tipo_evaluacion, periodo_hasta DESC)` | Serie de degradación |
 | `pronosticos_demanda` | `UNIQUE (modelo_id, producto_id, ruta_id, fecha_objetivo, horizonte_dias)`; índice `(fecha_objetivo, producto_id)` | Evita duplicados; cruce con ventas reales |
 | `etl_lotes` | `UNIQUE (checksum_sha256)` | Bloquea carga duplicada del mismo archivo |
+| `etl_lotes` | `CHECK (origen IN ('excel_historico','liquidacion'))` | Separa la línea base de lo liquidado (ADR-14) |
+| `liquidaciones_diarias` | `UNIQUE (fecha, ruta_id, vendedor_id) WHERE estado <> 'anulada'` | Una liquidación vigente por ruta/vendedor/día |
+| `liquidaciones_diarias` | `CHECK` montos ≥ 0; caja coherente; `cerrada ⇒ venta_total = efectivo+transferencia+crédito` | Cuadre de dinero |
+| `liquidacion_detalles` | `CHECK (vendida + devuelta + merma <= cargada)`; `monto_total = round(vendida*precio,2)` | Cuadre de unidades |
 | `alertas` | Índice `(estado, severidad, creada_en DESC)` | Bandeja de alertas |
 
 ### 3.4 Diccionario de datos — tablas core de ML
@@ -1242,6 +1303,65 @@ components:
 
 > Nota: el contrato agrega 403 a los códigos solicitados (excepto en login), porque la denegación RBAC debe distinguirse de la falta de autenticación (401). Es el único código añadido, y se aplica de forma transversal a todo endpoint protegido.
 
+### 4.1 Endpoints implementados posteriormente al contrato de diseño
+
+> El bloque YAML anterior es el **contrato de diseño** inicial (`openapi.contract.yaml`, 6 operaciones: auth, ETL, predicciones, cargas y ML). Desde entonces se añadieron 51 operaciones por las ADR de liquidación diaria (ADR-14), productos/ajustes (ADR-16), compras, usuarios, reportes, bitácora y alertas. La fuente de verdad **vigente** es `docs/architecture/openapi.yaml`, generado desde FastAPI con `make openapi` y verificado por `tests/unit/test_app_and_openapi.py`. Tabla generada a partir de él (Swagger en `/docs` para esquemas y códigos de error):
+
+| Módulo | Método | Ruta | Resumen |
+|---|---|---|---|
+| Alerts | GET | `/api/v1/alerts` | Bandeja de alertas |
+| Alerts | PATCH | `/api/v1/alerts/{alerta_id}/acknowledge` | Reconocer una alerta abierta |
+| Bitácora | GET | `/api/v1/bitacora` | Consultar la bitácora de auditoría |
+| Catalog | GET | `/api/v1/catalog/categories` | Categorías de producto |
+| Catalog | GET | `/api/v1/catalog/routes` | Rutas activas |
+| Catalog | GET | `/api/v1/catalog/suppliers` | Proveedores activos |
+| ETL | GET | `/api/v1/etl/batches` | Historial de lotes ETL |
+| ETL | GET | `/api/v1/etl/config` | Política de datos del modelo |
+| ETL | PUT | `/api/v1/etl/config` | Cierra o reabre el arranque y fija la fuente de reentrenamiento |
+| Health | GET | `/health` | Liveness del servicio |
+| Inventory | GET | `/api/v1/inventory` | Existencias por producto |
+| Inventory | POST | `/api/v1/inventory/adjustments` | Ajuste manual de existencias |
+| Inventory | GET | `/api/v1/inventory/kardex` | Movimientos de kardex |
+| Liquidaciones | GET | `/api/v1/liquidaciones` | Historial de liquidaciones |
+| Liquidaciones | POST | `/api/v1/liquidaciones` | Crear o actualizar el borrador de la liquidación del día |
+| Liquidaciones | GET | `/api/v1/liquidaciones/config` | Umbral de diferencia de caja |
+| Liquidaciones | PUT | `/api/v1/liquidaciones/config` | Actualiza el umbral de diferencia de caja |
+| Liquidaciones | GET | `/api/v1/liquidaciones/precarga` | Precarga de la pantalla: carga despachada y liquidación vigente |
+| Liquidaciones | GET | `/api/v1/liquidaciones/{liquidacion_id}` | Detalle de una liquidación |
+| Liquidaciones | POST | `/api/v1/liquidaciones/{liquidacion_id}/anular` | Anular una liquidación |
+| Liquidaciones | POST | `/api/v1/liquidaciones/{liquidacion_id}/cerrar` | Cerrar la liquidación (alimenta el modelo) |
+| Liquidaciones | POST | `/api/v1/liquidaciones/{liquidacion_id}/corregir` | Corregir una liquidación cerrada |
+| ML | GET | `/api/v1/ml/config` | Umbral de degradación vigente |
+| ML | PUT | `/api/v1/ml/config` | Guardar umbral de degradación |
+| ML | GET | `/api/v1/ml/jobs/{job_id}` | Estado de un job asíncrono |
+| ML | GET | `/api/v1/ml/models` | Historial de modelos |
+| Products | GET | `/api/v1/products` | Listar productos |
+| Products | POST | `/api/v1/products` | Crear producto |
+| Products | DELETE | `/api/v1/products/{producto_id}` | Dar de baja un producto (baja lógica) |
+| Products | GET | `/api/v1/products/{producto_id}` | Detalle de un producto |
+| Products | PATCH | `/api/v1/products/{producto_id}` | Actualizar producto (parcial) |
+| Products | POST | `/api/v1/products/{producto_id}/reactivate` | Reactivar un producto dado de baja |
+| Purchasing | GET | `/api/v1/purchasing/orders` | Pedidos a proveedor |
+| Purchasing | POST | `/api/v1/purchasing/orders` | Crear (y opcionalmente enviar) una orden de compra |
+| Purchasing | GET | `/api/v1/purchasing/orders/{pedido_id}` | Detalle de un pedido |
+| Purchasing | POST | `/api/v1/purchasing/orders/{pedido_id}/cancel` | Cancelar una orden (borrador/enviado → cancelado) |
+| Purchasing | PATCH | `/api/v1/purchasing/orders/{pedido_id}/confirm` | Confirmación del proveedor (enviado → confirmado) |
+| Purchasing | POST | `/api/v1/purchasing/orders/{pedido_id}/receive` | Recepción física en bodega (confirmado → recibido) |
+| Purchasing | POST | `/api/v1/purchasing/orders/{pedido_id}/send` | Aprobar y enviar la orden al proveedor (borrador → enviado) |
+| Purchasing | GET | `/api/v1/purchasing/suggestions` | Sugerencias de reabastecimiento |
+| Reports | GET | `/api/v1/reports/commissions` | Liquidación de comisiones por vendedor y periodo |
+| Reports | GET | `/api/v1/reports/export` | Exportar reportes en CSV o Excel |
+| Reports | GET | `/api/v1/reports/inventory-turnover` | Rotación de inventario e índice de quiebres por ruta |
+| Reports | GET | `/api/v1/reports/sales-vs-forecast` | Volumen de venta real vs. proyectado por ruta |
+| Routes | GET | `/api/v1/routes/load-plans` | Carga vigente de una ruta y fecha |
+| Routes | POST | `/api/v1/routes/load-plans/{carga_id}/dispatch` | Despacho físico de una carga aprobada |
+| Users | GET | `/api/v1/users` | Listar usuarios |
+| Users | POST | `/api/v1/users` | Crear usuario |
+| Users | GET | `/api/v1/users/roles` | Roles asignables |
+| Users | PATCH | `/api/v1/users/{usuario_id}` | Actualizar usuario (parcial) |
+| Users | PATCH | `/api/v1/users/{usuario_id}/status` | Activar / desactivar usuario |
+
+
 ---
 
 ## 5. Matriz de pruebas de aceptación y QA
@@ -1277,6 +1397,61 @@ components:
 | TC-RBAC-03 | Seguridad RBAC | Seguridad | Usuario Proveedor A | JWT de Proveedor A | 1. Intentar acceder a pedido del Proveedor B | 403/404 | Aislamiento por `proveedor_id` |
 | TC-RBAC-04 | Seguridad RBAC | E2E | Usuario Ventas | Sesión iniciada | 1. Navegar manualmente a `/monitoreo` | Redirección a vista de acceso denegado; el menú no muestra la opción | Coincide con matriz de permisos 1.4 |
 | TC-E2E-01 | Flujo completo | E2E | Datos históricos cargados; modelo activo | Usuario Ventas | 1. Abrir dashboard. 2. Consultar demanda. 3. Generar plan. 4. Aprobar | Carga `aprobada` visible; kardex con reservas | Flujo completo sin errores en consola ni 5xx |
+| **TC-LIQ-01** | **Liquidación** | **Integración** | Usuario Admin; ruta con vendedor | Borrador con unidades y pagos | 1. POST `/liquidaciones` | 200 `borrador`; reenvío actualiza el mismo | Sin filas en `ventas_historicas`/`etl_lotes`/job |
+| **TC-LIQ-02** | **Liquidación** | **Integración** | Borrador cuadrado | — | 1. POST `/liquidaciones/{id}/cerrar` | 200 `cerrada` | `ventas_historicas` con lote `origen='liquidacion'`; comisiones; cierre atómico |
+| TC-LIQ-03 | Liquidación | Integración | Pronósticos de la fecha/ruta | Línea `agotado` | 1. Cerrar | `demanda_real` y `demanda_censurada` fijadas | El censurado no entra en `evaluables` |
+| TC-LIQ-04 | Liquidación | Integración | — | Varias liquidaciones | 1. Cerrar N días 2. Worker | Un job `evaluacion_produccion` en cola; el Worker lo completa | Sin entrenar dentro de la petición |
+| TC-LIQ-05 | Liquidación | Integración | Umbral Q 10 | Entregado con faltante Q 30 | 1. Cerrar | 200 y alerta `diferencia_caja` | Dentro del umbral: sin alerta; no bloquea |
+| TC-LIQ-06 | Liquidación | Integración | Liquidación cerrada | — | 1. Cerrar de nuevo / POST duplicado | 409 `LIQUIDACION_YA_CERRADA` / `LIQUIDACION_DUPLICADA` | Sin cambios |
+| TC-LIQ-07 | Liquidación | Integración | — | Unidades o montos que no cuadran | 1. Cerrar | 400 `UNIDADES_NO_CUADRAN` / `MONTOS_NO_CUADRAN` | Sin ventas ni job |
+| TC-LIQ-08 | Liquidación | Integración | Cerrada | Corrección con otra cantidad y sin una línea | 1. POST `/corregir` | `version+1`, ventas sin duplicar, `demanda_real` recalculada, nuevo job | Auditoría con antes/después y motivo |
+| TC-LIQ-09 | Liquidación | Integración | Cerrada | Motivo | 1. POST `/anular` | `anulada`; ventas y `demanda_real` revertidas | 409 `LIQUIDACION_YA_ANULADA`; permite re-liquidar |
+| TC-LIQ-10 | Liquidación | Seguridad | Sin sesión / sin permiso | — | 1. Cada endpoint | 401 / 403 `PERMISO_DENEGADO` | Gerente solo lee |
+| TC-LIQ-11 | Liquidación | Integración | Carga despachada | Cargado distinto | 1. Precarga 2. POST | Precarga = aprobada; 400 `CARGA_REQUIERE_JUSTIFICACION` | Sin carga: advertencia |
+| TC-LIQ-12 | Liquidación | Integración | Base Excel con ventas de la fecha | — | 1. Cerrar | 409 `VENTAS_EXCEL_EXISTENTES` | Base intacta |
+| TC-LIQ-13 | Liquidación | Integración | Arranque cerrado | Excel | 1. PUT `/etl/config` 2. POST `/etl/upload-excel` | 409 `EXCEL_DESHABILITADO` | Sin lotes nuevos |
+| TC-LIQ-14 | Liquidación | ML | Excel + liquidaciones | — | 1. Entrenar con cobertura | Sin cruzar el hueco; censura pesa 0,5 | `HISTORIAL_INSUFICIENTE` con tramo corto |
+| **TC-LIQ-15** | **Liquidación** | **E2E** | Excel inicial | 50 días liquidados | 1. Entrenar 2. Liquidar 3. Evaluar 4. Degradación 5. Reentrenar | MAPE visible; alerta `mape_umbral`; candidato con `fuentes_datos` de ambos orígenes | Flujo completo sin 5xx |
+| **TC-PROD-01** | **Productos** | **Integración** | Usuario con `productos:crear`; categoría existente | SKU `abc-1` en minúsculas, precio ≥ 0 | 1. POST `/products` 2. Repetir con `ABC-1` | 201 con `sku=ABC-1`, `activo=true` y existencias en 0; la repetición responde 409 `SKU_DUPLICADO` | Fila en `inventario` con stock 0; categoría/proveedor inexistentes → 404; valores negativos → 422 |
+| TC-PROD-02 | Productos | Integración | Producto con stock 40 | `nombre`, `precio_venta`, `proveedor_id=null` | 1. PATCH `/products/{id}` | 200; solo cambian los campos enviados; proveedor removido | `stock_actual` intacto; SKU de otro producto → 409 |
+| **TC-PROD-03** | **Productos** | **Integración** | Producto con kardex y ventas | — | 1. DELETE `/products/{id}` (dos veces) 2. GET detalle y kardex | 204 ambas veces; el producto sigue consultable con `activo=false` | Fila no borrada; historial íntegro; fuera de `GET /products` por defecto; `activo=false` lo lista |
+| TC-PROD-04 | Productos | Integración | Producto con `stock_reservado=5`, o en una carga vigente | — | 1. DELETE `/products/{id}` | 409 `PRODUCTO_EN_USO` con detalle (`stock_reservado`, `cargas_vigentes`) | `activo` sigue en `true`; con la carga rechazada la baja procede |
+| TC-PROD-05 | Productos | Integración | Producto dado de baja | — | 1. POST `/products/{id}/reactivate` | 200 `activo=true` (idempotente) | Vuelve a entrar en cargas y existencias |
+| TC-PROD-06 | Productos | Integración | Producto dado de baja | Ventas históricas en una ruta | 1. Listar productos de la ruta para cargas 2. `GET /inventory?bajo_minimo=true` 3. Pronosticar | Excluido de cargas nuevas y de alertas; pronóstico → 409 `PRODUCTO_INACTIVO` | Ventas históricas conservadas |
+| **TC-AJU-01** | **Inventario** | **Integración** | Producto activo, usuario con `inventario:ajustar` | `incremento` 100, `decremento` 30, `fijar` 55, con motivo | 1. POST `/inventory/adjustments` ×3 | 201; stock 100 → 70 → 55 | Kardex `ajuste` con cantidad con signo (+100, −30, −15), `saldo_resultante`, `motivo` y `usuario_id` |
+| **TC-AJU-02** | **Inventario** | **Integración** | Stock 20, reservado 8 | Decremento 15 / `fijar` 7 / decremento 500 | 1. POST `/inventory/adjustments` | 400 `STOCK_INSUFICIENTE` en los tres casos; decremento 12 → 201 | Sin movimientos de kardex por los rechazos; `stock_actual ≥ stock_reservado` |
+| TC-AJU-03 | Inventario | Integración | Producto activo / inactivo / inexistente | Cantidad 0, motivo de < 5 caracteres, `fijar` al mismo valor | 1. POST `/inventory/adjustments` | 400 `CANTIDAD_INVALIDA` / 422 / 400 `AJUSTE_SIN_CAMBIO`; 409 `PRODUCTO_INACTIVO`; 404 `PRODUCTO_NO_ENCONTRADO` | Sin cambios en `inventario` ni `kardex` |
+| TC-AJU-04 | Inventario | Integración | Producto con `stock_minimo=50` | Ajustes que lo dejan bajo el mínimo | 1. POST `/inventory/adjustments` ×2 | Una sola alerta `stock_bajo` abierta | Sin alerta si el disponible queda sobre el mínimo |
+| TC-AJU-05 | Inventario | Concurrencia | Stock 100 | Dos decrementos simultáneos de 60 | 1. Dos sesiones llaman al caso de uso a la vez | Uno OK y otro `STOCK_INSUFICIENTE` | `stock_actual=40`; un solo movimiento de kardex |
+| TC-PROD-07 | Productos / RBAC | Seguridad | Sin sesión / sin el permiso `productos:*` o `inventario:ajustar` | — | 1. Cada endpoint de `/products` y `/inventory/adjustments` | 401 / 403 `PERMISO_DENEGADO` | Bodega ajusta stock pero no gestiona productos |
+| **TC-COMP-01** | **Compras** | **Integración** | Usuario con `pedido_proveedor:gestionar`; A (stock 20, mínimo 30, proveedor A, lead time 3 d), B (stock 500), C sin fila de inventario y D sin proveedor; demanda proyectada A=70, C=12,5 | `horizonte_dias=5` | 1. GET `/purchasing/suggestions` | 200; A: `cantidad_sugerida=80.00` (demanda + mínimo − stock); C: `17.50` con stock 0 | B (stock cubre) y D (sin proveedor) omitidos; cantidad nunca negativa; `lead_time_dias` y `costo_unitario` del proveedor |
+| TC-COMP-02 | Compras | Integración | Igual que COMP-01 | Predicción sin modelo productivo, o `HISTORIAL_INSUFICIENTE` para un producto | 1. GET `/purchasing/suggestions` | 200 con `advertencias`; cantidad por punto de reorden (A=10, C=5) y `pronostico_disponible=false` | No falla la consulta; los productos con pronóstico conservan su fórmula normal |
+| **TC-COMP-03** | **Compras** | **Integración** | Compras, Proveedor A y Bodega; A stock 20, B stock 500 | Orden de A: 80 × costo de catálogo 2,50 y 10,5 × costo explícito 5,00 | 1. POST `/purchasing/orders` 2. POST `/send` 3. PATCH `/confirm` (Proveedor, `fecha_esperada`) 4. POST `/receive` (Bodega) | 201 `borrador` con `total=252.50` → `enviado` → `confirmado` → `recibido` | Hasta recibir no hay kardex; al recibir `stock_actual` 100 y 510,50, movimiento `entrada` con `referencia_tipo=pedido`, `saldo_resultante` y `usuario_id` de Bodega |
+| TC-COMP-04 | Compras | Integración | Producto C (proveedor B) sin fila de `inventario` | Orden con `enviar=true` | 1. POST `/purchasing/orders` 2. Confirmar 3. Recibir | 201 nace `enviado`; la recepción crea la fila de `inventario` con 20 | Kardex con `entrada` y saldo 20 |
+| **TC-COMP-05** | **Compras** | **Integración** | Pedidos en distintos estados | Confirmar sin enviar, recibir sin confirmar, enviar dos veces, recibir dos veces, cancelar dos veces, `fecha_esperada` anterior al pedido | 1. Invocar cada acción fuera de secuencia | 400 `ESTADO_PEDIDO_INVALIDO`; fecha inválida → 400 `FECHA_ESPERADA_INVALIDA` | Sin doble ingreso de stock ni de kardex; el pedido cancelado no se recibe |
+| TC-COMP-06 | Compras | Integración | Proveedor A con sus productos | Producto de otro proveedor o inexistente; cuerpo inválido; ítems repetidos | 1. POST `/purchasing/orders` | 400 (producto ajeno o inexistente) / 422 (cuerpo inválido e ítems repetidos) | Ningún pedido creado |
+| TC-COMP-07 | Compras | Seguridad | Usuarios Compras, Bodega y Proveedor; pedido `enviado` | Cada rol sobre cada acción; Proveedor sin `proveedor_id` asociado | 1. Invocar listar, crear, enviar, cancelar, confirmar y recibir con cada rol | Compras gestiona (no confirma ni recibe); Proveedor solo confirma lo suyo; Bodega consulta y recibe; 403 `PROVEEDOR_NO_ASOCIADO`; sin token 401 | Compras ve todos los pedidos y filtra por `estado`; pedido inexistente → 404 (el aislamiento entre proveedores es TC-RBAC-03) |
+| **TC-USR-01** | **Usuarios** | **Seguridad** | Usuario Ventas sin `usuarios:gestionar` | — | 1. GET y POST `/users` sin token y con ese usuario | 401 / 403 | Solo Admin administra usuarios |
+| **TC-USR-02** | **Usuarios** | **Integración** | Admin con `usuarios:gestionar`; ruta libre | Alta con rol Ventas, contraseña de longitud válida y una ruta | 1. POST `/users` 2. POST `/auth/login` con el nuevo usuario | 201 con `roles=[Ventas]`, `activo=true` y la ruta asignada; el login responde 200 | La respuesta no incluye `password` ni `password_hash` |
+| TC-USR-03 | Usuarios | Integración | Usuario existente `dup@ds.gt` | Correo repetido en otra capitalización, rol o ruta inexistente, rol Proveedor sin proveedor, contraseña corta | 1. POST `/users` | 409 `EMAIL_DUPLICADO`; 400 `ROL_INVALIDO` / `RUTA_INVALIDA` / `PROVEEDOR_REQUERIDO`; 422 | Sin usuarios nuevos |
+| TC-USR-04 | Usuarios | Integración | Usuario con una ruta asignada a otro vendedor | `ruta_ids` y nombre; luego `password` y `roles` | 1. PATCH `/users/{id}` 2. Login con la clave anterior y la nueva | La ruta pasa al nuevo vendedor (una ruta, un vendedor); `ruta_ids=[]` las libera; clave anterior 401 y nueva 200; usuario inexistente 404 | El rol cambia a Admin |
+| TC-USR-05 | Usuarios | Integración | Usuario activo | `activo=false` y luego `true` | 1. PATCH `/users/{id}/status` 2. Login | Desactivado: login 401 y aparece con `activo=false`; reactivado: login 200 | Filtros por `rol`, `activo` y `q`; GET `/users/roles` lista los roles |
+| TC-USR-06 | Usuarios | Integración | Admin autenticado; un segundo Admin | Desactivarse a sí mismo; dejar al sistema sin Admin activo | 1. PATCH `/users/{id}/status` y PATCH `/users/{id}` con `roles` | 409 `AUTOMODIFICACION_NO_PERMITIDA`; 409 `ULTIMO_ADMIN` al desactivar o quitar el rol al último | Siempre queda al menos un Admin activo |
+| **TC-REP-01** | **Reportes** | **Seguridad** | Usuario con `alertas:leer` pero sin `reportes:leer` | — | 1. GET `/reports/inventory-turnover`, `/commissions`, `/sales-vs-forecast` y `/export` | 401 sin token; 403 sin permiso | Cada endpoint exige `reportes:leer` |
+| **TC-REP-02** | **Reportes** | **Integración** | Ruta 1 con ventas, costo y 1 carga aprobada de 2 líneas (1 ajustada por stock) más 1 carga rechazada; ruta 2 con ventas y sin cargas | Rango de fechas y `ruta_id` | 1. GET `/reports/inventory-turnover` | 200; ruta 1: 35 unidades, monto 190, costo 80, `indice_quiebre=50` y 10 unidades no cubiertas; ruta 2: `indice_quiebre=null` | La carga rechazada no cuenta; rotación global = costo de ventas / valor de inventario; rutas ordenadas por costo |
+| TC-REP-03 | Reportes | Integración | Vendedor con ventas en dos rutas durante enero | `periodo_desde=periodo_hasta=2031-01`, con y sin `ruta_id` | 1. GET `/reports/commissions` | Total vendido 230 y comisiones 6,90 (3 %); solo la ruta 1: 190 y 5,70 | `ventas_registradas` y `porcentaje_efectivo` por vendedor y periodo |
+| TC-REP-04 | Reportes | Integración | Datos de prueba | Periodo `2031-13`; `periodo_desde` > `periodo_hasta`; `desde` > `hasta`; `ruta_id` inexistente | 1. GET `/reports/commissions` y `/sales-vs-forecast` | 422 / 400 `RANGO_INVALIDO` / 400 `RANGO_INVALIDO` / 404 | Sin cuerpo de reporte |
+| TC-REP-05 | Reportes | Integración | Ruta con dos pronósticos de distinta antigüedad para el mismo día | Rango y `ruta_id` | 1. GET `/reports/sales-vs-forecast` | Real 35, proyectada 20 (usa la proyección más reciente), `desviacion_pct=75`; ruta sin pronóstico: proyectada 0 y desviación `null` | La serie diaria coincide con los totales |
+| TC-REP-06 | Reportes | Funcional | Datos de prueba | `formato` xlsx y csv; `tipo` consolidado o `comisiones` | 1. GET `/reports/export` | XLSX con hojas «Rotación y quiebres», «Comisiones» y «Real vs proyectado»; CSV con BOM UTF-8 y cabecera `Periodo,Vendedor,Ventas,Monto vendido,Comisión,% efectivo` | `Content-Disposition` con nombre `reporte_consolidado_*` |
+| **TC-AUD-01** | **Bitácora** | **Integración** | Usuario con `usuarios:gestionar` y `bitacora:leer` | Cualquier caso de uso (listar usuarios) | 1. GET `/users` y leer `X-Request-ID` 2. GET `/bitacora?request_id=...` | Dos registros: `origen=http` (`GET /api/v1/users`) y `origen=servicio` con `usuario_id` y parámetros | Cada caso de uso deja registro trazable por `request_id` |
+| TC-AUD-02 | Bitácora | Seguridad | — | Login fallido con contraseña | 1. POST `/auth/login` 2. Consultar `bitacora` | 401; registro con `resultado=error`, `codigo_error` y `parametros.datos.password` enmascarado (`***`) | La contraseña no aparece en ningún campo |
+| TC-AUD-03 | Bitácora | Seguridad | Usuario sin `bitacora:leer` | — | 1. GET `/bitacora` con y sin token | 403 `PERMISO_DENEGADO` / 401 | Sin registros en el cuerpo |
+| TC-AUD-04 | Bitácora | Integración | Registro existente en `bitacora` | `UPDATE`, `DELETE` y `TRUNCATE` | 1. Ejecutar cada sentencia sobre `bitacora` | Error de BD «solo inserción» | Tabla append-only por trigger |
+| **TC-ALE-01** | **Alertas** | **Seguridad** | Alertas abiertas de todos los tipos; usuarios Admin, Inventario, Bodega, Gerente y uno sin rol de dominio | — | 1. GET `/alerts` con cada usuario | Admin ve todas; Inventario todas salvo `mape_umbral` y `diferencia_caja`; Bodega solo `stock_bajo`; Gerente `mape_umbral`, `quiebre_proyectado` y `diferencia_caja`; sin dominio ninguna | `total` refleja el filtro por rol; sin permiso 403 y sin token 401 |
+| TC-ALE-02 | Alertas | Integración | Alerta `stock_bajo` abierta; usuario Bodega | — | 1. PATCH `/alerts/{id}/acknowledge` 2. Repetir 3. GET `/alerts?estado=reconocida` | 200 `reconocida` y sale de la bandeja abierta; la repetición responde 409 `ALERTA_NO_ABIERTA` | Aparece en el listado de reconocidas |
+| TC-ALE-03 | Alertas | Seguridad | Alerta `mape_umbral` abierta; usuario Bodega | Alerta ajena al rol, inexistente y usuario sin permiso | 1. PATCH `/alerts/{id}/acknowledge` | 404 `ALERTA_NO_ENCONTRADA` / 404 / 403 | La alerta ajena sigue `abierta` |
+| TC-ALE-04 | Alertas | Integración | Lotes ETL en varios estados; usuario con permiso de carga | Filtro por `estado` y paginación | 1. GET `/etl/batches` | 200 con `total` y página filtrada | Sin el permiso de carga ETL: 403 |
+| **TC-CFG-01** | **Configuración ML** | **Integración** | Gerente con `ml:reentrenar`; lector con `ml:metricas:leer` | `umbral_mape=8.5`, `periodos_consecutivos=2`; luego valores 0 | 1. PUT `/ml/config` 2. GET `/ml/config` 3. PUT con valores inválidos | 200 y el GET devuelve lo guardado; los valores 0 → 422 | La evaluación de producción usa el umbral guardado |
 
 ### 5.1 Criterios globales de aceptación del prototipo
 

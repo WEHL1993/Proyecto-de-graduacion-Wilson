@@ -39,6 +39,14 @@ class ReferenciaTipo(StrEnum):
     ETL = "etl"
 
 
+class TipoAjuste(StrEnum):
+    """Modalidad de un ajuste manual de existencias (ADR-16)."""
+
+    INCREMENTO = "incremento"
+    DECREMENTO = "decremento"
+    FIJAR = "fijar"
+
+
 class EstadoPedido(StrEnum):
     BORRADOR = "borrador"
     ENVIADO = "enviado"
@@ -52,6 +60,27 @@ class EstadoLoteEtl(StrEnum):
     VALIDADO = "validado"
     RECHAZADO = "rechazado"
     CARGADO = "cargado"
+
+
+class OrigenDatos(StrEnum):
+    """Procedencia de un lote de `ventas_historicas` (ADR-14)."""
+
+    EXCEL_HISTORICO = "excel_historico"
+    LIQUIDACION = "liquidacion"
+
+
+class EstadoLiquidacion(StrEnum):
+    BORRADOR = "borrador"
+    CERRADA = "cerrada"
+    ANULADA = "anulada"
+
+
+class FuenteReentrenamiento(StrEnum):
+    """Qué datos alimentan un entrenamiento (`ml.fuente_reentrenamiento`, ADR-14)."""
+
+    EXCEL_HISTORICO = "excel_historico"
+    EXCEL_MAS_LIQUIDACION = "excel_mas_liquidacion"
+    LIQUIDACION = "liquidacion"
 
 
 class Algoritmo(StrEnum):
@@ -84,6 +113,7 @@ class TipoAlerta(StrEnum):
     QUIEBRE_PROYECTADO = "quiebre_proyectado"
     MAPE_UMBRAL = "mape_umbral"
     ETL_ERROR = "etl_error"
+    DIFERENCIA_CAJA = "diferencia_caja"
 
 
 class Severidad(StrEnum):
@@ -109,6 +139,30 @@ class EstadoJob(StrEnum):
     EN_EJECUCION = "en_ejecucion"
     COMPLETADO = "completado"
     FALLIDO = "fallido"
+
+
+class NivelBitacora(StrEnum):
+    INFO = "INFO"
+    WARNING = "WARNING"
+    ERROR = "ERROR"
+
+
+class OrigenBitacora(StrEnum):
+    """Capa que generó el registro de la bitácora (ADR-15)."""
+
+    HTTP = "http"
+    SERVICIO = "servicio"
+    WORKER = "worker"
+
+
+class ResultadoBitacora(StrEnum):
+    EXITO = "exito"
+    ERROR = "error"
+
+
+class OperacionBitacora(StrEnum):
+    LECTURA = "lectura"
+    ESCRITURA = "escritura"
 
 
 def sql_in(column: str, values) -> str:

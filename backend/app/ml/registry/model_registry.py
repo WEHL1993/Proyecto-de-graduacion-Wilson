@@ -23,6 +23,7 @@ def registrar_modelo(
     motivo: str,
     entrenado_por: uuid.UUID | None,
     raiz_artefactos: Path,
+    fuentes_datos: dict | None = None,
 ) -> ModeloML:
     """Guarda los artefactos y registra el modelo como `candidato` con sus métricas."""
     version = model_repo.siguiente_version(db, nombre)
@@ -48,6 +49,7 @@ def registrar_modelo(
         ventana_hasta=resultado.ventana_hasta,
         motivo_entrenamiento=motivo,
         entrenado_por=entrenado_por,
+        fuentes_datos=fuentes_datos,
     )
     model_repo.registrar_metricas(
         db,

@@ -39,6 +39,13 @@ def activo_de_tipo(db: Session, tipo: TipoJob) -> JobML | None:
     ).first()
 
 
+def en_cola_de_tipo(db: Session, tipo: TipoJob) -> JobML | None:
+    """Job aún `en_cola` (sin iniciar) del tipo: permite coalescer solicitudes repetidas."""
+    return db.scalars(
+        select(JobML).where(JobML.tipo == tipo, JobML.estado == EstadoJob.EN_COLA).limit(1)
+    ).first()
+
+
 def reclamar_siguiente(db: Session, tipo: TipoJob) -> JobML | None:
     """Toma el job `en_cola` más antiguo (FOR UPDATE SKIP LOCKED) y lo pasa a `en_ejecucion`."""
     job = db.scalars(

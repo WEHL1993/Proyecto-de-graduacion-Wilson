@@ -17,6 +17,7 @@ from app.schemas.users import (
     UsuarioPage,
     UsuarioUpdate,
 )
+from app.services.bitacora_service import auditar
 
 ROL_PROVEEDOR = "Proveedor"
 ROL_ADMIN = "Admin"
@@ -86,6 +87,7 @@ def _proteger_admin(db: Session, usuario: Usuario, actor_id: uuid.UUID, accion: 
         )
 
 
+@auditar
 def listar_roles(db: Session) -> list[RolItem]:
     return [
         RolItem(id=r.id, nombre=r.nombre, descripcion=r.descripcion)
@@ -93,6 +95,7 @@ def listar_roles(db: Session) -> list[RolItem]:
     ]
 
 
+@auditar
 def listar(
     db: Session, *, q: str | None, activo: bool | None, rol: str | None, limit: int, offset: int
 ) -> UsuarioPage:
@@ -101,6 +104,7 @@ def listar(
     return UsuarioPage(total=total, usuarios=[_a_dto(u, rutas[u.id]) for u in usuarios])
 
 
+@auditar
 def crear(db: Session, datos: UsuarioCreate) -> UsuarioOut:
     email = str(datos.email).lower()
     if user_repo.existe_email(db, email):
@@ -126,6 +130,7 @@ def crear(db: Session, datos: UsuarioCreate) -> UsuarioOut:
     return _dto(db, usuario)
 
 
+@auditar
 def actualizar(
     db: Session, usuario_id: uuid.UUID, datos: UsuarioUpdate, actor_id: uuid.UUID
 ) -> UsuarioOut:
@@ -154,6 +159,7 @@ def actualizar(
     return _dto(db, usuario)
 
 
+@auditar
 def cambiar_estado(
     db: Session, usuario_id: uuid.UUID, activo: bool, actor_id: uuid.UUID
 ) -> UsuarioOut:

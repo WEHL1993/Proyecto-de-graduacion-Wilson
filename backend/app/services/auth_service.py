@@ -8,6 +8,7 @@ from app.core.errors import AppError
 from app.core.security import create_access_token, verify_password
 from app.repositories import user_repo
 from app.schemas.auth import LoginRequest, TokenResponse, UsuarioToken
+from app.services.bitacora_service import auditar
 
 # TC-AUTH-02: el mensaje debe ser idéntico para correo inexistente, contraseña incorrecta
 # y usuario inactivo, para no revelar si el correo existe.
@@ -21,6 +22,7 @@ def _rechazar_credenciales() -> AppError:
     )
 
 
+@auditar
 def login(db: Session, datos: LoginRequest) -> TokenResponse:
     usuario = user_repo.obtener_por_email(db, datos.email)
     if usuario is None or not verify_password(datos.password, usuario.password_hash):

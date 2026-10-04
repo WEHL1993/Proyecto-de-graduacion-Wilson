@@ -5,8 +5,12 @@ import { AccessDeniedView } from '../views/AccessDeniedView'
 import { AdminUsersView } from '../views/AdminUsersView'
 import { EtlUploadView } from '../views/EtlUploadView'
 import { InventoryView } from '../views/InventoryView'
+import { LiquidacionDiariaView } from '../views/LiquidacionDiariaView'
+import { LiquidacionesHistorialView } from '../views/LiquidacionesHistorialView'
 import { LoginView } from '../views/LoginView'
 import { ModelMonitoringView } from '../views/ModelMonitoringView'
+import { PoliticaDatosView } from '../views/PoliticaDatosView'
+import { ProductsView } from '../views/ProductsView'
 import { PurchasingView } from '../views/PurchasingView'
 import { ReportsView } from '../views/ReportsView'
 import { SalesDashboardView } from '../views/SalesDashboardView'
@@ -20,6 +24,8 @@ function Inicio() {
   if (canAny(PERMISOS_VISTA.monitoreo)) return <Navigate to="/monitoreo" replace />
   if (canAny(PERMISOS_VISTA.compras)) return <Navigate to="/compras" replace />
   if (canAny(PERMISOS_VISTA.inventario)) return <Navigate to="/inventario" replace />
+  if (canAny(PERMISOS_VISTA.liquidacion)) return <Navigate to="/ventas/liquidacion" replace />
+  if (canAny(PERMISOS_VISTA.liquidaciones)) return <Navigate to="/ventas/liquidaciones" replace />
   if (canAny(PERMISOS_VISTA.etl)) return <Navigate to="/etl" replace />
   if (canAny(PERMISOS_VISTA.reportes)) return <Navigate to="/reportes" replace />
   if (canAny(PERMISOS_VISTA.usuarios)) return <Navigate to="/usuarios" replace />
@@ -59,6 +65,38 @@ export function AppRoutes() {
           element={
             <PermissionGate guardRoute anyOf={PERMISOS_VISTA.inventario}>
               <InventoryView />
+            </PermissionGate>
+          }
+        />
+        <Route
+          path="productos"
+          element={
+            <PermissionGate guardRoute anyOf={PERMISOS_VISTA.productos}>
+              <ProductsView />
+            </PermissionGate>
+          }
+        />
+        <Route
+          path="ventas/liquidacion"
+          element={
+            <PermissionGate guardRoute anyOf={PERMISOS_VISTA.liquidacion}>
+              <LiquidacionDiariaView />
+            </PermissionGate>
+          }
+        />
+        <Route
+          path="ventas/liquidaciones"
+          element={
+            <PermissionGate guardRoute anyOf={PERMISOS_VISTA.liquidaciones}>
+              <LiquidacionesHistorialView />
+            </PermissionGate>
+          }
+        />
+        <Route
+          path="politica-datos"
+          element={
+            <PermissionGate guardRoute anyOf={PERMISOS_VISTA.etlConfig}>
+              <PoliticaDatosView />
             </PermissionGate>
           }
         />

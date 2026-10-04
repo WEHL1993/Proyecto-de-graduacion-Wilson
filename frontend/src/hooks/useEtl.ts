@@ -2,6 +2,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { useState } from 'react'
 import * as api from '../services/etlApi'
 import type { OpcionesCarga } from '../services/etlApi'
+import type { EtlConfig } from '../types'
 
 export const TAMANO_PAGINA_LOTES = 10
 
@@ -29,4 +30,16 @@ export function useSubirExcel() {
     },
   })
   return { ...mutacion, progreso }
+}
+
+/** Política de datos (ADR-14): ¿el arranque sigue abierto? ¿qué fuente usa el reentrenamiento? */
+export const useEtlConfig = () =>
+  useQuery({ queryKey: ['etl-config'], retry: false, queryFn: api.obtenerConfigEtl })
+
+export function useGuardarEtlConfig() {
+  const cliente = useQueryClient()
+  return useMutation({
+    mutationFn: (config: EtlConfig) => api.guardarConfigEtl(config),
+    onSuccess: () => cliente.invalidateQueries({ queryKey: ['etl-config'] }),
+  })
 }

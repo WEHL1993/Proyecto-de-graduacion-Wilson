@@ -7,6 +7,9 @@ from dataclasses import dataclass, field
 
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.core import contexto
+from app.core.contexto import ContextoAuditoria
+from app.domain.enums import OrigenBitacora
 from app.workers.jobs import evaluate_production, retrain_model
 
 logger = logging.getLogger(__name__)
@@ -14,7 +17,8 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class Planificador:
-    """Un `ciclo()` atiende la cola de reentrenamientos y, si toca, evalúa producción."""
+    """Un `ciclo()` atiende las evaluaciones y los reentrenamientos en cola y, si toca, evalúa
+    producción."""
 
     fabrica_sesiones: sessionmaker[Session]
     intervalo_evaluacion: float
@@ -28,12 +32,16 @@ class Planificador:
         if self.reloj() >= self._proxima_evaluacion:
             self._proxima_evaluacion = self.reloj() + self.intervalo_evaluacion
             self._proteger("evaluate_production", evaluate_production.ejecutar)
+        self._proteger("evaluate_production_en_cola", evaluate_production.ejecutar_en_cola)
         self._proteger("retrain_model", retrain_model.ejecutar_pendientes)
 
     def _proteger(self, nombre: str, tarea: Callable[[Session], object]) -> None:
         """Un fallo en un job se registra y no detiene al Worker."""
+        token = contexto.establecer(ContextoAuditoria(origen=OrigenBitacora.WORKER.value))
         try:
             with self.fabrica_sesiones() as db:
                 tarea(db)
         except Exception:
             logger.exception("Job %s falló", nombre)
+        finally:
+            contexto.restablecer(token)

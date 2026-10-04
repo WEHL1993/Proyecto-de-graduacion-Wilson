@@ -11,10 +11,12 @@ from app.domain.enums import EstadoJob, TipoJob
 from app.repositories import job_repo
 from app.schemas.ml import JobStatus
 from app.services import monitoring_service, retraining_service
+from app.services.bitacora_service import auditar
 
 logger = logging.getLogger(__name__)
 
 
+@auditar
 def obtener_estado(db: Session, job_id: uuid.UUID) -> JobStatus:
     job = job_repo.obtener(db, job_id)
     if job is None:
@@ -32,6 +34,7 @@ def obtener_estado(db: Session, job_id: uuid.UUID) -> JobStatus:
     )
 
 
+@auditar
 def procesar_siguiente_reentrenamiento(db: Session) -> uuid.UUID | None:
     """Reclama y ejecuta el reentrenamiento más antiguo en cola; `None` si no hay ninguno."""
     job = job_repo.reclamar_siguiente(db, TipoJob.REENTRENAMIENTO)
@@ -48,6 +51,30 @@ def procesar_siguiente_reentrenamiento(db: Session) -> uuid.UUID | None:
     return job.id
 
 
+@auditar
+def procesar_evaluacion_en_cola(db: Session) -> uuid.UUID | None:
+    """Reclama y ejecuta la evaluación en cola (p. ej. encolada al cerrar una liquidación, ADR-14).
+
+    Evalúa los periodos pendientes del modelo productivo; no entrena. `None` si no hay ninguna.
+    """
+    job = job_repo.reclamar_siguiente(db, TipoJob.EVALUACION_PRODUCCION)
+    if job is None:
+        return None
+    db.commit()  # publica `en_ejecucion` antes de evaluar
+    try:
+        monitoring_service.evaluar_produccion(db)
+    except Exception as exc:
+        db.rollback()
+        logger.exception("Evaluación en cola %s falló", job.id)
+        job_repo.finalizar(db, job, estado=EstadoJob.FALLIDO, error=str(exc))
+        db.commit()
+        return job.id
+    job_repo.finalizar(db, job, estado=EstadoJob.COMPLETADO)
+    db.commit()
+    return job.id
+
+
+@auditar
 def ejecutar_evaluacion(
     db: Session, *, desde: date | None = None, hasta: date | None = None
 ) -> monitoring_service.ResultadoEvaluacion:

@@ -6,9 +6,16 @@ export const PERMISOS_VISTA = {
   // Compras gestiona, Proveedor confirma, Bodega recibe.
   compras: ['pedido_proveedor:gestionar', 'pedido_proveedor:confirmar', 'inventario:ajustar'],
   inventario: ['inventario:leer'],
+  // ADR-16: quien consulta inventario ve el catálogo; las acciones se habilitan por `productos:*`.
+  productos: ['inventario:leer'],
   etl: ['etl:cargar'],
   reportes: ['reportes:leer'],
   usuarios: ['usuarios:gestionar'],
+  // ADR-14: el admin liquida (registrar); Administrador y Gerente consultan el historial.
+  liquidacion: ['liquidaciones:registrar'],
+  liquidaciones: ['liquidaciones:leer'],
+  // Política de datos (cierre del arranque ETL): solo Administrador.
+  etlConfig: ['etl:configurar'],
 } as const
 
 export type Vista = keyof typeof PERMISOS_VISTA

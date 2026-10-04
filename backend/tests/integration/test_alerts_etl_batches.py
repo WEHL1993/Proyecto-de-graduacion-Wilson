@@ -17,7 +17,12 @@ LOTES = "/api/v1/etl/batches"
 PERFILES = {
     "inventario": ("alertas:leer", "inventario:leer", "etl:cargar", "prediccion:consultar"),
     "bodega": ("alertas:leer", "inventario:leer", "inventario:ajustar"),
-    "gerente": ("alertas:leer", "ml:metricas:leer", "prediccion:consultar"),
+    "gerente": (
+        "alertas:leer",
+        "ml:metricas:leer",
+        "prediccion:consultar",
+        "liquidaciones:leer",
+    ),
     "admin": (
         "alertas:leer",
         "inventario:leer",
@@ -25,6 +30,7 @@ PERFILES = {
         "prediccion:consultar",
         "ml:metricas:leer",
         "ml:reentrenar",
+        "liquidaciones:leer",
     ),
     "sin_dominio": ("alertas:leer",),
 }
@@ -59,24 +65,34 @@ def _tipos_visibles(e, perfil: str) -> set[TipoAlerta]:
     return {e.ids[a["id"]] for a in r.json()["alertas"] if a["id"] in e.ids}
 
 
+# TC-ALE-01
 def test_cada_rol_ve_solo_los_tipos_de_su_dominio(entorno):
     e = entorno
     assert _tipos_visibles(e, "admin") == set(TipoAlerta)
-    assert _tipos_visibles(e, "inventario") == set(TipoAlerta) - {TipoAlerta.MAPE_UMBRAL}
+    assert _tipos_visibles(e, "inventario") == set(TipoAlerta) - {
+        TipoAlerta.MAPE_UMBRAL,
+        TipoAlerta.DIFERENCIA_CAJA,
+    }
     assert _tipos_visibles(e, "bodega") == {TipoAlerta.STOCK_BAJO}
-    assert _tipos_visibles(e, "gerente") == {TipoAlerta.MAPE_UMBRAL, TipoAlerta.QUIEBRE_PROYECTADO}
+    assert _tipos_visibles(e, "gerente") == {
+        TipoAlerta.MAPE_UMBRAL,
+        TipoAlerta.QUIEBRE_PROYECTADO,
+        TipoAlerta.DIFERENCIA_CAJA,  # ADR-14: Administrador y Gerente atienden el cuadre de caja
+    }
     assert _tipos_visibles(e, "sin_dominio") == set()
     sin_permiso = encabezados(e.usuario, "inventario:leer")
     assert e.client.get(ALERTAS, headers=sin_permiso).status_code == 403
     assert e.client.get(ALERTAS).status_code == 401
 
 
+# TC-ALE-01
 def test_total_refleja_el_filtro_por_rol(entorno):
     e = entorno
     vacio = e.client.get(ALERTAS, headers=e.headers["sin_dominio"]).json()
     assert vacio == {"total": 0, "alertas": []}
 
 
+# TC-ALE-02
 def test_reconocer_alerta_la_saca_de_la_bandeja_abierta(entorno):
     e = entorno
     alerta = e.alertas[TipoAlerta.STOCK_BAJO]
@@ -94,6 +110,7 @@ def test_reconocer_alerta_la_saca_de_la_bandeja_abierta(entorno):
     assert str(alerta.id) in {a["id"] for a in reconocidas["alertas"]}
 
 
+# TC-ALE-03
 def test_no_reconoce_alertas_ajenas_al_rol_ni_inexistentes(entorno):
     e = entorno
     ajena = e.alertas[TipoAlerta.MAPE_UMBRAL]
@@ -127,6 +144,7 @@ def _lote(e, estado, validas, rechazadas):
     return lote
 
 
+# TC-ALE-04
 def test_historial_de_lotes_con_filtro_y_paginacion(entorno):
     e = entorno
     cargado = _lote(e, EstadoLoteEtl.CARGADO, 100, 3)
@@ -150,6 +168,7 @@ def test_historial_de_lotes_con_filtro_y_paginacion(entorno):
     assert len(pagina["lotes"]) == 1 and pagina["total"] >= 2
 
 
+# TC-ALE-04
 def test_historial_de_lotes_exige_permiso_de_carga(entorno):
     e = entorno
     assert e.client.get(LOTES).status_code == 401

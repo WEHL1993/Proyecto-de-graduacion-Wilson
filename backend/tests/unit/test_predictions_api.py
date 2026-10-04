@@ -169,6 +169,7 @@ def test_producto_inexistente_o_sin_historial(entorno):
 
 
 def test_artefacto_manipulado_devuelve_500_corrupto(entorno):
+    """TC-ML-06: hash alterado → 500 ARTEFACTO_CORRUPTO; no se sirve predicción."""
     actual = entorno.estado.modelo
     entorno.estado.modelo = SimpleNamespace(**{**vars(actual), "hash_artefacto": "0" * 64})
     r = entorno.client.post(URL, json=_cuerpo(), headers=_headers("prediccion:consultar"))

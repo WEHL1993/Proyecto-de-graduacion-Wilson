@@ -25,13 +25,15 @@ from app.domain.enums import (
 )
 from app.domain.models.ml import JobML, ModeloML
 from app.ml import contracts
-from app.repositories import alert_repo, job_repo, model_repo
+from app.repositories import alert_repo, job_repo, model_repo, parametro_repo
 from app.schemas.ml import RetrainRequest, RetrainResponse
 from app.services import training_service
+from app.services.bitacora_service import auditar
 
 logger = logging.getLogger(__name__)
 
 
+@auditar
 def solicitar(db: Session, solicitud: RetrainRequest, usuario_id: uuid.UUID) -> RetrainResponse:
     activo = job_repo.activo_de_tipo(db, TipoJob.REENTRENAMIENTO)
     if activo is not None:
@@ -56,6 +58,7 @@ def solicitar(db: Session, solicitud: RetrainRequest, usuario_id: uuid.UUID) -> 
     return RetrainResponse(job_id=job.id, estado="en_cola", solicitado_en=job.solicitado_en)
 
 
+@auditar
 def ejecutar(db: Session, job: JobML) -> JobML:
     """Ejecuta un job de reentrenamiento ya reclamado (`en_ejecucion`) y lo cierra."""
     parametros = job.parametros
@@ -65,6 +68,7 @@ def ejecutar(db: Session, job: JobML) -> JobML:
     hasta = _fecha(parametros.get("ventana_hasta"))
     promover = bool(parametros.get("promover_automaticamente", True))
     productivo = model_repo.obtener_produccion(db, get_settings().ml_modelo_nombre)
+    fuente = parametro_repo.fuente_reentrenamiento(db)  # ADR-14: base Excel + liquidaciones
 
     candidatos: list[ModeloML] = []
     errores: list[str] = []
@@ -78,6 +82,7 @@ def ejecutar(db: Session, job: JobML) -> JobML:
                     entrenado_por=job.solicitado_por,
                     ventana_desde=desde,
                     ventana_hasta=hasta,
+                    fuente=fuente,
                 )
             )
         except AppError as exc:

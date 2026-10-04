@@ -22,6 +22,7 @@ from app.schemas.reports import (
     VentasProyeccionReporte,
 )
 from app.services import report_export
+from app.services.bitacora_service import auditar
 from app.services.report_export import Tabla
 
 CERO = Decimal("0")
@@ -60,6 +61,7 @@ def _validar_periodo(periodo: str | None) -> str | None:
 
 
 # ---------------------------------------------------------------- rotación y quiebres
+@auditar
 def rotacion_e_indice_quiebres(
     db: Session, desde: date | None, hasta: date | None, ruta_id: uuid.UUID | None
 ) -> RotacionReporte:
@@ -114,6 +116,7 @@ def rotacion_e_indice_quiebres(
 
 
 # ---------------------------------------------------------------- comisiones
+@auditar
 def liquidacion_comisiones(
     db: Session,
     periodo_desde: str | None,
@@ -153,6 +156,7 @@ def liquidacion_comisiones(
 
 
 # ---------------------------------------------------------------- real vs proyectado
+@auditar
 def ventas_vs_proyeccion(
     db: Session, desde: date | None, hasta: date | None, ruta_id: uuid.UUID | None
 ) -> VentasProyeccionReporte:
@@ -258,6 +262,7 @@ def _tabla_ventas(v: VentasProyeccionReporte) -> Tabla:
     )
 
 
+@auditar
 def exportar(
     db: Session,
     tipo: TipoReporte,

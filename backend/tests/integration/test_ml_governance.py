@@ -347,6 +347,7 @@ def _entrenador_falso(mape_por_algoritmo: dict[str, float]):
         ventana_hasta=None,
         hiperparametros=None,
         promover=False,
+        fuente=None,
     ):
         modelo = _modelo(
             db,
@@ -672,6 +673,7 @@ def test_validacion_del_cuerpo_de_reentrenamiento(entorno):
 
 
 # ------------------------------------------------------------------ configuración y alertas
+# TC-CFG-01
 def test_config_de_degradacion_se_guarda_y_afecta_la_evaluacion(entorno):
     db = entorno.db
     lector, _ = _usuario(db, ["ml:metricas:leer"])

@@ -7,6 +7,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from app.domain.enums import FuenteReentrenamiento
+
 # Contrato: máx. 20 MB por archivo.
 TAMANO_MAXIMO_BYTES = 20 * 1024 * 1024
 # Tope de errores detallados que se persisten y devuelven (el total real va en `total_errores`).
@@ -74,3 +76,10 @@ class LoteItem(BaseModel):
 class LotePage(BaseModel):
     total: int
     lotes: list[LoteItem]
+
+
+class EtlConfig(BaseModel):
+    """Política de datos del modelo (ADR-14)."""
+
+    carga_excel_habilitada: bool
+    fuente_reentrenamiento: FuenteReentrenamiento

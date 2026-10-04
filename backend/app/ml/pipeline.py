@@ -7,6 +7,11 @@
    lo anterior y se pronostica con el mismo `PredictorDemanda` de producción: métricas
    `holdout` globales y por producto, y cobertura empírica del intervalo.
 4. Modelo final: se reentrena con todo el histórico.
+
+ADR-14: con `cobertura` (Excel histórico + liquidaciones separados por un hueco) el calendario
+solo se completa dentro de los rangos cubiertos y los rezagos no cruzan el hueco. Las
+observaciones `censurada` (producto agotado: la venta es un piso de la demanda) pesan
+`PESO_OBSERVACION_CENSURADA` en el entrenamiento.
 """
 
 from dataclasses import dataclass, replace
@@ -24,6 +29,7 @@ from app.ml.data_preparation.feature_engineering import (
     COL_SERIE,
     FEATURES_REZAGO,
     HISTORIA_MINIMA_DIAS,
+    Cobertura,
     completar_calendario,
     construir_features,
 )
@@ -34,6 +40,7 @@ from app.ml.inference.predictor import PredictorDemanda
 from app.ml.modeling.model_factory import ModeloDemanda, crear_modelo
 
 NIVEL_INTERVALO = 0.95
+PESO_OBSERVACION_CENSURADA = 0.5
 
 
 @dataclass(frozen=True)
@@ -49,7 +56,8 @@ def _ajustar(
 ) -> tuple[ModeloDemanda, PreprocesadorDemanda]:
     prep = PreprocesadorDemanda().ajustar(dataset)
     modelo = crear_modelo(algoritmo, **hiperparametros)
-    modelo.entrenar(prep.transformar(dataset), dataset["cantidad"].to_numpy(dtype=float))
+    pesos = dataset["peso"].to_numpy(dtype=float) if "peso" in dataset.columns else None
+    modelo.entrenar(prep.transformar(dataset), dataset["cantidad"].to_numpy(dtype=float), pesos)
     return modelo, prep
 
 
@@ -65,8 +73,10 @@ def entrenar_y_evaluar(
     algoritmo: str,
     hiperparametros: dict | None = None,
     config: ConfigEntrenamiento | None = None,
+    cobertura: Cobertura | None = None,
 ) -> ResultadoEntrenamiento:
-    """`ventas`: `fecha`, `producto_id`, `ruta_id`, `cantidad` (una fila por día con venta)."""
+    """`ventas`: `fecha`, `producto_id`, `ruta_id`, `cantidad` (una fila por día con venta) y,
+    opcional, `censurada` (0/1)."""
     cfg = config or ConfigEntrenamiento()
     hp = dict(hiperparametros or {})
     if ventas.empty:
@@ -78,8 +88,12 @@ def entrenar_y_evaluar(
         ruta_id=ventas["ruta_id"].astype(str),
         cantidad=ventas["cantidad"].astype(float),
     )
-    completo = completar_calendario(ventas)
+    completo = completar_calendario(ventas, cobertura=cobertura)
     dataset = construir_features(completo).dropna(subset=FEATURES_REZAGO).reset_index(drop=True)
+    n_censuradas = 0
+    if "censurada" in dataset.columns:
+        n_censuradas = int((dataset["censurada"] > 0).sum())
+        dataset["peso"] = 1.0 - (1.0 - PESO_OBSERVACION_CENSURADA) * (dataset["censurada"] > 0)
     desde, hasta = completo["fecha"].min().date(), completo["fecha"].max().date()
 
     # ---- backtest Walk-Forward (1 paso)
@@ -119,9 +133,9 @@ def entrenar_y_evaluar(
     prep_h.residuo_q_inferior, prep_h.residuo_q_superior = float(q_inf), float(q_sup)
     historial = ventas[ventas["fecha"] <= corte]
     puntos = PredictorDemanda(modelo_h, prep_h).predecir(
-        historial, corte.date(), cfg.horizonte_holdout
+        historial, corte.date(), cfg.horizonte_holdout, cobertura=cobertura
     )
-    cobertura = _metricas_holdout(completo, puntos, metricas)
+    cobertura_intervalo = _metricas_holdout(completo, puntos, metricas)
 
     # ---- modelo final con todo el histórico
     modelo, prep = _ajustar(algoritmo, hp, dataset)
@@ -132,8 +146,11 @@ def entrenar_y_evaluar(
         "ventana": {"desde": desde, "hasta": hasta},
         "n_filas_entrenamiento": len(dataset),
         "n_series": len(prep.codigos_serie),
+        "con_cobertura": cobertura is not None,
+        "n_observaciones_censuradas": n_censuradas,
+        "peso_observacion_censurada": PESO_OBSERVACION_CENSURADA,
         "configuracion": cfg.__dict__,
-        "cobertura_intervalo_holdout": cobertura,
+        "cobertura_intervalo_holdout": cobertura_intervalo,
         "nivel_intervalo": NIVEL_INTERVALO,
         "metricas": [
             {

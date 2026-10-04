@@ -32,7 +32,7 @@ export interface paths {
         put?: never;
         /**
          * Ingesta de histórico de ventas desde Excel
-         * @description Requiere permiso `etl:cargar`. Valida estructura, tipos y reglas de negocio. Si existen errores bloqueantes el lote se rechaza completo (modo estricto) salvo `modo=parcial`. Un archivo con checksum ya cargado devuelve 400 `LOTE_DUPLICADO`.
+         * @description Requiere permiso `etl:cargar`. Valida estructura, tipos y reglas de negocio. Si existen errores bloqueantes el lote se rechaza completo (modo estricto) salvo `modo=parcial`. Un archivo con checksum ya cargado devuelve 400 `LOTE_DUPLICADO`. Con el arranque cerrado (`GET /etl/config`) devuelve 409 `EXCEL_DESHABILITADO`.
          */
         post: operations["upload_excel_api_v1_etl_upload_excel_post"];
         delete?: never;
@@ -61,6 +61,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/etl/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Política de datos del modelo
+         * @description Requiere permiso `etl:cargar`. `carga_excel_habilitada=false` indica que el arranque está cerrado y las ventas nuevas entran solo por la liquidación diaria; `fuente_reentrenamiento` define qué ventas alimentan los reentrenamientos (ADR-14).
+         */
+        get: operations["obtener_config_api_v1_etl_config_get"];
+        /**
+         * Cierra o reabre el arranque y fija la fuente de reentrenamiento
+         * @description Requiere permiso `etl:configurar` (Administrador). Cambio auditado.
+         */
+        put: operations["actualizar_config_api_v1_etl_config_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/predictions/demand": {
         parameters: {
             query?: never;
@@ -72,7 +96,7 @@ export interface paths {
         put?: never;
         /**
          * Inferencia de demanda por producto/ruta/horizonte
-         * @description Requiere permiso `prediccion:consultar`. Usa el modelo en estado `produccion` (400 `SIN_MODELO_PRODUCTIVO` si no existe). El intervalo es al 95 %. Con `persistir=true` guarda los puntos en `pronosticos_demanda` (idempotente).
+         * @description Requiere permiso `prediccion:consultar`. Usa el modelo en estado `produccion` (400 `SIN_MODELO_PRODUCTIVO` si no existe). El intervalo es al 95 %. Con `persistir=true` guarda los puntos en `pronosticos_demanda` (idempotente). 400 `HISTORIAL_INSUFICIENTE` si el producto/ruta no tiene historial previo a `fecha_base`; 500 `ARTEFACTO_CORRUPTO` si el hash del artefacto no coincide (no se sirve predicción).
          */
         post: operations["predecir_demanda_api_v1_predictions_demand_post"];
         delete?: never;
@@ -159,6 +183,98 @@ export interface paths {
         get: operations["listar_kardex_api_v1_inventory_kardex_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/inventory/adjustments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ajuste manual de existencias
+         * @description Requiere `inventario:ajustar`. Tipos: `incremento`, `decremento`, `fijar`. Registra un movimiento `ajuste` en el kardex (cantidad con signo) con el motivo. 404 `PRODUCTO_NO_ENCONTRADO`; 409 `PRODUCTO_INACTIVO`; 400 `STOCK_INSUFICIENTE` si deja el stock bajo lo reservado, `CANTIDAD_INVALIDA` o `AJUSTE_SIN_CAMBIO`.
+         */
+        post: operations["ajustar_existencias_api_v1_inventory_adjustments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/products": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar productos
+         * @description Requiere `inventario:leer`. Por defecto solo activos (`activo=true`); `activo=false` lista las bajas. Filtros: `categoria_id` y `q` (SKU o nombre).
+         */
+        get: operations["listar_productos_api_v1_products_get"];
+        put?: never;
+        /**
+         * Crear producto
+         * @description Requiere `productos:crear`. Crea también su existencia en 0. 409 `SKU_DUPLICADO`; 404 `CATEGORIA_NO_ENCONTRADA` / `PROVEEDOR_NO_ENCONTRADO`.
+         */
+        post: operations["crear_producto_api_v1_products_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/products/{producto_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Detalle de un producto
+         * @description Requiere `inventario:leer`. 404 `PRODUCTO_NO_ENCONTRADO`.
+         */
+        get: operations["obtener_producto_api_v1_products__producto_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Dar de baja un producto (baja lógica)
+         * @description Requiere `productos:eliminar`. Marca `activo=false`; el historial se conserva. Idempotente. 409 `PRODUCTO_EN_USO` si tiene stock reservado o cargas vigentes.
+         */
+        delete: operations["eliminar_producto_api_v1_products__producto_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Actualizar producto (parcial)
+         * @description Requiere `productos:editar`. No modifica existencias ni estado. 404 `PRODUCTO_NO_ENCONTRADO`; 409 `SKU_DUPLICADO`.
+         */
+        patch: operations["actualizar_producto_api_v1_products__producto_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/products/{producto_id}/reactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reactivar un producto dado de baja
+         * @description Requiere `productos:eliminar`. Idempotente. 404 `PRODUCTO_NO_ENCONTRADO`.
+         */
+        post: operations["reactivar_producto_api_v1_products__producto_id__reactivate_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -321,6 +437,46 @@ export interface paths {
          * @description Cualquier usuario autenticado. Alimenta el filtro de ruta del dashboard.
          */
         get: operations["listar_rutas_api_v1_catalog_routes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/catalog/categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Categorías de producto
+         * @description Cualquier usuario autenticado. Alimenta el formulario de productos.
+         */
+        get: operations["listar_categorias_api_v1_catalog_categories_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/catalog/suppliers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Proveedores activos
+         * @description Cualquier usuario autenticado. Alimenta el formulario de productos.
+         */
+        get: operations["listar_proveedores_api_v1_catalog_suppliers_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -634,6 +790,174 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/liquidaciones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Historial de liquidaciones
+         * @description Requiere `liquidaciones:leer` (Administrador y Gerente). Filtros por rango de fechas, ruta, vendedor y estado; paginado, más recientes primero.
+         */
+        get: operations["listar_api_v1_liquidaciones_get"];
+        put?: never;
+        /**
+         * Crear o actualizar el borrador de la liquidación del día
+         * @description Requiere `liquidaciones:registrar`. Un borrador puede guardarse incompleto y **no** afecta al modelo. 400: `VENTA_FECHA_FUTURA`, `PRODUCTO_DUPLICADO_EN_CIERRE`, `PRODUCTO_INACTIVO`, `UNIDADES_NO_CUADRAN` (vendido + devuelto + merma excede lo cargado), `CARGA_REQUIERE_JUSTIFICACION`. 409 `LIQUIDACION_DUPLICADA` si ya está cerrada.
+         */
+        post: operations["guardar_borrador_api_v1_liquidaciones_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/liquidaciones/precarga": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Precarga de la pantalla: carga despachada y liquidación vigente
+         * @description Requiere `liquidaciones:registrar`. Devuelve las presentaciones con la cantidad despachada a la ruta ese día (editable, con justificación) y la liquidación vigente de la fecha/ruta si existe. Sin carga despachada devuelve una advertencia, no un error.
+         */
+        get: operations["precargar_api_v1_liquidaciones_precarga_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/liquidaciones/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Umbral de diferencia de caja
+         * @description Requiere `liquidaciones:leer`.
+         */
+        get: operations["obtener_config_api_v1_liquidaciones_config_get"];
+        /**
+         * Actualiza el umbral de diferencia de caja
+         * @description Requiere `liquidaciones:corregir` (Administrador). Auditado.
+         */
+        put: operations["actualizar_config_api_v1_liquidaciones_config_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/liquidaciones/{liquidacion_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Detalle de una liquidación
+         * @description Requiere `liquidaciones:leer`. 404 `LIQUIDACION_NO_ENCONTRADA`.
+         */
+        get: operations["obtener_api_v1_liquidaciones__liquidacion_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/liquidaciones/{liquidacion_id}/cerrar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cerrar la liquidación (alimenta el modelo)
+         * @description Requiere `liquidaciones:cerrar`. Valida el cuadre de unidades (400 `UNIDADES_NO_CUADRAN`) y de dinero (400 `MONTOS_NO_CUADRAN`); la diferencia de caja no bloquea: se registra y, sobre el umbral, genera una alerta. En una sola transacción escribe `ventas_historicas` (origen `liquidacion`), rellena `demanda_real`, encola `evaluate_production` y audita. 409 `LIQUIDACION_YA_CERRADA`, `LIQUIDACION_YA_ANULADA`, `VENTAS_EXCEL_EXISTENTES`.
+         */
+        post: operations["cerrar_api_v1_liquidaciones__liquidacion_id__cerrar_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/liquidaciones/{liquidacion_id}/corregir": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Corregir una liquidación cerrada
+         * @description Requiere `liquidaciones:corregir`. Incrementa `version`, hace UPSERT en `ventas_historicas`, recalcula `demanda_real` y vuelve a encolar la evaluación; deja auditoría con el motivo. 409 `LIQUIDACION_NO_CERRADA`.
+         */
+        post: operations["corregir_api_v1_liquidaciones__liquidacion_id__corregir_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/liquidaciones/{liquidacion_id}/anular": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Anular una liquidación
+         * @description Requiere `liquidaciones:corregir`. Motivo obligatorio. Si estaba cerrada revierte su efecto en `ventas_historicas` y `demanda_real`. 409 `LIQUIDACION_YA_ANULADA`.
+         */
+        post: operations["anular_api_v1_liquidaciones__liquidacion_id__anular_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/bitacora": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Consultar la bitácora de auditoría
+         * @description Requiere `bitacora:leer` (Admin). Más reciente primero. Filtros: rango de fechas, usuario, acción (texto parcial), origen (`http|servicio|worker`), resultado (`exito|error`) y `request_id` (une la petición HTTP con sus casos de uso).
+         */
+        get: operations["consultar_bitacora_api_v1_bitacora_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -667,6 +991,28 @@ export interface components {
             producto_id: string;
             /** Cantidad Aprobada */
             cantidad_aprobada: number | string;
+        };
+        /**
+         * AjusteRequest
+         * @description Ajuste manual (ADR-16). `incremento`/`decremento` exigen `cantidad > 0`; `fijar` establece
+         *     el `stock_actual` resultante (`cantidad >= 0`).
+         */
+        AjusteRequest: {
+            /**
+             * Producto Id
+             * Format: uuid
+             */
+            producto_id: string;
+            tipo: components["schemas"]["TipoAjuste"];
+            /** Cantidad */
+            cantidad: number | string;
+            /** Motivo */
+            motivo: string;
+        };
+        /** AjusteResponse */
+        AjusteResponse: {
+            movimiento: components["schemas"]["KardexEntry"];
+            existencias: components["schemas"]["StockItem"];
         };
         /** AlertItem */
         AlertItem: {
@@ -702,6 +1048,60 @@ export interface components {
          * @enum {string}
          */
         Algoritmo: "sklearn" | "xgboost" | "lstm";
+        /** AnulacionRequest */
+        AnulacionRequest: {
+            /** Motivo */
+            motivo: string;
+        };
+        /** BitacoraItem */
+        BitacoraItem: {
+            /** Id */
+            id: number;
+            /**
+             * Ocurrido En
+             * Format: date-time
+             */
+            ocurrido_en: string;
+            /** Nivel */
+            nivel: string;
+            /** Origen */
+            origen: string;
+            /** Operacion */
+            operacion: string;
+            /** Accion */
+            accion: string;
+            /** Resultado */
+            resultado: string;
+            /** Usuario Id */
+            usuario_id: string | null;
+            /** Ip */
+            ip: string | null;
+            /** Request Id */
+            request_id: string | null;
+            /** Metodo */
+            metodo: string | null;
+            /** Ruta */
+            ruta: string | null;
+            /** Status Code */
+            status_code: number | null;
+            /** Duracion Ms */
+            duracion_ms: number | null;
+            /** Parametros */
+            parametros: {
+                [key: string]: unknown;
+            } | null;
+            /** Codigo Error */
+            codigo_error: string | null;
+            /** Mensaje */
+            mensaje: string | null;
+        };
+        /** BitacoraPage */
+        BitacoraPage: {
+            /** Total */
+            total: number;
+            /** Registros */
+            registros: components["schemas"]["BitacoraItem"][];
+        };
         /** Body_upload_excel_api_v1_etl_upload_excel_post */
         Body_upload_excel_api_v1_etl_upload_excel_post: {
             /** File */
@@ -718,6 +1118,16 @@ export interface components {
              * @description YYYY-MM. Solo formato ancho; por defecto se infiere del nombre del archivo
              */
             periodo?: string | null;
+        };
+        /** CategoriaItem */
+        CategoriaItem: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Nombre */
+            nombre: string;
         };
         /**
          * CodigoErrorEtl
@@ -756,6 +1166,64 @@ export interface components {
             comision_total: string;
             /** Porcentaje Efectivo */
             porcentaje_efectivo?: string | null;
+        };
+        /** CorreccionRequest */
+        CorreccionRequest: {
+            /**
+             * Fecha
+             * Format: date
+             */
+            fecha: string;
+            /**
+             * Ruta Id
+             * Format: uuid
+             */
+            ruta_id: string;
+            /** Vendedor Id */
+            vendedor_id?: string | null;
+            /** Lineas */
+            lineas: components["schemas"]["LineaLiquidacion"][];
+            pagos?: components["schemas"]["PagosLiquidacion-Input"];
+            /** Observaciones */
+            observaciones?: string | null;
+            /** Motivo */
+            motivo: string;
+        };
+        /** CuadreDinero */
+        CuadreDinero: {
+            /** Venta Total */
+            venta_total: string;
+            /** Total Pagos */
+            total_pagos: string;
+            /** Diferencia Venta Pagos */
+            diferencia_venta_pagos: string;
+            /** Cuadra */
+            cuadra: boolean;
+            /** Efectivo Esperado */
+            efectivo_esperado: string;
+            /** Efectivo Entregado */
+            efectivo_entregado: string;
+            /** Diferencia Caja */
+            diferencia_caja: string;
+            /** Umbral Diferencia Caja */
+            umbral_diferencia_caja: string;
+            /** Supera Umbral */
+            supera_umbral: boolean;
+        };
+        /** CuadreUnidades */
+        CuadreUnidades: {
+            /** Cargadas */
+            cargadas: string;
+            /** Vendidas */
+            vendidas: string;
+            /** Devueltas */
+            devueltas: string;
+            /** Merma */
+            merma: string;
+            /** Diferencia */
+            diferencia: string;
+            /** Cuadra */
+            cuadra: boolean;
         };
         /** Degradacion */
         Degradacion: {
@@ -879,6 +1347,11 @@ export interface components {
          */
         EstadoJob: "en_cola" | "en_ejecucion" | "completado" | "fallido";
         /**
+         * EstadoLiquidacion
+         * @enum {string}
+         */
+        EstadoLiquidacion: "borrador" | "cerrada" | "anulada";
+        /**
          * EstadoLoteEtl
          * @enum {string}
          */
@@ -893,6 +1366,15 @@ export interface components {
          * @enum {string}
          */
         EstadoPedido: "borrador" | "enviado" | "confirmado" | "recibido" | "cancelado";
+        /**
+         * EtlConfig
+         * @description Política de datos del modelo (ADR-14).
+         */
+        EtlConfig: {
+            /** Carga Excel Habilitada */
+            carga_excel_habilitada: boolean;
+            fuente_reentrenamiento: components["schemas"]["FuenteReentrenamiento"];
+        };
         /** EtlResult */
         EtlResult: {
             /**
@@ -933,6 +1415,12 @@ export interface components {
          * @enum {string}
          */
         FormatoReporte: "csv" | "xlsx";
+        /**
+         * FuenteReentrenamiento
+         * @description Qué datos alimentan un entrenamiento (`ml.fuente_reentrenamiento`, ADR-14).
+         * @enum {string}
+         */
+        FuenteReentrenamiento: "excel_historico" | "excel_mas_liquidacion" | "liquidacion";
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -989,6 +1477,8 @@ export interface components {
              * Format: date-time
              */
             fecha_movimiento: string;
+            /** Motivo */
+            motivo?: string | null;
         };
         /** KardexPage */
         KardexPage: {
@@ -1000,6 +1490,216 @@ export interface components {
             limit: number;
             /** Offset */
             offset: number;
+        };
+        /** LineaLiquidacion */
+        LineaLiquidacion: {
+            /**
+             * Producto Id
+             * Format: uuid
+             */
+            producto_id: string;
+            /** Cantidad Cargada */
+            cantidad_cargada: number | string;
+            /** Cantidad Vendida */
+            cantidad_vendida: number | string;
+            /**
+             * Cantidad Devuelta
+             * @default 0
+             */
+            cantidad_devuelta: number | string;
+            /**
+             * Cantidad Merma
+             * @default 0
+             */
+            cantidad_merma: number | string;
+            /** Precio Unitario */
+            precio_unitario?: number | string | null;
+            /**
+             * Agotado
+             * @default false
+             */
+            agotado: boolean;
+            /** Justificacion Carga */
+            justificacion_carga?: string | null;
+        };
+        /** LineaPrecarga */
+        LineaPrecarga: {
+            /**
+             * Producto Id
+             * Format: uuid
+             */
+            producto_id: string;
+            /** Sku */
+            sku: string;
+            /** Producto Nombre */
+            producto_nombre: string;
+            /** Cantidad Cargada */
+            cantidad_cargada: string;
+            /** Precio Unitario */
+            precio_unitario: string;
+        };
+        /** LineaRespuesta */
+        LineaRespuesta: {
+            /**
+             * Producto Id
+             * Format: uuid
+             */
+            producto_id: string;
+            /** Sku */
+            sku: string;
+            /** Producto Nombre */
+            producto_nombre: string;
+            /** Cantidad Cargada */
+            cantidad_cargada: string;
+            /** Cantidad Vendida */
+            cantidad_vendida: string;
+            /** Cantidad Devuelta */
+            cantidad_devuelta: string;
+            /** Cantidad Merma */
+            cantidad_merma: string;
+            /** Precio Unitario */
+            precio_unitario: string;
+            /** Monto Total */
+            monto_total: string;
+            /** Agotado */
+            agotado: boolean;
+            /** Justificacion Carga */
+            justificacion_carga?: string | null;
+            /** Diferencia Unidades */
+            diferencia_unidades: string;
+            /** Cuadra */
+            cuadra: boolean;
+        };
+        /** LiquidacionConfig */
+        "LiquidacionConfig-Input": {
+            /** Umbral Diferencia Caja */
+            umbral_diferencia_caja: number | string;
+        };
+        /** LiquidacionConfig */
+        "LiquidacionConfig-Output": {
+            /** Umbral Diferencia Caja */
+            umbral_diferencia_caja: string;
+        };
+        /** LiquidacionRequest */
+        LiquidacionRequest: {
+            /**
+             * Fecha
+             * Format: date
+             */
+            fecha: string;
+            /**
+             * Ruta Id
+             * Format: uuid
+             */
+            ruta_id: string;
+            /** Vendedor Id */
+            vendedor_id?: string | null;
+            /** Lineas */
+            lineas: components["schemas"]["LineaLiquidacion"][];
+            pagos?: components["schemas"]["PagosLiquidacion-Input"];
+            /** Observaciones */
+            observaciones?: string | null;
+        };
+        /** LiquidacionResponse */
+        LiquidacionResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Fecha
+             * Format: date
+             */
+            fecha: string;
+            /**
+             * Ruta Id
+             * Format: uuid
+             */
+            ruta_id: string;
+            /** Ruta Nombre */
+            ruta_nombre: string;
+            /**
+             * Vendedor Id
+             * Format: uuid
+             */
+            vendedor_id: string;
+            /** Vendedor Nombre */
+            vendedor_nombre: string;
+            estado: components["schemas"]["EstadoLiquidacion"];
+            /** Version */
+            version: number;
+            /** Lote Id */
+            lote_id?: string | null;
+            /** Lineas */
+            lineas: components["schemas"]["LineaRespuesta"][];
+            pagos: components["schemas"]["PagosLiquidacion-Output"];
+            cuadre_unidades: components["schemas"]["CuadreUnidades"];
+            cuadre_dinero: components["schemas"]["CuadreDinero"];
+            /** Devolucion Esperada */
+            devolucion_esperada: string;
+            /** Observaciones */
+            observaciones?: string | null;
+            /** Advertencias */
+            advertencias?: string[];
+            /** Alerta Id */
+            alerta_id?: string | null;
+            /**
+             * Creado En
+             * Format: date-time
+             */
+            creado_en: string;
+            /** Cerrado En */
+            cerrado_en?: string | null;
+            /** Anulado En */
+            anulado_en?: string | null;
+            /** Anulado Motivo */
+            anulado_motivo?: string | null;
+        };
+        /** LiquidacionResumen */
+        LiquidacionResumen: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Fecha
+             * Format: date
+             */
+            fecha: string;
+            /**
+             * Ruta Id
+             * Format: uuid
+             */
+            ruta_id: string;
+            /** Ruta Nombre */
+            ruta_nombre: string;
+            /**
+             * Vendedor Id
+             * Format: uuid
+             */
+            vendedor_id: string;
+            /** Vendedor Nombre */
+            vendedor_nombre: string;
+            estado: components["schemas"]["EstadoLiquidacion"];
+            /** Version */
+            version: number;
+            /** Unidades Vendidas */
+            unidades_vendidas: string;
+            /** Venta Total */
+            venta_total: string;
+            /** Diferencia Caja */
+            diferencia_caja: string;
+            /** Cerrado En */
+            cerrado_en?: string | null;
+        };
+        /** ListadoLiquidaciones */
+        ListadoLiquidaciones: {
+            /** Total */
+            total: number;
+            /** Liquidaciones */
+            liquidaciones: components["schemas"]["LiquidacionResumen"][];
         };
         /** LoadPlanItem */
         LoadPlanItem: {
@@ -1236,6 +1936,72 @@ export interface components {
          * @enum {string}
          */
         MotivoEntrenamiento: "programado" | "manual" | "degradacion";
+        /** PagosLiquidacion */
+        "PagosLiquidacion-Input": {
+            /**
+             * Efectivo
+             * @default 0
+             */
+            efectivo: number | string;
+            /**
+             * Transferencia
+             * @default 0
+             */
+            transferencia: number | string;
+            /**
+             * Credito
+             * @default 0
+             */
+            credito: number | string;
+            /**
+             * Cobro Saldos
+             * @default 0
+             */
+            cobro_saldos: number | string;
+            /**
+             * Gastos
+             * @default 0
+             */
+            gastos: number | string;
+            /**
+             * Efectivo Entregado
+             * @default 0
+             */
+            efectivo_entregado: number | string;
+        };
+        /** PagosLiquidacion */
+        "PagosLiquidacion-Output": {
+            /**
+             * Efectivo
+             * @default 0
+             */
+            efectivo: string;
+            /**
+             * Transferencia
+             * @default 0
+             */
+            transferencia: string;
+            /**
+             * Credito
+             * @default 0
+             */
+            credito: string;
+            /**
+             * Cobro Saldos
+             * @default 0
+             */
+            cobro_saldos: string;
+            /**
+             * Gastos
+             * @default 0
+             */
+            gastos: string;
+            /**
+             * Efectivo Entregado
+             * @default 0
+             */
+            efectivo_entregado: string;
+        };
         /** PedidoConfirmacion */
         PedidoConfirmacion: {
             /**
@@ -1363,6 +2129,148 @@ export interface components {
              * @description MAPE del último periodo frente al anterior
              */
             tendencia?: ("sube" | "baja" | "estable") | null;
+        };
+        /** PrecargaResponse */
+        PrecargaResponse: {
+            /**
+             * Fecha
+             * Format: date
+             */
+            fecha: string;
+            /**
+             * Ruta Id
+             * Format: uuid
+             */
+            ruta_id: string;
+            /** Vendedor Id */
+            vendedor_id?: string | null;
+            /** Carga Id */
+            carga_id?: string | null;
+            /** Lineas */
+            lineas: components["schemas"]["LineaPrecarga"][];
+            liquidacion?: components["schemas"]["LiquidacionResponse"] | null;
+            /** Advertencias */
+            advertencias?: string[];
+        };
+        /** ProductoCreate */
+        ProductoCreate: {
+            /** Sku */
+            sku: string;
+            /** Nombre */
+            nombre: string;
+            /**
+             * Categoria Id
+             * Format: uuid
+             */
+            categoria_id: string;
+            /** Proveedor Id */
+            proveedor_id?: string | null;
+            /**
+             * Unidad Medida
+             * @default unidad
+             */
+            unidad_medida: string;
+            /**
+             * Precio Venta
+             * @default 0
+             */
+            precio_venta: number | string;
+            /**
+             * Costo Unitario
+             * @default 0
+             */
+            costo_unitario: number | string;
+            /**
+             * Stock Minimo
+             * @default 0
+             */
+            stock_minimo: number | string;
+        };
+        /** ProductoOut */
+        ProductoOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Sku */
+            sku: string;
+            /** Nombre */
+            nombre: string;
+            /**
+             * Categoria Id
+             * Format: uuid
+             */
+            categoria_id: string;
+            /** Categoria */
+            categoria: string;
+            /** Proveedor Id */
+            proveedor_id?: string | null;
+            /** Unidad Medida */
+            unidad_medida: string;
+            /** Precio Venta */
+            precio_venta: string;
+            /** Costo Unitario */
+            costo_unitario: string;
+            /** Stock Minimo */
+            stock_minimo: string;
+            /** Activo */
+            activo: boolean;
+            /** Stock Actual */
+            stock_actual: string;
+            /** Stock Reservado */
+            stock_reservado: string;
+            /** Stock Disponible */
+            stock_disponible: string;
+            /**
+             * Creado En
+             * Format: date-time
+             */
+            creado_en: string;
+        };
+        /** ProductoPage */
+        ProductoPage: {
+            /** Items */
+            items: components["schemas"]["ProductoOut"][];
+            /** Total */
+            total: number;
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+        };
+        /**
+         * ProductoUpdate
+         * @description Actualización parcial. No modifica existencias (usar `POST /inventory/adjustments`) ni el
+         *     estado (usar `DELETE` / `POST .../reactivate`).
+         */
+        ProductoUpdate: {
+            /** Sku */
+            sku?: string | null;
+            /** Nombre */
+            nombre?: string | null;
+            /** Categoria Id */
+            categoria_id?: string | null;
+            /** Proveedor Id */
+            proveedor_id?: string | null;
+            /** Unidad Medida */
+            unidad_medida?: string | null;
+            /** Precio Venta */
+            precio_venta?: number | string | null;
+            /** Costo Unitario */
+            costo_unitario?: number | string | null;
+            /** Stock Minimo */
+            stock_minimo?: number | string | null;
+        };
+        /** ProveedorItem */
+        ProveedorItem: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Nombre */
+            nombre: string;
         };
         /** RangoFechas */
         RangoFechas: {
@@ -1616,10 +2524,16 @@ export interface components {
             advertencias: string[];
         };
         /**
+         * TipoAjuste
+         * @description Modalidad de un ajuste manual de existencias (ADR-16).
+         * @enum {string}
+         */
+        TipoAjuste: "incremento" | "decremento" | "fijar";
+        /**
          * TipoAlerta
          * @enum {string}
          */
-        TipoAlerta: "stock_bajo" | "quiebre_proyectado" | "mape_umbral" | "etl_error";
+        TipoAlerta: "stock_bajo" | "quiebre_proyectado" | "mape_umbral" | "etl_error" | "diferencia_caja";
         /**
          * TipoEvaluacion
          * @enum {string}
@@ -1926,6 +2840,59 @@ export interface operations {
             };
         };
     };
+    obtener_config_api_v1_etl_config_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EtlConfig"];
+                };
+            };
+        };
+    };
+    actualizar_config_api_v1_etl_config_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EtlConfig"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EtlConfig"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     predecir_demanda_api_v1_predictions_demand_post: {
         parameters: {
             query?: never;
@@ -1948,6 +2915,13 @@ export interface operations {
                     "application/json": components["schemas"]["DemandResponse"];
                 };
             };
+            /** @description `SIN_MODELO_PRODUCTIVO` o `HISTORIAL_INSUFICIENTE` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -1956,6 +2930,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+            /** @description `ARTEFACTO_CORRUPTO`: hash del artefacto inválido; alerta crítica */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -2112,6 +3093,233 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["KardexPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ajustar_existencias_api_v1_inventory_adjustments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AjusteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AjusteResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listar_productos_api_v1_products_get: {
+        parameters: {
+            query?: {
+                activo?: boolean | null;
+                categoria_id?: string | null;
+                q?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductoPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    crear_producto_api_v1_products_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProductoCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductoOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    obtener_producto_api_v1_products__producto_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                producto_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductoOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    eliminar_producto_api_v1_products__producto_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                producto_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    actualizar_producto_api_v1_products__producto_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                producto_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProductoUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductoOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reactivar_producto_api_v1_products__producto_id__reactivate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                producto_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductoOut"];
                 };
             };
             /** @description Validation Error */
@@ -2376,6 +3584,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RouteItem"][];
+                };
+            };
+        };
+    };
+    listar_categorias_api_v1_catalog_categories_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoriaItem"][];
+                };
+            };
+        };
+    };
+    listar_proveedores_api_v1_catalog_suppliers_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProveedorItem"][];
                 };
             };
         };
@@ -2920,6 +4168,382 @@ export interface operations {
                     "application/json": unknown;
                     "text/csv": unknown;
                     "application/octet-stream": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listar_api_v1_liquidaciones_get: {
+        parameters: {
+            query?: {
+                desde?: string | null;
+                hasta?: string | null;
+                ruta_id?: string | null;
+                vendedor_id?: string | null;
+                estado?: components["schemas"]["EstadoLiquidacion"] | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListadoLiquidaciones"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    guardar_borrador_api_v1_liquidaciones_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LiquidacionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiquidacionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    precargar_api_v1_liquidaciones_precarga_get: {
+        parameters: {
+            query: {
+                fecha: string;
+                ruta_id: string;
+                vendedor_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrecargaResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    obtener_config_api_v1_liquidaciones_config_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiquidacionConfig-Output"];
+                };
+            };
+        };
+    };
+    actualizar_config_api_v1_liquidaciones_config_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LiquidacionConfig-Input"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiquidacionConfig-Output"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    obtener_api_v1_liquidaciones__liquidacion_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                liquidacion_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiquidacionResponse"];
+                };
+            };
+            /** @description `LIQUIDACION_NO_ENCONTRADA` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cerrar_api_v1_liquidaciones__liquidacion_id__cerrar_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                liquidacion_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiquidacionResponse"];
+                };
+            };
+            /** @description `LIQUIDACION_NO_ENCONTRADA` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conflicto de estado de la liquidación */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    corregir_api_v1_liquidaciones__liquidacion_id__corregir_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                liquidacion_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CorreccionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiquidacionResponse"];
+                };
+            };
+            /** @description `LIQUIDACION_NO_ENCONTRADA` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conflicto de estado de la liquidación */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    anular_api_v1_liquidaciones__liquidacion_id__anular_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                liquidacion_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnulacionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiquidacionResponse"];
+                };
+            };
+            /** @description `LIQUIDACION_NO_ENCONTRADA` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conflicto de estado de la liquidación */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    consultar_bitacora_api_v1_bitacora_get: {
+        parameters: {
+            query?: {
+                desde?: string | null;
+                hasta?: string | null;
+                usuario_id?: string | null;
+                accion?: string | null;
+                origen?: string | null;
+                resultado?: string | null;
+                request_id?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BitacoraPage"];
                 };
             };
             /** @description Validation Error */

@@ -8,7 +8,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.domain.enums import ESTADOS_CARGA_VIGENTE
+from app.domain.enums import ESTADOS_CARGA_VIGENTE, EstadoCarga
 from app.domain.models.operations import CargaRuta, DetalleCarga
 
 
@@ -30,6 +30,22 @@ def vigente_de_ruta(db: Session, ruta_id: uuid.UUID, fecha_operacion: date) -> C
             CargaRuta.estado.in_(ESTADOS_CARGA_VIGENTE),
         )
     ).first()
+
+
+def despachadas_de_ruta(
+    db: Session, ruta_id: uuid.UUID, fecha_operacion: date
+) -> Sequence[CargaRuta]:
+    """Cargas `despachadas` de la ruta y fecha, con sus líneas (la liquidación parte de ellas)."""
+    return db.scalars(
+        select(CargaRuta)
+        .where(
+            CargaRuta.ruta_id == ruta_id,
+            CargaRuta.fecha_operacion == fecha_operacion,
+            CargaRuta.estado == EstadoCarga.DESPACHADA,
+        )
+        .options(selectinload(CargaRuta.detalles))
+        .order_by(CargaRuta.generada_en)
+    ).all()
 
 
 def crear(

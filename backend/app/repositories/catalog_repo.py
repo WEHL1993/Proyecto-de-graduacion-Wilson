@@ -2,6 +2,7 @@
 
 import uuid
 from collections.abc import Iterable
+from decimal import Decimal
 from typing import NamedTuple
 
 from sqlalchemy import func, or_, select
@@ -75,6 +76,31 @@ def productos_resumen(
         return {}
     stmt = select(Producto.id, Producto.sku, Producto.nombre).where(Producto.id.in_(ids))
     return {pid: (sku, nombre) for pid, sku, nombre in db.execute(stmt)}
+
+
+class ProductoLiquidable(NamedTuple):
+    id: uuid.UUID
+    sku: str
+    nombre: str
+    precio_venta: Decimal
+    activo: bool
+
+
+def productos_para_liquidacion(
+    db: Session, producto_ids: Iterable[uuid.UUID]
+) -> dict[uuid.UUID, ProductoLiquidable]:
+    """Datos del catálogo que necesita la liquidación diaria (precio vigente y estado)."""
+    ids = set(producto_ids)
+    if not ids:
+        return {}
+    stmt = select(
+        Producto.id, Producto.sku, Producto.nombre, Producto.precio_venta, Producto.activo
+    ).where(Producto.id.in_(ids))
+    return {fila[0]: ProductoLiquidable(*fila) for fila in db.execute(stmt)}
+
+
+def obtener_ruta(db: Session, ruta_id: uuid.UUID) -> Ruta | None:
+    return db.get(Ruta, ruta_id)
 
 
 def listar_rutas_activas(db: Session) -> list[Ruta]:

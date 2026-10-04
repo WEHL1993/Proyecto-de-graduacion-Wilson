@@ -23,8 +23,14 @@ PuedeConsultar = Annotated[UsuarioAutenticado, Depends(require_permission("predi
     description=(
         "Requiere permiso `prediccion:consultar`. Usa el modelo en estado `produccion` "
         "(400 `SIN_MODELO_PRODUCTIVO` si no existe). El intervalo es al 95 %. Con "
-        "`persistir=true` guarda los puntos en `pronosticos_demanda` (idempotente)."
+        "`persistir=true` guarda los puntos en `pronosticos_demanda` (idempotente). 400 "
+        "`HISTORIAL_INSUFICIENTE` si el producto/ruta no tiene historial previo a `fecha_base`; "
+        "500 `ARTEFACTO_CORRUPTO` si el hash del artefacto no coincide (no se sirve predicción)."
     ),
+    responses={
+        400: {"description": "`SIN_MODELO_PRODUCTIVO` o `HISTORIAL_INSUFICIENTE`"},
+        500: {"description": "`ARTEFACTO_CORRUPTO`: hash del artefacto inválido; alerta crítica"},
+    },
 )
 def predecir_demanda(
     db: DBSession, _usuario: PuedeConsultar, solicitud: DemandRequest

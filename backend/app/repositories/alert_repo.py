@@ -71,6 +71,21 @@ def resolver_abiertas_de_modelo(db: Session, *, tipo: TipoAlerta, modelo_id: uui
     return resultado.rowcount
 
 
+def resolver_abiertas_con_marca(db: Session, *, tipo: TipoAlerta, marca: str) -> int:
+    """Resuelve las alertas abiertas del tipo cuyo mensaje contiene `marca` (p. ej. el id de la
+    liquidación a la que se refieren)."""
+    resultado = db.execute(
+        update(Alerta)
+        .where(
+            Alerta.tipo == tipo,
+            Alerta.estado == EstadoAlerta.ABIERTA,
+            Alerta.mensaje.contains(marca),
+        )
+        .values(estado=EstadoAlerta.RESUELTA, resuelta_en=datetime.now(UTC))
+    )
+    return resultado.rowcount
+
+
 def obtener(db: Session, alerta_id: uuid.UUID) -> Alerta | None:
     return db.get(Alerta, alerta_id)
 

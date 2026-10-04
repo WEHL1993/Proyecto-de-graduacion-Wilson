@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { EtlResult, EtlValidationError, LotePage } from '../types'
+import type { EtlConfig, EtlResult, EtlValidationError, LotePage } from '../types'
 import { httpClient } from './httpClient'
 
 export type ModoCarga = 'estricto' | 'parcial'
@@ -40,3 +40,7 @@ export function errorDeValidacion(e: unknown): EtlValidationError | null {
 
 export const listarLotes = (limit: number, offset: number) =>
   httpClient.get<LotePage>('/etl/batches', { params: { limit, offset } }).then((r) => r.data)
+
+export const obtenerConfigEtl = () => httpClient.get<EtlConfig>('/etl/config').then((r) => r.data)
+export const guardarConfigEtl = (config: EtlConfig) =>
+  httpClient.put<EtlConfig>('/etl/config', config).then((r) => r.data)

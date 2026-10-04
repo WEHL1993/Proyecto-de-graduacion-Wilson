@@ -124,6 +124,7 @@ erDiagram
         uuid referencia_id
         uuid usuario_id FK
         timestamptz fecha_movimiento
+        varchar motivo "ajustes manuales (ADR-16); NULL en el resto"
     }
     cargas_ruta {
         uuid id PK

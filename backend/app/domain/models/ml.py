@@ -79,6 +79,8 @@ class ModeloML(UUIDPkMixin, Base):
     )
     entrenado_en: Mapped[datetime] = mapped_column(server_default=func.now())
     promovido_en: Mapped[datetime | None]
+    # ADR-14: fuente, rango de fechas y filas por origen (`excel_historico`/`liquidacion`).
+    fuentes_datos: Mapped[dict | None] = mapped_column(JSONB)
 
 
 class MetricaEvaluacion(UUIDPkMixin, Base):
@@ -151,6 +153,8 @@ class PronosticoDemanda(Base):
     limite_inferior: Mapped[Cantidad | None]
     limite_superior: Mapped[Cantidad | None]
     demanda_real: Mapped[Cantidad | None]
+    # ADR-14: la liquidación marcó `agotado`; `demanda_real` es un piso y no se evalúa su error.
+    demanda_censurada: Mapped[bool] = mapped_column(Boolean, server_default=false())
     generado_en: Mapped[datetime] = mapped_column(server_default=func.now())
 
 

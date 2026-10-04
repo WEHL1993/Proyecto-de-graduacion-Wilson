@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.errors import AppError
 from app.ml import contracts
-from app.repositories import catalog_repo, forecast_repo, model_repo, sales_repo
+from app.repositories import catalog_repo, forecast_repo, model_repo, product_repo, sales_repo
 from app.schemas.predictions import (
     DemandModelInfo,
     DemandPoint,
@@ -25,8 +25,10 @@ from app.schemas.predictions import (
     DemandRequest,
     DemandResponse,
 )
+from app.services.bitacora_service import auditar
 
 
+@auditar
 def predecir_demanda(db: Session, solicitud: DemandRequest) -> DemandResponse:
     settings = get_settings()
     modelo = model_repo.obtener_produccion(db, settings.ml_modelo_nombre)
@@ -121,6 +123,14 @@ def _validar_catalogo(
             "PRODUCTO_NO_ENCONTRADO",
             "Uno o más productos no existen en el catálogo.",
             detalle={"producto_ids": sorted(str(p) for p in faltantes)},
+        )
+    inactivos = product_repo.inactivos_entre(db, set(producto_ids))
+    if inactivos:
+        raise AppError(
+            "PRODUCTO_INACTIVO",
+            "Uno o más productos están dados de baja y no admiten nuevos pronósticos.",
+            status_code=409,
+            detalle={"producto_ids": sorted(str(p) for p in inactivos)},
         )
     if ruta_id is not None and not catalog_repo.ruta_existe(db, ruta_id):
         raise AppError("RUTA_NO_ENCONTRADA", "La ruta indicada no existe.")

@@ -32,6 +32,7 @@ from app.schemas.purchasing import (
     SugerenciasResponse,
 )
 from app.services import inventory_service, prediction_service
+from app.services.bitacora_service import auditar
 
 _CENTESIMA = Decimal("0.01")
 _CERO = Decimal("0.00")
@@ -45,6 +46,7 @@ def calcular_cantidad_a_pedir(
     return max(_CERO, (demanda_proyectada + stock_minimo) - stock_actual).quantize(_CENTESIMA)
 
 
+@auditar
 def sugerir(db: Session, horizonte_dias: int) -> SugerenciasResponse:
     candidatos = purchasing_repo.productos_reabastecibles(db)
     demanda, advertencias = _demanda_proyectada(
@@ -134,6 +136,7 @@ def _predecir_lote(
 
 
 # ------------------------------------------------------------------ crear
+@auditar
 def crear_pedido(db: Session, solicitud: PedidoCreate, usuario_id: uuid.UUID) -> PedidoOut:
     proveedor = purchasing_repo.obtener_proveedor(db, solicitud.proveedor_id)
     if proveedor is None or not proveedor.activo:
@@ -191,6 +194,7 @@ def crear_pedido(db: Session, solicitud: PedidoCreate, usuario_id: uuid.UUID) ->
 
 
 # ------------------------------------------------------------------ consulta
+@auditar
 def listar(
     db: Session,
     usuario: UsuarioAutenticado,
@@ -205,6 +209,7 @@ def listar(
     return PedidoPage(items=_salida(db, pedidos), total=total, limit=limit, offset=offset)
 
 
+@auditar
 def obtener(db: Session, usuario: UsuarioAutenticado, pedido_id: uuid.UUID) -> PedidoOut:
     proveedor_id = _alcance(db, usuario)
     pedido = purchasing_repo.obtener(db, pedido_id)
@@ -215,6 +220,7 @@ def obtener(db: Session, usuario: UsuarioAutenticado, pedido_id: uuid.UUID) -> P
 
 
 # ------------------------------------------------------------------ transiciones
+@auditar
 def enviar(db: Session, pedido_id: uuid.UUID) -> PedidoOut:
     """`borrador → enviado`: Compras aprueba y envía la orden."""
     pedido = _bloquear(db, pedido_id, (EstadoPedido.BORRADOR,), "enviar")
@@ -223,6 +229,7 @@ def enviar(db: Session, pedido_id: uuid.UUID) -> PedidoOut:
     return _salida(db, [pedido])[0]
 
 
+@auditar
 def cancelar(db: Session, pedido_id: uuid.UUID) -> PedidoOut:
     pedido = _bloquear(db, pedido_id, (EstadoPedido.BORRADOR, EstadoPedido.ENVIADO), "cancelar")
     pedido.estado = EstadoPedido.CANCELADO
@@ -230,6 +237,7 @@ def cancelar(db: Session, pedido_id: uuid.UUID) -> PedidoOut:
     return _salida(db, [pedido])[0]
 
 
+@auditar
 def confirmar(
     db: Session, usuario: UsuarioAutenticado, pedido_id: uuid.UUID, solicitud: PedidoConfirmacion
 ) -> PedidoOut:
@@ -246,6 +254,7 @@ def confirmar(
     return _salida(db, [pedido])[0]
 
 
+@auditar
 def recibir(db: Session, pedido_id: uuid.UUID, usuario_id: uuid.UUID) -> PedidoOut:
     """`confirmado → recibido`: Bodega valida el ingreso físico. Registra la entrada en `kardex`
     e incrementa `stock_actual`, todo atómico con el cambio de estado."""

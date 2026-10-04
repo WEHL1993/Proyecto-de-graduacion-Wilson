@@ -3,7 +3,7 @@ import type { DragEvent, KeyboardEvent } from 'react'
 import { Button } from '../components/common/Button'
 import { Campo, CLASE_INPUT, Card } from '../components/common/Card'
 import { AlertBanner, Cargando, EmptyState } from '../components/feedback/feedback'
-import { TAMANO_PAGINA_LOTES, useLotes, useSubirExcel } from '../hooks/useEtl'
+import { TAMANO_PAGINA_LOTES, useEtlConfig, useLotes, useSubirExcel } from '../hooks/useEtl'
 import { errorDeValidacion } from '../services/etlApi'
 import type { ModoCarga } from '../services/etlApi'
 import type { EtlValidationError, LoteItem } from '../types'
@@ -222,6 +222,8 @@ export function EtlUploadView() {
   const [hoja, setHoja] = useState('')
   const [periodo, setPeriodo] = useState('')
   const subida = useSubirExcel()
+  // ADR-14: con el arranque cerrado las ventas nuevas entran solo por la liquidación diaria.
+  const bloqueado = useEtlConfig().data?.carga_excel_habilitada === false
 
   const elegir = (f: File) => {
     subida.reset()
@@ -246,9 +248,16 @@ export function EtlUploadView() {
         </p>
       </header>
 
+      {bloqueado && (
+        <AlertBanner tipo="info">
+          <strong>Carga de Excel deshabilitada.</strong> El arranque está cerrado: las ventas nuevas se registran en la
+          liquidación diaria.
+        </AlertBanner>
+      )}
+
       <Card titulo="Nuevo archivo">
         <div className="flex flex-col gap-4">
-          <Dropzone archivo={archivo} deshabilitado={subida.isPending} onElegir={elegir} />
+          <Dropzone archivo={archivo} deshabilitado={subida.isPending || bloqueado} onElegir={elegir} />
           {problema && <AlertBanner>{problema}</AlertBanner>}
 
           <div className="flex flex-wrap items-end gap-3">
@@ -264,7 +273,7 @@ export function EtlUploadView() {
             <Campo etiqueta="Periodo (opcional)">
               <input type="month" value={periodo} onChange={(e) => setPeriodo(e.target.value)} disabled={subida.isPending} className={CLASE_INPUT} />
             </Campo>
-            <Button variant="primary" disabled={!archivo || subida.isPending} onClick={enviar}>
+            <Button variant="primary" disabled={!archivo || subida.isPending || bloqueado} onClick={enviar}>
               {subida.isPending ? 'Procesando…' : 'Cargar archivo'}
             </Button>
           </div>

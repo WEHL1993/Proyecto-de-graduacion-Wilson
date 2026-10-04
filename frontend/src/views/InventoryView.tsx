@@ -194,7 +194,7 @@ function VisorKardex({ productos }: { productos: StockItem[] }) {
       {kardex.data && kardex.data.items.length > 0 && (
         <>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-sm">
+            <table className="w-full min-w-[760px] text-sm">
               <thead>
                 <tr className="border-b border-line text-left text-xs text-muted">
                   <th className="py-2">Fecha</th>
@@ -203,6 +203,7 @@ function VisorKardex({ productos }: { productos: StockItem[] }) {
                   <th className="py-2 text-right">Cantidad</th>
                   <th className="py-2 text-right">Saldo</th>
                   <th className="py-2 pl-4">Referencia</th>
+                  <th className="py-2 pl-4">Motivo</th>
                 </tr>
               </thead>
               <tbody>
@@ -225,6 +226,7 @@ function VisorKardex({ productos }: { productos: StockItem[] }) {
                         {m.referencia_tipo ?? '—'}
                         {m.referencia_id && <span className="font-mono"> {m.referencia_id.slice(0, 8)}</span>}
                       </td>
+                      <td className="py-2 pl-4 text-xs text-muted">{m.motivo ?? '—'}</td>
                     </tr>
                   )
                 })}

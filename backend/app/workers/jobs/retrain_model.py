@@ -8,13 +8,16 @@ import uuid
 from sqlalchemy.orm import Session
 
 from app.services import job_service
+from app.services.bitacora_service import auditar
 
 
+@auditar
 def ejecutar(db: Session) -> uuid.UUID | None:
     """Procesa el reentrenamiento más antiguo en cola; `None` si la cola está vacía."""
     return job_service.procesar_siguiente_reentrenamiento(db)
 
 
+@auditar
 def ejecutar_pendientes(db: Session) -> list[uuid.UUID]:
     """Vacía la cola de reentrenamientos y devuelve los ids procesados."""
     procesados: list[uuid.UUID] = []

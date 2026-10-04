@@ -20,12 +20,14 @@ from app.repositories import carga_repo, catalog_repo, sales_repo
 from app.schemas.predictions import DemandRequest
 from app.schemas.routes import LoadPlanItem, LoadPlanRequest, LoadPlanResponse
 from app.services import inventory_service, prediction_service
+from app.services.bitacora_service import auditar
 
 _CENTESIMA = Decimal("0.01")
 _MAX_PRODUCTOS_POR_PREDICCION = 200
 _ESTADOS_DECIDIBLES = (EstadoCarga.BORRADOR, EstadoCarga.PENDIENTE_APROBACION)
 
 
+@auditar
 def gestionar(db: Session, solicitud: LoadPlanRequest, usuario_id: uuid.UUID) -> LoadPlanResponse:
     if solicitud.accion == "generar":
         return generar(db, solicitud, usuario_id)
@@ -37,6 +39,7 @@ def gestionar(db: Session, solicitud: LoadPlanRequest, usuario_id: uuid.UUID) ->
 
 
 # ------------------------------------------------------------------ generar
+@auditar
 def generar(db: Session, solicitud: LoadPlanRequest, usuario_id: uuid.UUID) -> LoadPlanResponse:
     ruta_id, fecha = solicitud.ruta_id, solicitud.fecha_operacion
     assert ruta_id is not None and fecha is not None  # garantizado por LoadPlanRequest
@@ -121,6 +124,7 @@ def _predecir_demanda(
 
 
 # ------------------------------------------------------------------ consultar / enviar
+@auditar
 def obtener_vigente(db: Session, ruta_id: uuid.UUID, fecha_operacion: date) -> LoadPlanResponse:
     carga = carga_repo.vigente_de_ruta(db, ruta_id, fecha_operacion)
     if carga is None:
@@ -132,6 +136,7 @@ def obtener_vigente(db: Session, ruta_id: uuid.UUID, fecha_operacion: date) -> L
     return _respuesta(db, carga)
 
 
+@auditar
 def enviar(db: Session, solicitud: LoadPlanRequest) -> LoadPlanResponse:
     """`borrador → pendiente_aprobacion` (Ventas envía el plan a aprobación)."""
     carga = _cargar_para_decidir(db, solicitud.carga_id, (EstadoCarga.BORRADOR,), "enviar")
@@ -143,6 +148,7 @@ def enviar(db: Session, solicitud: LoadPlanRequest) -> LoadPlanResponse:
 
 
 # ------------------------------------------------------------------ aprobar
+@auditar
 def aprobar(db: Session, solicitud: LoadPlanRequest, usuario_id: uuid.UUID) -> LoadPlanResponse:
     carga = _cargar_para_decidir(db, solicitud.carga_id, _ESTADOS_DECIDIBLES, "aprobar")
     detalles = {d.producto_id: d for d in carga.detalles}
@@ -188,6 +194,7 @@ def aprobar(db: Session, solicitud: LoadPlanRequest, usuario_id: uuid.UUID) -> L
 
 
 # ------------------------------------------------------------------ rechazar
+@auditar
 def rechazar(db: Session, solicitud: LoadPlanRequest, usuario_id: uuid.UUID) -> LoadPlanResponse:
     carga = _cargar_para_decidir(
         db, solicitud.carga_id, (*_ESTADOS_DECIDIBLES, EstadoCarga.APROBADA), "rechazar"
@@ -208,6 +215,7 @@ def rechazar(db: Session, solicitud: LoadPlanRequest, usuario_id: uuid.UUID) -> 
 
 
 # ------------------------------------------------------------------ despachar
+@auditar
 def despachar(db: Session, carga_id: uuid.UUID, usuario_id: uuid.UUID) -> LoadPlanResponse:
     """`aprobada → despachada` (Bodega confirma la salida física del camión, ADR-06).
 

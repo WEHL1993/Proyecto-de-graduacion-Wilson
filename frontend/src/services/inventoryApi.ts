@@ -1,4 +1,4 @@
-import type { KardexPage, StockPage, TipoMovimiento } from '../types'
+import type { AjusteRequest, AjusteResponse, KardexPage, StockPage, TipoMovimiento } from '../types'
 import { httpClient } from './httpClient'
 
 export const listarExistencias = (opciones: { bajoMinimo?: boolean; limit?: number } = {}) =>
@@ -31,3 +31,6 @@ export const listarKardex = (f: FiltroKardex) =>
       },
     })
     .then((r) => r.data)
+
+export const ajustarStock = (datos: AjusteRequest) =>
+  httpClient.post<AjusteResponse>('/inventory/adjustments', datos).then((r) => r.data)

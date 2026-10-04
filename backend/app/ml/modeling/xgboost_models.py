@@ -34,8 +34,8 @@ class ModeloXGBoost:
         self.hiperparametros = {**HIPERPARAMETROS_POR_DEFECTO, **hiperparametros}
         self._estimador = XGBRegressor(**self.hiperparametros)
 
-    def entrenar(self, X: pd.DataFrame, y: np.ndarray) -> Self:
-        self._estimador.fit(X, y)
+    def entrenar(self, X: pd.DataFrame, y: np.ndarray, pesos: np.ndarray | None = None) -> Self:
+        self._estimador.fit(X, y, sample_weight=pesos)
         return self
 
     def predecir(self, X: pd.DataFrame) -> np.ndarray:

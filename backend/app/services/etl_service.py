@@ -6,6 +6,7 @@ rechazo (422, lote `rechazado` + alerta `etl_error`) o carga idempotente en
 """
 
 import hashlib
+import logging
 import re
 import uuid
 from collections import defaultdict
@@ -16,6 +17,7 @@ from typing import Any
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core import parametros
 from app.core.errors import AppError
 from app.domain.enums import EstadoLoteEtl, Severidad, TipoAlerta
 from app.domain.models.sales import EtlLote
@@ -25,6 +27,7 @@ from app.schemas.etl import (
     TAMANO_MAXIMO_BYTES,
     CodigoErrorEtl,
     ErrorFila,
+    EtlConfig,
     EtlResult,
     EtlValidationError,
     LoteItem,
@@ -33,7 +36,10 @@ from app.schemas.etl import (
     RangoFechas,
 )
 from app.services import etl_lectura
+from app.services.bitacora_service import auditar
 from app.services.etl_lectura import ArchivoInvalido, ErrorLectura, FilaVenta, LecturaExcel
+
+auditoria = logging.getLogger("app.auditoria")
 
 PARAMETRO_COMISION = "comisiones.porcentaje"
 _RE_PERIODO = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
@@ -48,6 +54,7 @@ def calcular_checksum(contenido: bytes) -> str:
     return hashlib.sha256(contenido).hexdigest()
 
 
+@auditar
 def procesar_excel(
     db: Session,
     *,
@@ -61,7 +68,16 @@ def procesar_excel(
     """Devuelve `EtlResult` (lote cargado) o `EtlValidationError` (lote rechazado, HTTP 422).
 
     Lanza `AppError` 400 para archivo inválido/duplicado; la API traduce ambos casos.
+    Con el arranque cerrado (`etl.carga_excel_habilitada=false`, ADR-14) responde 409
+    `EXCEL_DESHABILITADO`: las ventas nuevas entran solo por la liquidación diaria.
     """
+    if not excel_habilitado(db):
+        raise AppError(
+            "EXCEL_DESHABILITADO",
+            "La carga de Excel está deshabilitada: las ventas nuevas se registran en la "
+            "liquidación diaria.",
+            status_code=409,
+        )
     _validar_archivo(nombre_archivo, contenido, periodo)
     checksum = calcular_checksum(contenido)
 
@@ -329,7 +345,7 @@ def _cargar(
         )
 
     persistidas = sales_repo.upsert_ventas(db, filas_db)
-    advertencias.extend(_generar_comisiones(db, persistidas))
+    advertencias.extend(generar_comisiones(db, persistidas))
 
     if errores:
         advertencias.append(
@@ -357,7 +373,8 @@ def _cargar(
     )
 
 
-def _generar_comisiones(db: Session, ventas: list[sales_repo.VentaPersistida]) -> list[str]:
+@auditar
+def generar_comisiones(db: Session, ventas: list[sales_repo.VentaPersistida]) -> list[str]:
     """`monto = monto_total × porcentaje / 100` por venta con vendedor (idempotente)."""
     valor = parametro_repo.obtener_valor(db, PARAMETRO_COMISION)
     if valor is None:
@@ -393,6 +410,7 @@ def _generar_comisiones(db: Session, ventas: list[sales_repo.VentaPersistida]) -
     return []
 
 
+@auditar
 def listar_lotes(db: Session, *, estado: EstadoLoteEtl | None, limit: int, offset: int) -> LotePage:
     filas, total = sales_repo.listar_lotes(db, estado=estado, limit=limit, offset=offset)
     return LotePage(
@@ -411,3 +429,43 @@ def listar_lotes(db: Session, *, estado: EstadoLoteEtl | None, limit: int, offse
             for lote, nombre in filas
         ],
     )
+
+
+# ------------------------------------------------------------------ política de datos (ADR-14)
+def excel_habilitado(db: Session) -> bool:
+    valor = parametro_repo.obtener_valor(db, parametros.CARGA_EXCEL_HABILITADA)
+    return parametros.CARGA_EXCEL_HABILITADA_POR_DEFECTO if valor is None else valor is not False
+
+
+@auditar
+def obtener_config(db: Session) -> EtlConfig:
+    return EtlConfig(
+        carga_excel_habilitada=excel_habilitado(db),
+        fuente_reentrenamiento=parametro_repo.fuente_reentrenamiento(db),
+    )
+
+
+@auditar
+def actualizar_config(db: Session, config: EtlConfig, usuario_id: uuid.UUID) -> EtlConfig:
+    """Cierra (o reabre) el arranque y fija la fuente de reentrenamiento. Auditado."""
+    anterior = obtener_config(db)
+    parametro_repo.guardar_valor(
+        db,
+        parametros.CARGA_EXCEL_HABILITADA,
+        config.carga_excel_habilitada,
+        actualizado_por=usuario_id,
+    )
+    parametro_repo.guardar_valor(
+        db,
+        parametros.FUENTE_REENTRENAMIENTO,
+        config.fuente_reentrenamiento.value,
+        actualizado_por=usuario_id,
+    )
+    auditoria.info(
+        "CONFIG_ETL usuario=%s antes=%s despues=%s",
+        usuario_id,
+        anterior.model_dump(mode="json"),
+        config.model_dump(mode="json"),
+    )
+    db.commit()
+    return config

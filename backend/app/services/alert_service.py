@@ -10,6 +10,7 @@ from app.domain.models.ml import Alerta
 from app.repositories import alert_repo
 from app.schemas.alerts import AlertItem, AlertList
 from app.schemas.auth import UsuarioAutenticado
+from app.services.bitacora_service import auditar
 
 # Cada tipo de alerta lo ven quienes tienen algún permiso de su dominio (matriz 1.4), de modo
 # que Bodega no ve el MAPE ni Gerente los errores de ETL. Admin tiene todos los permisos.
@@ -20,6 +21,7 @@ PERMISOS_POR_TIPO: dict[TipoAlerta, frozenset[str]] = {
     ),
     TipoAlerta.MAPE_UMBRAL: frozenset({"ml:metricas:leer", "ml:reentrenar"}),
     TipoAlerta.ETL_ERROR: frozenset({"etl:cargar"}),
+    TipoAlerta.DIFERENCIA_CAJA: frozenset({"liquidaciones:leer"}),
 }
 
 
@@ -41,6 +43,7 @@ def _a_dto(a: Alerta) -> AlertItem:
     )
 
 
+@auditar
 def listar(
     db: Session, usuario: UsuarioAutenticado, *, estado: EstadoAlerta | None, limite: int
 ) -> AlertList:
@@ -51,6 +54,7 @@ def listar(
     return AlertList(total=total, alertas=[_a_dto(a) for a in filas])
 
 
+@auditar
 def reconocer(db: Session, usuario: UsuarioAutenticado, alerta_id: uuid.UUID) -> AlertItem:
     alerta = alert_repo.obtener(db, alerta_id)
     # 404 (no 403) para tipos ajenos: no se revela la existencia de alertas fuera del rol.

@@ -9,6 +9,7 @@ Uso (desde `backend/`, con el venv activo):
 
 from sqlalchemy.orm import Session
 
+from app.core import parametros
 from app.core.database import get_sessionmaker
 from app.core.security import hash_password
 from app.domain.models.auth import Permiso, Rol, Usuario
@@ -33,12 +34,21 @@ PERMISOS: dict[str, str] = {
     "carga_ruta:despachar": "Confirmación de despacho (kardex de salida).",
     "inventario:leer": "Consulta de existencias.",
     "inventario:ajustar": "Ajustes manuales de existencias.",
+    "productos:crear": "Alta de productos en el catálogo (ADR-16).",
+    "productos:editar": "Edición de datos de productos: precio, costo, mínimo, categoría (ADR-16).",
+    "productos:eliminar": "Baja lógica y reactivación de productos (ADR-16).",
     "pedido_proveedor:gestionar": "Creación y edición de pedidos a proveedores.",
     "pedido_proveedor:confirmar": "Confirmación de pedidos por el proveedor.",
     "ml:metricas:leer": "Consulta de métricas y degradación de modelos.",
     "ml:reentrenar": "Solicitud de reentrenamiento de modelos.",
     "alertas:leer": "Consulta de alertas del sistema.",
     "reportes:leer": "Reportes gerenciales: rotación, quiebres, comisiones y exportación.",
+    "liquidaciones:registrar": "Registro y edición de borradores de la liquidación diaria.",
+    "liquidaciones:cerrar": "Cierre de la liquidación diaria (alimenta el modelo).",
+    "liquidaciones:corregir": "Corrección y anulación de liquidaciones; umbral de caja.",
+    "liquidaciones:leer": "Consulta del historial de liquidaciones y su cuadre de caja.",
+    "etl:configurar": "Cierre del arranque ETL y fuente de reentrenamiento (política de datos).",
+    "bitacora:leer": "Consulta de la bitácora de auditoría del sistema (ADR-15).",
 }
 
 # Matriz 1.4 de la especificación (columna Worker se excluye: no es un rol de login).
@@ -49,6 +59,9 @@ MATRIZ_ROL_PERMISO: dict[str, tuple[str, ...]] = {
         "prediccion:consultar",
         "inventario:leer",
         "inventario:ajustar",
+        "productos:crear",
+        "productos:editar",
+        "productos:eliminar",
         "alertas:leer",
     ),
     "Ventas": (
@@ -79,6 +92,7 @@ MATRIZ_ROL_PERMISO: dict[str, tuple[str, ...]] = {
         "ml:metricas:leer",
         "ml:reentrenar",
         "alertas:leer",
+        "liquidaciones:leer",
     ),
     "Proveedor": ("pedido_proveedor:confirmar",),
 }
@@ -90,6 +104,13 @@ ADMIN_NOMBRE = "Administrador del Sistema"
 PARAMETROS_INICIALES: dict[str, object] = {
     "ml.mape_umbral": 12.0,
     "ml.periodos_consecutivos": 3,
+}
+
+# ADR-14: los administra el negocio; el seed solo los crea si faltan (nunca pisa un cambio).
+PARAMETROS_POR_DEFECTO: dict[str, object] = {
+    parametros.CARGA_EXCEL_HABILITADA: parametros.CARGA_EXCEL_HABILITADA_POR_DEFECTO,
+    parametros.FUENTE_REENTRENAMIENTO: parametros.FUENTE_REENTRENAMIENTO_POR_DEFECTO,
+    parametros.UMBRAL_DIFERENCIA_CAJA: float(parametros.UMBRAL_DIFERENCIA_CAJA_POR_DEFECTO),
 }
 
 
@@ -149,6 +170,9 @@ def seed_parametros_sistema(session: Session) -> None:
             session.add(ParametroSistema(clave=clave, valor=valor))
         else:
             parametro.valor = valor
+    for clave, valor in PARAMETROS_POR_DEFECTO.items():
+        if session.get(ParametroSistema, clave) is None:
+            session.add(ParametroSistema(clave=clave, valor=valor))
 
 
 def run() -> None:

@@ -20,6 +20,7 @@ from app.ml.data_preparation.feature_engineering import (
     HISTORIA_MINIMA_DIAS,
     REZAGOS,
     VENTANAS,
+    Cobertura,
     agregar_calendario,
     completar_calendario,
 )
@@ -39,13 +40,20 @@ class PredictorDemanda:
         self.preprocesador = preprocesador
 
     def predecir(
-        self, historial: pd.DataFrame, fecha_base: date, horizonte_dias: int
+        self,
+        historial: pd.DataFrame,
+        fecha_base: date,
+        horizonte_dias: int,
+        cobertura: Cobertura | None = None,
     ) -> list[PuntoPronostico]:
         """`historial`: ventas por día (`fecha`, `producto_id`, `ruta_id`, `cantidad`) hasta
-        `fecha_base` inclusive; los días sin fila se asumen en 0."""
+        `fecha_base` inclusive; los días sin fila se asumen en 0.
+
+        Con `cobertura` (entrenamiento con huecos, ADR-14) solo se pronostican las series cuyo
+        último tramo contiguo llega a `fecha_base` y alcanza la historia mínima."""
         base = pd.Timestamp(fecha_base)
-        completo = completar_calendario(historial, hasta=base)
-        series = self._series_con_historia(completo)
+        completo = completar_calendario(historial, hasta=base, cobertura=cobertura)
+        series = self._series_con_historia(completo, base if cobertura is not None else None)
 
         claves = list(series)
         colas = np.stack([series[k][-HISTORIA_MINIMA_DIAS:] for k in claves])
@@ -79,16 +87,24 @@ class PredictorDemanda:
         return puntos
 
     @staticmethod
-    def _series_con_historia(completo: pd.DataFrame) -> dict[tuple[str, str], np.ndarray]:
+    def _series_con_historia(
+        completo: pd.DataFrame, base: pd.Timestamp | None = None
+    ) -> dict[tuple[str, str], np.ndarray]:
+        """`base` (modo con cobertura): usa el último tramo contiguo y descarta, sin error, las
+        series inactivas en `base` o con tramo corto; solo falla si no queda ninguna."""
         series: dict[tuple[str, str], np.ndarray] = {}
         insuficientes: list[str] = []
         for (producto, ruta), grupo in completo.groupby(COL_SERIE, sort=True):
+            if base is not None:
+                grupo = grupo[grupo["segmento"] == grupo["segmento"].max()]
+                if grupo["fecha"].max() != base:
+                    continue
             valores = grupo.sort_values("fecha")["cantidad"].to_numpy(dtype=float)
             if len(valores) < HISTORIA_MINIMA_DIAS:
                 insuficientes.append(str(producto))
             else:
                 series[(str(producto), str(ruta))] = valores
-        if insuficientes or not series:
+        if (insuficientes and base is None) or not series:
             raise HistorialInsuficiente(sorted(set(insuficientes)), HISTORIA_MINIMA_DIAS)
         return series
 

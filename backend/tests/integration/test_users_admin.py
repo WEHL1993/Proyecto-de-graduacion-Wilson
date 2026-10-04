@@ -54,6 +54,7 @@ def _usuarios(e, **params) -> list[dict]:
     return e.client.get(BASE, params={"limit": 200, **params}, headers=e.h).json()["usuarios"]
 
 
+# TC-USR-01
 def test_exige_permiso_y_autenticacion(entorno):
     e = entorno
     assert e.client.get(BASE).status_code == 401
@@ -63,6 +64,7 @@ def test_exige_permiso_y_autenticacion(entorno):
     assert e.client.post(BASE, json=_nuevo(), headers=sin_permiso).status_code == 403
 
 
+# TC-USR-02
 def test_crear_usuario_con_rol_y_rutas_y_puede_iniciar_sesion(entorno):
     e = entorno
     r = e.client.post(BASE, json=_nuevo(ruta_ids=[str(e.rutas[0].id)]), headers=e.h)
@@ -76,6 +78,7 @@ def test_crear_usuario_con_rol_y_rutas_y_puede_iniciar_sesion(entorno):
     assert login.status_code == 200 and login.json()["usuario"]["roles"] == ["Ventas"]
 
 
+# TC-USR-03
 def test_validaciones_de_alta(entorno):
     e = entorno
     assert e.client.post(BASE, json=_nuevo("dup@ds.gt"), headers=e.h).status_code == 201
@@ -94,6 +97,7 @@ def test_validaciones_de_alta(entorno):
     assert e.client.post(BASE, json=_nuevo(password="corta"), headers=e.h).status_code == 422
 
 
+# TC-USR-04
 def test_reasignar_rutas_una_ruta_un_vendedor(entorno):
     e = entorno
     primero = e.client.post(BASE, json=_nuevo(ruta_ids=[str(e.rutas[0].id)]), headers=e.h).json()
@@ -114,6 +118,7 @@ def test_reasignar_rutas_una_ruta_un_vendedor(entorno):
     assert e.client.patch(f"{BASE}/{uuid.uuid4()}", json={}, headers=e.h).status_code == 404
 
 
+# TC-USR-04
 def test_cambiar_clave_y_rol(entorno):
     e = entorno
     u = e.client.post(BASE, json=_nuevo(), headers=e.h).json()
@@ -126,6 +131,7 @@ def test_cambiar_clave_y_rol(entorno):
     assert viejo.status_code == 401 and nuevo.status_code == 200
 
 
+# TC-USR-05
 def test_desactivar_impide_login_y_reactivar_lo_permite(entorno):
     e = entorno
     u = e.client.post(BASE, json=_nuevo(), headers=e.h).json()
@@ -140,6 +146,7 @@ def test_desactivar_impide_login_y_reactivar_lo_permite(entorno):
     assert e.client.post(LOGIN, json=creds).status_code == 200
 
 
+# TC-USR-06
 def test_protege_al_administrador(entorno):
     e = entorno
     propio = e.client.patch(f"{BASE}/{e.admin.id}/status", json={"activo": False}, headers=e.h)
@@ -159,6 +166,7 @@ def test_protege_al_administrador(entorno):
     assert quitar.status_code == 409 and quitar.json()["codigo"] == "ULTIMO_ADMIN"
 
 
+# TC-USR-05
 def test_listar_roles_y_filtros(entorno):
     e = entorno
     e.client.post(BASE, json=_nuevo("filtro-uno@ds.gt"), headers=e.h)

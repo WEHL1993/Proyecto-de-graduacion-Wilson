@@ -4,6 +4,8 @@ import uuid
 
 from sqlalchemy.orm import Session
 
+from app.core import parametros
+from app.domain.enums import FuenteReentrenamiento
 from app.domain.models.ml import ParametroSistema
 
 
@@ -22,3 +24,12 @@ def guardar_valor(
         parametro.valor = valor
         parametro.actualizado_por = actualizado_por
     db.flush()
+
+
+def fuente_reentrenamiento(db: Session) -> FuenteReentrenamiento:
+    """`ml.fuente_reentrenamiento` (ADR-14); ausente o inválido usa el valor por defecto."""
+    valor = obtener_valor(db, parametros.FUENTE_REENTRENAMIENTO)
+    try:
+        return FuenteReentrenamiento(str(valor))
+    except ValueError:
+        return FuenteReentrenamiento(parametros.FUENTE_REENTRENAMIENTO_POR_DEFECTO)

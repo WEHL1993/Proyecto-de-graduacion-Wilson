@@ -14,7 +14,9 @@ class ModeloDemanda(Protocol):
     algoritmo: str
     hiperparametros: dict[str, Any]
 
-    def entrenar(self, X: pd.DataFrame, y: np.ndarray) -> "ModeloDemanda": ...
+    def entrenar(
+        self, X: pd.DataFrame, y: np.ndarray, pesos: np.ndarray | None = None
+    ) -> "ModeloDemanda": ...
 
     def predecir(self, X: pd.DataFrame) -> np.ndarray: ...
 

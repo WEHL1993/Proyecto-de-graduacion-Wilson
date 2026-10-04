@@ -11,6 +11,7 @@ const ETIQUETA_TIPO: Record<TipoAlerta, string> = {
   quiebre_proyectado: 'Quiebre proyectado',
   mape_umbral: 'MAPE sobre el umbral',
   etl_error: 'Error de carga ETL',
+  diferencia_caja: 'Diferencia de caja',
 }
 
 // Vista donde se atiende cada tipo de alerta.
@@ -19,6 +20,7 @@ const DESTINO: Record<TipoAlerta, { to: string; permisos: readonly string[] }> =
   quiebre_proyectado: { to: '/compras', permisos: PERMISOS_VISTA.compras },
   mape_umbral: { to: '/monitoreo', permisos: PERMISOS_VISTA.monitoreo },
   etl_error: { to: '/etl', permisos: PERMISOS_VISTA.etl },
+  diferencia_caja: { to: '/ventas/liquidaciones', permisos: PERMISOS_VISTA.liquidaciones },
 }
 
 const esCritica = (a: AlertItem) => a.severidad === 'critica'

@@ -20,6 +20,7 @@ from app.core.config import get_settings
 from app.core.errors import AppError
 from app.domain.enums import (
     MotivoEntrenamiento,
+    OrigenDatos,
     Severidad,
     TipoAlerta,
     TipoEvaluacion,
@@ -46,6 +47,7 @@ from app.schemas.ml import (
     PeorProducto,
     ResumenMetricas,
 )
+from app.services.bitacora_service import auditar
 
 PERIODO_DIAS = 7
 CLAVE_UMBRAL = "ml.mape_umbral"
@@ -81,6 +83,7 @@ class ResultadoEvaluacion:
 
 
 # ------------------------------------------------------------------ configuración (ADR-08)
+@auditar
 def obtener_config(db: Session) -> MlConfig:
     umbral = parametro_repo.obtener_valor(db, CLAVE_UMBRAL)
     periodos = parametro_repo.obtener_valor(db, CLAVE_PERIODOS)
@@ -92,6 +95,7 @@ def obtener_config(db: Session) -> MlConfig:
     )
 
 
+@auditar
 def actualizar_config(db: Session, config: MlConfig, usuario_id: uuid.UUID) -> MlConfig:
     parametro_repo.guardar_valor(db, CLAVE_UMBRAL, config.umbral_mape, actualizado_por=usuario_id)
     parametro_repo.guardar_valor(
@@ -102,6 +106,7 @@ def actualizar_config(db: Session, config: MlConfig, usuario_id: uuid.UUID) -> M
 
 
 # ------------------------------------------------------------------ evaluación (Worker)
+@auditar
 def evaluar_produccion(
     db: Session, *, desde: date | None = None, hasta: date | None = None
 ) -> ResultadoEvaluacion:
@@ -139,7 +144,16 @@ def evaluar_produccion(
 def _completar_demanda_real(db: Session, modelo_id: uuid.UUID, desde: date, hasta: date) -> None:
     ventas_hasta = sales_repo.ultima_fecha_venta(db)
     if ventas_hasta is not None:
-        forecast_repo.registrar_demanda_real(db, modelo_id, desde, hasta, ventas_hasta=ventas_hasta)
+        forecast_repo.registrar_demanda_real(
+            db,
+            modelo_id,
+            desde,
+            hasta,
+            ventas_hasta=ventas_hasta,
+            ultima_fecha_excel=sales_repo.ultima_fecha_venta_de_origen(
+                db, OrigenDatos.EXCEL_HISTORICO
+            ),
+        )
 
 
 def _periodos_pendientes(db: Session, modelo: ModeloML) -> list[tuple[date, date]]:
@@ -155,7 +169,14 @@ def _periodos_pendientes(db: Session, modelo: ModeloML) -> list[tuple[date, date
     ventas_hasta = sales_repo.ultima_fecha_venta(db)
     if ventas_hasta is not None:
         forecast_repo.registrar_demanda_real(
-            db, modelo.id, inicio, ventas_hasta, ventas_hasta=ventas_hasta
+            db,
+            modelo.id,
+            inicio,
+            ventas_hasta,
+            ventas_hasta=ventas_hasta,
+            ultima_fecha_excel=sales_repo.ultima_fecha_venta_de_origen(
+                db, OrigenDatos.EXCEL_HISTORICO
+            ),
         )
     ultima_real = forecast_repo.ultima_fecha_con_real(db, modelo.id)
     if ultima_real is None:
@@ -276,6 +297,7 @@ def _encolar_reentrenamiento(db: Session, modelo: ModeloML) -> uuid.UUID:
 
 
 # ------------------------------------------------------------------ consulta (GET /ml/metrics)
+@auditar
 def estado_degradacion(db: Session, modelo: ModeloML) -> Degradacion:
     config = obtener_config(db)
     actuales = _consecutivos_sobre_umbral(db, modelo.id)
@@ -294,6 +316,7 @@ def estado_degradacion(db: Session, modelo: ModeloML) -> Degradacion:
     )
 
 
+@auditar
 def consultar_metricas(
     db: Session,
     *,
@@ -351,6 +374,7 @@ def consultar_metricas(
     )
 
 
+@auditar
 def listar_modelos(db: Session) -> list[ModeloResumen]:
     """Historial de la familia de modelos (más reciente primero) con su MAPE de holdout."""
     resumen = []

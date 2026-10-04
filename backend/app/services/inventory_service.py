@@ -5,7 +5,8 @@ es el `stock_actual` físico tras el movimiento (las reservas y liberaciones no 
 
 Las operaciones que mutan (`reservar`, `liberar`, `confirmar_salida`, `registrar_entrada`) solo
 hacen `flush`: el commit lo decide el caso de uso que las orquesta, para que el movimiento y
-el cambio de estado sean atómicos.
+el cambio de estado sean atómicos. `ajustar_existencias` es un caso de uso completo (ADR-16):
+bloquea la fila, registra el kardex con motivo y hace `commit`.
 """
 
 import uuid
@@ -15,10 +16,18 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
-from app.domain.enums import ReferenciaTipo, Severidad, TipoAlerta, TipoMovimiento
-from app.domain.models.catalog import Inventario
-from app.repositories import alert_repo, inventory_repo
-from app.schemas.inventory import KardexEntry, KardexPage, StockItem, StockPage
+from app.domain.enums import ReferenciaTipo, Severidad, TipoAjuste, TipoAlerta, TipoMovimiento
+from app.domain.models.catalog import Inventario, Kardex, Producto
+from app.repositories import alert_repo, inventory_repo, product_repo
+from app.schemas.inventory import (
+    AjusteRequest,
+    AjusteResponse,
+    KardexEntry,
+    KardexPage,
+    StockItem,
+    StockPage,
+)
+from app.services.bitacora_service import auditar
 
 CERO = Decimal("0.00")
 
@@ -33,6 +42,7 @@ def stock_disponible(db: Session, producto_ids: list[uuid.UUID]) -> dict[uuid.UU
     }
 
 
+@auditar
 def listar_existencias(
     db: Session,
     *,
@@ -48,26 +58,27 @@ def listar_existencias(
         limit=limit,
         offset=offset,
     )
-    items = []
-    for producto, inv in filas:
-        actual = inv.stock_actual if inv else CERO
-        reservado = inv.stock_reservado if inv else CERO
-        disponible = actual - reservado
-        items.append(
-            StockItem(
-                producto_id=producto.id,
-                sku=producto.sku,
-                nombre=producto.nombre,
-                stock_actual=actual,
-                stock_reservado=reservado,
-                stock_disponible=disponible,
-                stock_minimo=producto.stock_minimo,
-                bajo_minimo=disponible < producto.stock_minimo,
-            )
-        )
+    items = [_stock_item(producto, inv) for producto, inv in filas]
     return StockPage(items=items, total=total, limit=limit, offset=offset)
 
 
+def _stock_item(producto: Producto, inv: Inventario | None) -> StockItem:
+    actual = inv.stock_actual if inv else CERO
+    reservado = inv.stock_reservado if inv else CERO
+    disponible = actual - reservado
+    return StockItem(
+        producto_id=producto.id,
+        sku=producto.sku,
+        nombre=producto.nombre,
+        stock_actual=actual,
+        stock_reservado=reservado,
+        stock_disponible=disponible,
+        stock_minimo=producto.stock_minimo,
+        bajo_minimo=disponible < producto.stock_minimo,
+    )
+
+
+@auditar
 def listar_kardex(db: Session, **filtros) -> KardexPage:
     movimientos, total = inventory_repo.listar_kardex(db, **filtros)
     return KardexPage(
@@ -79,6 +90,7 @@ def listar_kardex(db: Session, **filtros) -> KardexPage:
 
 
 # ------------------------------------------------------------------ movimientos
+@auditar
 def reservar(
     db: Session,
     cantidades: Mapping[uuid.UUID, Decimal],
@@ -107,6 +119,7 @@ def reservar(
         _mover(db, inv, TipoMovimiento.RESERVA, cantidad, referencia_id, usuario_id)
 
 
+@auditar
 def liberar(
     db: Session,
     cantidades: Mapping[uuid.UUID, Decimal],
@@ -128,6 +141,7 @@ def liberar(
         _mover(db, inv, TipoMovimiento.LIBERACION, liberada, referencia_id, usuario_id)
 
 
+@auditar
 def confirmar_salida(
     db: Session,
     cantidades: Mapping[uuid.UUID, Decimal],
@@ -156,6 +170,7 @@ def confirmar_salida(
         _mover(db, inv, TipoMovimiento.SALIDA, cantidad, referencia_id, usuario_id)
 
 
+@auditar
 def registrar_entrada(
     db: Session,
     cantidades: Mapping[uuid.UUID, Decimal],
@@ -185,12 +200,13 @@ def _mover(
     inv: Inventario,
     tipo: TipoMovimiento,
     cantidad: Decimal,
-    referencia_id: uuid.UUID,
+    referencia_id: uuid.UUID | None,
     usuario_id: uuid.UUID,
     referencia_tipo: ReferenciaTipo = ReferenciaTipo.CARGA_RUTA,
-) -> None:
+    motivo: str | None = None,
+) -> Kardex:
     db.flush()  # que la CHECK de `inventario` falle aquí y no en el commit
-    inventory_repo.registrar_movimiento(
+    return inventory_repo.registrar_movimiento(
         db,
         producto_id=inv.producto_id,
         tipo=tipo,
@@ -199,6 +215,101 @@ def _mover(
         referencia_tipo=referencia_tipo,
         referencia_id=referencia_id,
         usuario_id=usuario_id,
+        motivo=motivo,
+    )
+
+
+# ------------------------------------------------------------------ ajuste manual
+@auditar
+def ajustar_existencias(
+    db: Session, solicitud: AjusteRequest, usuario_id: uuid.UUID
+) -> AjusteResponse:
+    """Ajuste manual de `stock_actual` (ADR-16): incremento, decremento o fijar.
+
+    Bloquea la fila de existencias, no deja `stock_actual` por debajo de lo reservado y
+    registra en el kardex un movimiento `ajuste` con `cantidad` **con signo** (positivo suma,
+    negativo resta), el `saldo_resultante` físico y el motivo. Actualiza existencias y kardex
+    en el mismo commit.
+    """
+    producto = product_repo.obtener(db, solicitud.producto_id)
+    if producto is None:
+        raise AppError("PRODUCTO_NO_ENCONTRADO", "El producto no existe.", status_code=404)
+    if not producto.activo:
+        raise AppError(
+            "PRODUCTO_INACTIVO",
+            "No se puede ajustar el stock de un producto dado de baja; reactívelo primero.",
+            status_code=409,
+        )
+
+    existencias = inventory_repo.obtener_por_productos(db, [producto.id], bloquear=True)
+    inv = existencias.get(producto.id) or inventory_repo.crear_existencia(db, producto.id)
+
+    actual, reservado = inv.stock_actual, inv.stock_reservado
+    nuevo = _stock_resultante(solicitud, actual)
+    if nuevo < reservado:
+        raise AppError(
+            "STOCK_INSUFICIENTE",
+            "El ajuste dejaría el stock físico por debajo de lo reservado (o negativo).",
+            detalle={
+                "stock_actual": str(actual),
+                "stock_reservado": str(reservado),
+                "solicitado": str(solicitud.cantidad),
+                "stock_resultante": str(nuevo),
+            },
+        )
+    delta = nuevo - actual
+    if delta == 0:
+        raise AppError("AJUSTE_SIN_CAMBIO", "El ajuste no modifica el stock actual.")
+
+    inv.stock_actual = nuevo
+    movimiento = _mover(
+        db,
+        inv,
+        TipoMovimiento.AJUSTE,
+        delta,
+        None,
+        usuario_id,
+        ReferenciaTipo.AJUSTE,
+        motivo=solicitud.motivo.strip(),
+    )
+    _alertar_bajo_minimo(db, producto, inv)
+    db.commit()
+    return AjusteResponse(
+        movimiento=KardexEntry.model_validate(movimiento, from_attributes=True),
+        existencias=_stock_item(producto, inv),
+    )
+
+
+def _stock_resultante(solicitud: AjusteRequest, actual: Decimal) -> Decimal:
+    if solicitud.tipo == TipoAjuste.FIJAR:
+        return solicitud.cantidad
+    if solicitud.cantidad <= 0:
+        raise AppError(
+            "CANTIDAD_INVALIDA", "La cantidad del incremento o decremento debe ser mayor que 0."
+        )
+    if solicitud.tipo == TipoAjuste.INCREMENTO:
+        return actual + solicitud.cantidad
+    return actual - solicitud.cantidad
+
+
+def _alertar_bajo_minimo(db: Session, producto: Producto, inv: Inventario) -> None:
+    """Abre una alerta `stock_bajo` si tras el ajuste el disponible queda bajo el mínimo (no
+    duplica una alerta abierta del mismo producto)."""
+    disponible = inv.stock_disponible
+    if disponible >= producto.stock_minimo:
+        return
+    tipo = TipoAlerta.STOCK_BAJO
+    if alert_repo.abierta_de_producto(db, tipo=tipo, producto_id=producto.id) is not None:
+        return
+    alert_repo.crear(
+        db,
+        tipo=tipo,
+        severidad=Severidad.CRITICA if disponible <= 0 else Severidad.ADVERTENCIA,
+        mensaje=(
+            f"Stock disponible {disponible} inferior al mínimo {producto.stock_minimo} "
+            f"tras un ajuste manual ({producto.sku})."
+        ),
+        producto_id=producto.id,
     )
 
 

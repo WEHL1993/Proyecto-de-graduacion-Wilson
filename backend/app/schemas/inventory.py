@@ -1,12 +1,12 @@
-"""DTOs de lectura de existencias y kardex (`/inventory`)."""
+"""DTOs de existencias, kardex y ajustes manuales (`/inventory`)."""
 
 from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from app.domain.enums import ReferenciaTipo, TipoMovimiento
+from app.domain.enums import ReferenciaTipo, TipoAjuste, TipoMovimiento
 
 
 class StockItem(BaseModel):
@@ -37,6 +37,7 @@ class KardexEntry(BaseModel):
     referencia_id: UUID | None = None
     usuario_id: UUID | None = None
     fecha_movimiento: datetime
+    motivo: str | None = None
 
 
 class KardexPage(BaseModel):
@@ -44,3 +45,18 @@ class KardexPage(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class AjusteRequest(BaseModel):
+    """Ajuste manual (ADR-16). `incremento`/`decremento` exigen `cantidad > 0`; `fijar` establece
+    el `stock_actual` resultante (`cantidad >= 0`)."""
+
+    producto_id: UUID
+    tipo: TipoAjuste
+    cantidad: Decimal = Field(ge=0, max_digits=12, decimal_places=2)
+    motivo: str = Field(min_length=5, max_length=300)
+
+
+class AjusteResponse(BaseModel):
+    movimiento: KardexEntry
+    existencias: StockItem

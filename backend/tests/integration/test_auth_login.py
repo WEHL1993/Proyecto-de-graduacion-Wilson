@@ -7,6 +7,7 @@ revierte al final, igual que `tests/integration/test_schema_constraints.py`.
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
@@ -14,6 +15,8 @@ from app.core.database import get_db, get_engine
 from app.core.security import hash_password
 from app.domain.models.auth import Permiso, Rol, Usuario
 from app.main import app
+
+ROL_PRUEBA = "Ventas (prueba login)"
 
 
 @pytest.fixture
@@ -46,8 +49,11 @@ def client(db_session):
 
 @pytest.fixture
 def usuario_ventas(db_session):
-    permiso = Permiso(codigo="carga_ruta:generar", descripcion="Generar cargas de ruta")
-    rol = Rol(nombre="Ventas", descripcion="Rol de ventas", permisos=[permiso])
+    # La BD de pruebas puede traer el seed RBAC: se reutiliza el permiso y se usa un rol propio.
+    permiso = db_session.scalar(select(Permiso).where(Permiso.codigo == "carga_ruta:generar"))
+    if permiso is None:
+        permiso = Permiso(codigo="carga_ruta:generar", descripcion="Generar cargas de ruta")
+    rol = Rol(nombre=ROL_PRUEBA, descripcion="Rol de ventas de prueba", permisos=[permiso])
     usuario = Usuario(
         email="ventas@ds.gt",
         password_hash=hash_password("ClaveSegura123"),
@@ -68,7 +74,7 @@ def test_login_credenciales_validas_devuelve_token_roles_y_permisos(client, usua
     cuerpo = respuesta.json()
     assert cuerpo["token_type"] == "bearer"
     assert cuerpo["access_token"]
-    assert cuerpo["usuario"]["roles"] == ["Ventas"]
+    assert cuerpo["usuario"]["roles"] == [ROL_PRUEBA]
     assert cuerpo["usuario"]["permisos"] == ["carga_ruta:generar"]
 
 

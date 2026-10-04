@@ -10,6 +10,7 @@ from app.domain.enums import EstadoLoteEtl
 from app.schemas.auth import UsuarioAutenticado
 from app.schemas.etl import (
     TAMANO_MAXIMO_BYTES,
+    EtlConfig,
     EtlResult,
     EtlValidationError,
     LotePage,
@@ -20,6 +21,7 @@ from app.services import etl_service
 router = APIRouter(prefix="/etl", tags=["ETL"])
 
 PuedeCargar = Annotated[UsuarioAutenticado, Depends(require_permission("etl:cargar"))]
+PuedeConfigurar = Annotated[UsuarioAutenticado, Depends(require_permission("etl:configurar"))]
 
 
 @router.post(
@@ -29,7 +31,8 @@ PuedeCargar = Annotated[UsuarioAutenticado, Depends(require_permission("etl:carg
     description=(
         "Requiere permiso `etl:cargar`. Valida estructura, tipos y reglas de negocio. "
         "Si existen errores bloqueantes el lote se rechaza completo (modo estricto) salvo "
-        "`modo=parcial`. Un archivo con checksum ya cargado devuelve 400 `LOTE_DUPLICADO`."
+        "`modo=parcial`. Un archivo con checksum ya cargado devuelve 400 `LOTE_DUPLICADO`. "
+        "Con el arranque cerrado (`GET /etl/config`) devuelve 409 `EXCEL_DESHABILITADO`."
     ),
     responses={
         status.HTTP_422_UNPROCESSABLE_CONTENT: {
@@ -88,3 +91,27 @@ def listar_lotes(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> LotePage:
     return etl_service.listar_lotes(db, estado=estado, limit=limit, offset=offset)
+
+
+@router.get(
+    "/config",
+    response_model=EtlConfig,
+    summary="Política de datos del modelo",
+    description=(
+        "Requiere permiso `etl:cargar`. `carga_excel_habilitada=false` indica que el arranque "
+        "está cerrado y las ventas nuevas entran solo por la liquidación diaria; "
+        "`fuente_reentrenamiento` define qué ventas alimentan los reentrenamientos (ADR-14)."
+    ),
+)
+def obtener_config(db: DBSession, _usuario: PuedeCargar) -> EtlConfig:
+    return etl_service.obtener_config(db)
+
+
+@router.put(
+    "/config",
+    response_model=EtlConfig,
+    summary="Cierra o reabre el arranque y fija la fuente de reentrenamiento",
+    description="Requiere permiso `etl:configurar` (Administrador). Cambio auditado.",
+)
+def actualizar_config(db: DBSession, usuario: PuedeConfigurar, config: EtlConfig) -> EtlConfig:
+    return etl_service.actualizar_config(db, config, usuario.id)

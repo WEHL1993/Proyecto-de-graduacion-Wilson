@@ -127,3 +127,5 @@ class Kardex(Base):
         ForeignKey("usuarios.id", ondelete="RESTRICT"), index=True
     )
     fecha_movimiento: Mapped[datetime] = mapped_column(server_default=func.now())
+    # Justificación obligatoria de los ajustes manuales (ADR-16); NULL en el resto de movimientos.
+    motivo: Mapped[str | None] = mapped_column(String(300))

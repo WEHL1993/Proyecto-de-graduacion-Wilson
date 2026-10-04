@@ -1,4 +1,4 @@
-"""DTOs de `GET /catalog/routes` (extensión ADR-12: filtro de rutas del dashboard)."""
+"""DTOs de los catálogos de apoyo al frontend (`/catalog/*`): rutas, categorías y proveedores."""
 
 from uuid import UUID
 
@@ -10,3 +10,13 @@ class RouteItem(BaseModel):
     codigo: str
     nombre: str
     zona: str | None = None
+
+
+class CategoriaItem(BaseModel):
+    id: UUID
+    nombre: str
+
+
+class ProveedorItem(BaseModel):
+    id: UUID
+    nombre: str

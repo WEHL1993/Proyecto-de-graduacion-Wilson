@@ -8,7 +8,11 @@ const NAV = [
   { to: '/monitoreo', etiqueta: 'Monitoreo de Modelos', permisos: PERMISOS_VISTA.monitoreo },
   { to: '/compras', etiqueta: 'Abastecimiento', permisos: PERMISOS_VISTA.compras },
   { to: '/inventario', etiqueta: 'Inventario y Kardex', permisos: PERMISOS_VISTA.inventario },
+  { to: '/productos', etiqueta: 'Productos', permisos: PERMISOS_VISTA.productos },
+  { to: '/ventas/liquidacion', etiqueta: 'Liquidación Diaria', permisos: PERMISOS_VISTA.liquidacion },
+  { to: '/ventas/liquidaciones', etiqueta: 'Historial de Liquidaciones', permisos: PERMISOS_VISTA.liquidaciones },
   { to: '/etl', etiqueta: 'Carga de Datos (ETL)', permisos: PERMISOS_VISTA.etl },
+  { to: '/politica-datos', etiqueta: 'Política de Datos', permisos: PERMISOS_VISTA.etlConfig },
   { to: '/reportes', etiqueta: 'Reportes', permisos: PERMISOS_VISTA.reportes },
   { to: '/usuarios', etiqueta: 'Usuarios y Roles', permisos: PERMISOS_VISTA.usuarios },
 ] as const

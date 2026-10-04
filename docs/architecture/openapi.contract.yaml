@@ -1,3 +1,5 @@
+# CONTRATO DE DISEÑO (inicial). No refleja los 57 endpoints implementados.
+# Fuente vigente: docs/architecture/openapi.yaml (generado con `make openapi`). Ver sección 4.1 de la especificación.
 openapi: 3.0.3
 info:
   title: API Análisis Predictivo — Desarrollos Comerciales del Sur, S.A.

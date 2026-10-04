@@ -1,0 +1,68 @@
+COMANDOS PARA LEVANTAR EL SISTEMA (Backend + Frontend)
+=======================================================
+Sistema de Análisis Predictivo (ML) - Desarrollos Comerciales del Sur, S.A.
+
+Ejecutar todo desde la raíz del proyecto.
+Requisito previo: archivo .env en la raíz (copiar de .env.example si existe).
+
+
+OPCIÓN A: TODO CON DOCKER (recomendada)
+---------------------------------------
+Levanta postgres, backend (migraciones + seed), worker y frontend.
+
+  docker compose -f infra/docker-compose.yml --env-file .env up -d --build
+
+URLs:
+  Frontend : http://localhost:5173
+  Backend  : http://localhost:8000
+  Docs API : http://localhost:8000/docs
+
+Detener:
+  docker compose -f infra/docker-compose.yml --env-file .env down
+
+Ver logs:
+  docker compose -f infra/docker-compose.yml --env-file .env logs -f
+
+
+OPCIÓN B: CON MAKE (postgres + backend en Docker)
+-------------------------------------------------
+  make up          # levanta postgres + backend
+  make migrate     # aplica migraciones
+  make down        # detiene
+
+
+OPCIÓN C: LOCAL SIN DOCKER (Windows / PowerShell)
+-------------------------------------------------
+1) Base de datos: PostgreSQL 16 corriendo en localhost:5432
+   (o solo postgres con Docker):
+     docker compose -f infra/docker-compose.yml --env-file .env up -d postgres
+
+2) Backend:
+     cd backend
+     .venv/Scripts/python -m pip install -e .          # solo la primera vez
+     .venv/Scripts/python -m alembic upgrade head      # migraciones
+     .venv/Scripts/python -m uvicorn app.main:app --reload --port 8000
+
+3) Worker (otra terminal, opcional):
+     cd backend
+     .venv/Scripts/python -m app.workers.main
+
+4) Frontend (otra terminal):
+     cd frontend
+     npm install                                       # solo la primera vez
+     npm run dev
+   -> http://localhost:5173
+
+
+COMANDOS ÚTILES
+---------------
+  make test                 # pruebas backend (pytest)
+  make lint                 # ruff
+  make openapi              # regenerar docs/architecture/openapi.yaml
+  make frontend-test        # vitest
+  make frontend-build       # tsc + vite build
+  cd frontend; npm run gen:api   # regenerar tipos tras make openapi
+
+  Sin make (Windows):
+    cd backend; .venv/Scripts/python -m pytest
+    cd backend; .venv/Scripts/python scripts/export_openapi.py

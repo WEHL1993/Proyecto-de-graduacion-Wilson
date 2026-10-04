@@ -157,6 +157,7 @@ def entorno(db_tx, cliente):
     )
 
 
+# TC-REP-01
 def test_exige_permiso_y_autenticacion(entorno):
     e = entorno
     for ruta in ("inventory-turnover", "commissions", "sales-vs-forecast", "export"):
@@ -165,6 +166,7 @@ def test_exige_permiso_y_autenticacion(entorno):
         assert e.client.get(f"{BASE}/{ruta}", headers=sin).status_code == 403
 
 
+# TC-REP-02
 def test_rotacion_e_indice_de_quiebres_por_ruta(entorno):
     e = entorno
     r = e.client.get(
@@ -188,6 +190,7 @@ def test_rotacion_e_indice_de_quiebres_por_ruta(entorno):
         assert cuerpo["rotacion_global"] is None and cuerpo["dias_inventario"] is None
 
 
+# TC-REP-02
 def test_rotacion_de_dos_rutas_ordena_por_costo(entorno):
     e = entorno
     r = e.client.get(f"{BASE}/inventory-turnover", params=RANGO, headers=e.h).json()
@@ -198,6 +201,7 @@ def test_rotacion_de_dos_rutas_ordena_por_costo(entorno):
     assert ids.index(str(e.ruta1.id)) < ids.index(str(e.ruta2.id))
 
 
+# TC-REP-03
 def test_liquidacion_de_comisiones(entorno):
     e = entorno
     params = {"periodo_desde": "2031-01", "periodo_hasta": "2031-01"}
@@ -222,6 +226,7 @@ def test_liquidacion_de_comisiones(entorno):
     assert Decimal(solo_ruta1["total_comisiones"]) == Decimal("5.70")
 
 
+# TC-REP-04
 def test_validaciones_de_periodo_y_rango(entorno):
     e = entorno
     mal = e.client.get(f"{BASE}/commissions", params={"periodo_desde": "2031-13"}, headers=e.h)
@@ -244,6 +249,7 @@ def test_validaciones_de_periodo_y_rango(entorno):
     assert inexistente.status_code == 404
 
 
+# TC-REP-05
 def test_venta_real_vs_proyectada_usa_la_proyeccion_mas_reciente(entorno):
     e = entorno
     r = e.client.get(
@@ -265,6 +271,7 @@ def test_venta_real_vs_proyectada_usa_la_proyeccion_mas_reciente(entorno):
     assert ruta2["desviacion_pct"] is None
 
 
+# TC-REP-06
 def test_exportacion_excel_consolidado_y_csv(entorno):
     e = entorno
     params = {**RANGO, "periodo_desde": "2031-01", "periodo_hasta": "2031-01"}

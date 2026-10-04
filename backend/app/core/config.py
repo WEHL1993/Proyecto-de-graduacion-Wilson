@@ -47,6 +47,9 @@ class Settings(BaseSettings):
     worker_poll_segundos: int = Field(default=15, ge=1)
     worker_evaluacion_intervalo_segundos: int = Field(default=6 * 3600, ge=60)
 
+    # Bitácora de auditoría (ADR-15). Solo se desactiva en pruebas unitarias sin BD.
+    bitacora_habilitada: bool = True
+
     # ML: familia lógica (`modelos_ml.nombre`) que atiende /predictions/demand
     ml_modelo_nombre: str = "demanda_diaria"
 

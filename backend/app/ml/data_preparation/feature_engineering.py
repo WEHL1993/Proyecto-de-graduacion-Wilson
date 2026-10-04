@@ -5,7 +5,15 @@ Todas las características de una fecha `t` usan solo información de fechas ant
 
 Entrada esperada: DataFrame con columnas `fecha` (datetime64), `producto_id`, `ruta_id`
 (ambas `str`) y `cantidad`, con **un registro por día calendario** dentro de cada serie.
+
+Cobertura (ADR-14): con datos de Excel histórico y liquidaciones diarias separados por un hueco
+sin información, solo se rellena con 0 dentro de los rangos cubiertos de cada ruta; los rezagos se
+calculan por tramo contiguo (`segmento`) para no cruzar el hueco. Columna opcional `censurada`
+(la demanda del día es un piso: se agotó el producto).
 """
+
+from collections.abc import Mapping, Sequence
+from datetime import date
 
 import numpy as np
 import pandas as pd
@@ -30,38 +38,79 @@ FEATURES_CALENDARIO = [
 ]
 
 
-def completar_calendario(df: pd.DataFrame, hasta: pd.Timestamp | None = None) -> pd.DataFrame:
+# `ruta_id` (str) -> rangos de fechas (desde, hasta) con información para esa ruta.
+Cobertura = Mapping[str, Sequence[tuple[date, date]]]
+
+
+def _dias_cubiertos(
+    rangos: Sequence[tuple[date, date]], desde: pd.Timestamp, hasta: pd.Timestamp
+) -> pd.DatetimeIndex:
+    """Unión ordenada de los días de `rangos` recortada a `[desde, hasta]`."""
+    if not rangos:  # ruta sin cobertura declarada: tramo contiguo (comportamiento clásico)
+        return pd.date_range(desde, hasta, freq="D")
+    partes = []
+    for ini, fin in rangos:
+        a, b = max(pd.Timestamp(ini), desde), min(pd.Timestamp(fin), hasta)
+        if a <= b:
+            partes.append(pd.date_range(a, b, freq="D"))
+    if not partes:
+        return pd.DatetimeIndex([], dtype="datetime64[ns]")
+    return partes[0].append(partes[1:]).unique().sort_values()
+
+
+def _segmentos(indice: pd.DatetimeIndex) -> np.ndarray:
+    """Identificador de tramo contiguo: aumenta cada vez que falta al menos un día."""
+    if len(indice) == 0:
+        return np.array([], dtype=int)
+    saltos = np.diff(indice.values).astype("timedelta64[D]").astype(int) != 1
+    return np.concatenate([[1], 1 + np.cumsum(saltos)])
+
+
+def completar_calendario(
+    df: pd.DataFrame, hasta: pd.Timestamp | None = None, cobertura: Cobertura | None = None
+) -> pd.DataFrame:
     """Rellena con 0 los días sin venta de cada serie, desde su primera fecha hasta `hasta`
-    (por defecto la última fecha del conjunto). Ausencia de fila en `ventas_historicas` = 0."""
+    (por defecto la última fecha del conjunto). Ausencia de fila en `ventas_historicas` = 0.
+
+    Con `cobertura` el relleno se limita a los rangos cubiertos de cada ruta (los días sin
+    información no son ceros) y se añade la columna `segmento`."""
     if df.empty:
         return df.copy()
     limite = hasta if hasta is not None else df["fecha"].max()
+    con_censura = "censurada" in df.columns
     partes = []
     for (producto, ruta), grupo in df.groupby(COL_SERIE, sort=True):
         serie = grupo.groupby("fecha")["cantidad"].sum()
-        indice = pd.date_range(serie.index.min(), limite, freq="D")
-        serie = serie.reindex(indice, fill_value=0.0)
-        partes.append(
-            pd.DataFrame(
-                {
-                    "fecha": indice,
-                    "producto_id": producto,
-                    "ruta_id": ruta,
-                    "cantidad": serie.to_numpy(dtype=float),
-                }
-            )
-        )
+        if cobertura is None:
+            indice = pd.date_range(serie.index.min(), limite, freq="D")
+        else:
+            cubiertos = _dias_cubiertos(cobertura.get(str(ruta), ()), serie.index.min(), limite)
+            indice = cubiertos.union(serie.index[serie.index <= limite])
+        columnas: dict[str, object] = {
+            "fecha": indice,
+            "producto_id": producto,
+            "ruta_id": ruta,
+            "cantidad": serie.reindex(indice, fill_value=0.0).to_numpy(dtype=float),
+        }
+        if cobertura is not None:
+            columnas["segmento"] = _segmentos(indice)
+        if con_censura:
+            censura = grupo.groupby("fecha")["censurada"].max()
+            columnas["censurada"] = censura.reindex(indice, fill_value=0.0).to_numpy(dtype=float)
+        partes.append(pd.DataFrame(columnas))
     return pd.concat(partes, ignore_index=True)
 
 
 def agregar_rezagos(df: pd.DataFrame) -> pd.DataFrame:
     """Lags `Y_{t-k}` y medias móviles de los `w` días previos a `t` (exclusivas de `t`)."""
     df = df.sort_values([*COL_SERIE, "fecha"]).reset_index(drop=True)
-    por_serie = df.groupby(COL_SERIE, sort=False)["cantidad"]
+    # Con huecos de cobertura los rezagos se calculan dentro de cada tramo contiguo.
+    claves = [*COL_SERIE, "segmento"] if "segmento" in df.columns else COL_SERIE
+    por_serie = df.groupby(claves, sort=False)["cantidad"]
     for k in REZAGOS:
         df[f"lag_{k}"] = por_serie.shift(k)
     previo = por_serie.shift(1)
-    llaves = [df[c] for c in COL_SERIE]
+    llaves = [df[c] for c in claves]
     for w in VENTANAS:
         df[f"media_{w}"] = previo.groupby(llaves, sort=False).transform(
             lambda s, w=w: s.rolling(w, min_periods=w).mean()

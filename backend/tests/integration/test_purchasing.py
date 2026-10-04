@@ -186,12 +186,14 @@ def _stock(e, producto: Producto) -> Decimal | None:
 
 
 # ------------------------------------------------------------------ sugerencias
+# TC-COMP-01
 def test_formula_de_reabastecimiento():
     calc = purchasing_service.calcular_cantidad_a_pedir
     assert calc(Decimal("70"), Decimal("30"), Decimal("20")) == Decimal("80.00")
     assert calc(Decimal("10"), Decimal("5"), Decimal("500")) == Decimal("0.00")  # nunca negativa
 
 
+# TC-COMP-01
 def test_sugerencias_cruzan_demanda_stock_y_punto_de_reorden(entorno):
     e = entorno
     r = e.client.get(f"{BASE}/suggestions", params={"horizonte_dias": 5}, headers=e.compras)
@@ -216,6 +218,7 @@ def test_sugerencias_cruzan_demanda_stock_y_punto_de_reorden(entorno):
     assert e.d.id not in {p for s in e.solicitudes for p in s.producto_ids}
 
 
+# TC-COMP-02
 def test_sugerencias_sin_modelo_usan_punto_de_reorden(entorno, monkeypatch):
     def sin_modelo(_db, _solicitud):
         raise AppError("SIN_MODELO_PRODUCTIVO", "sin modelo")
@@ -231,6 +234,7 @@ def test_sugerencias_sin_modelo_usan_punto_de_reorden(entorno, monkeypatch):
     assert por_sku[entorno.c.sku]["pronostico_disponible"] is False
 
 
+# TC-COMP-02
 def test_sugerencias_omiten_productos_sin_historial(entorno, monkeypatch):
     original = purchasing_service.prediction_service.predecir_demanda
 
@@ -253,6 +257,7 @@ def test_sugerencias_omiten_productos_sin_historial(entorno, monkeypatch):
 
 
 # ------------------------------------------------------------------ ciclo completo
+# TC-COMP-03
 def test_ciclo_completo_orden_recepcion_e_incremento_de_kardex(entorno):
     e = entorno
     r = _crear(e)
@@ -299,6 +304,7 @@ def test_ciclo_completo_orden_recepcion_e_incremento_de_kardex(entorno):
     assert [m["tipo_movimiento"] for m in r.json()["items"]] == ["entrada"]
 
 
+# TC-COMP-04
 def test_crear_con_enviar_nace_enviado_y_recepcion_crea_inventario_faltante(entorno):
     e = entorno
     r = e.client.post(
@@ -321,6 +327,7 @@ def test_crear_con_enviar_nace_enviado_y_recepcion_crea_inventario_faltante(ento
     assert (entrada.tipo_movimiento, entrada.saldo_resultante) == (TipoMovimiento.ENTRADA, 20)
 
 
+# TC-COMP-05
 def test_transiciones_invalidas_y_recepcion_no_se_repite(entorno):
     e = entorno
     pid = _crear(e).json()["id"]
@@ -345,6 +352,7 @@ def test_transiciones_invalidas_y_recepcion_no_se_repite(entorno):
     assert _stock(e, e.a) == 100 and len(_kardex(e, e.a)) == 1  # sin doble ingreso
 
 
+# TC-COMP-05
 def test_cancelar_pedido_y_no_recibirlo(entorno):
     e = entorno
     pid = _crear(e).json()["id"]
@@ -354,6 +362,7 @@ def test_cancelar_pedido_y_no_recibirlo(entorno):
     assert (r.status_code, r.json()["codigo"]) == (400, "ESTADO_PEDIDO_INVALIDO")
 
 
+# TC-COMP-05
 def test_confirmar_con_fecha_anterior_al_pedido_es_400(entorno):
     e = entorno
     pid = _crear(e, enviar=True).json()["id"]
@@ -363,6 +372,7 @@ def test_confirmar_con_fecha_anterior_al_pedido_es_400(entorno):
 
 
 # ------------------------------------------------------------------ validación de la orden
+# TC-COMP-06
 def test_producto_ajeno_al_proveedor_o_inexistente_es_400(entorno):
     e = entorno
     r = _crear(e, items=[{"producto_id": str(e.c.id), "cantidad": "5"}])  # C es de B
@@ -388,6 +398,7 @@ def test_producto_ajeno_al_proveedor_o_inexistente_es_400(entorno):
         {"items": [{"producto_id": str(uuid.uuid4()), "cantidad": -3}]},
     ],
 )
+# TC-COMP-06
 def test_cuerpo_invalido_es_422(entorno, cuerpo):
     r = entorno.client.post(
         f"{BASE}/orders",
@@ -397,6 +408,7 @@ def test_cuerpo_invalido_es_422(entorno, cuerpo):
     assert r.status_code == 422
 
 
+# TC-COMP-06
 def test_items_repetidos_es_422(entorno):
     item = {"producto_id": str(entorno.a.id), "cantidad": 1}
     assert _crear(entorno, items=[item, item]).status_code == 422
@@ -419,6 +431,7 @@ def test_tc_rbac_03_proveedor_no_accede_a_pedidos_de_otro_proveedor(entorno):
     assert r.status_code == 200
 
 
+# TC-COMP-07
 def test_compras_ve_todos_los_pedidos_y_filtra_por_estado(entorno):
     e = entorno
     _crear(e)
@@ -437,6 +450,7 @@ def test_compras_ve_todos_los_pedidos_y_filtra_por_estado(entorno):
     assert [p["estado"] for p in enviados.json()["items"]] == ["enviado"]
 
 
+# TC-COMP-07
 def test_matriz_de_permisos_de_compras(entorno):
     e = entorno
     pid = _crear(e, enviar=True).json()["id"]
@@ -466,6 +480,7 @@ def test_matriz_de_permisos_de_compras(entorno):
     assert e.client.post(f"{BASE}/orders/{pid}/receive").status_code == 401
 
 
+# TC-COMP-07
 def test_usuario_con_permiso_de_confirmar_sin_proveedor_asociado_es_403(entorno):
     e = entorno
     pid = _crear(e, enviar=True).json()["id"]
@@ -476,6 +491,7 @@ def test_usuario_con_permiso_de_confirmar_sin_proveedor_asociado_es_403(entorno)
     assert e.client.get(f"{BASE}/orders", headers=headers).status_code == 403
 
 
+# TC-COMP-07
 def test_pedido_inexistente_es_404(entorno):
     e = entorno
     fantasma = uuid.uuid4()

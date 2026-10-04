@@ -48,6 +48,7 @@ def registrar_movimiento(
     referencia_tipo: ReferenciaTipo | None,
     referencia_id: uuid.UUID | None,
     usuario_id: uuid.UUID | None,
+    motivo: str | None = None,
 ) -> Kardex:
     movimiento = Kardex(
         producto_id=producto_id,
@@ -57,6 +58,7 @@ def registrar_movimiento(
         referencia_tipo=referencia_tipo,
         referencia_id=referencia_id,
         usuario_id=usuario_id,
+        motivo=motivo,
     )
     db.add(movimiento)
     db.flush()

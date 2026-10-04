@@ -101,6 +101,7 @@ def test_ruta_fuera_de_ml_artifacts_se_rechaza(tmp_path):
 
 
 def test_prediccion_reproducible_e_intervalo_coherente(entrenado, ventas, tmp_path):
+    """TC-ML-05 (reproducibilidad con misma semilla y datos)."""
     algoritmo, res = entrenado
     g = artifact_store.guardar_artefactos(
         tmp_path,

@@ -49,6 +49,7 @@ include = ["app*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
+markers = ["bitacora: activa la bitácora de auditoría (ADR-15) durante la prueba"]
 
 [tool.ruff]
 line-length = 100

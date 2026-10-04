@@ -41,7 +41,8 @@ paths:
       summary: Ingesta de histórico de ventas desde Excel
       description: Requiere permiso `etl:cargar`. Valida estructura, tipos y reglas de negocio. Si existen
         errores bloqueantes el lote se rechaza completo (modo estricto) salvo `modo=parcial`. Un archivo
-        con checksum ya cargado devuelve 400 `LOTE_DUPLICADO`.
+        con checksum ya cargado devuelve 400 `LOTE_DUPLICADO`. Con el arranque cerrado (`GET /etl/config`)
+        devuelve 409 `EXCEL_DESHABILITADO`.
       operationId: upload_excel_api_v1_etl_upload_excel_post
       requestBody:
         content:
@@ -113,6 +114,51 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/etl/config:
+    get:
+      tags:
+      - ETL
+      summary: Política de datos del modelo
+      description: Requiere permiso `etl:cargar`. `carga_excel_habilitada=false` indica que el arranque
+        está cerrado y las ventas nuevas entran solo por la liquidación diaria; `fuente_reentrenamiento`
+        define qué ventas alimentan los reentrenamientos (ADR-14).
+      operationId: obtener_config_api_v1_etl_config_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EtlConfig'
+      security:
+      - HTTPBearer: []
+    put:
+      tags:
+      - ETL
+      summary: Cierra o reabre el arranque y fija la fuente de reentrenamiento
+      description: Requiere permiso `etl:configurar` (Administrador). Cambio auditado.
+      operationId: actualizar_config_api_v1_etl_config_put
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EtlConfig'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EtlConfig'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
   /api/v1/predictions/demand:
     post:
       tags:
@@ -120,7 +166,9 @@ paths:
       summary: Inferencia de demanda por producto/ruta/horizonte
       description: Requiere permiso `prediccion:consultar`. Usa el modelo en estado `produccion` (400
         `SIN_MODELO_PRODUCTIVO` si no existe). El intervalo es al 95 %. Con `persistir=true` guarda los
-        puntos en `pronosticos_demanda` (idempotente).
+        puntos en `pronosticos_demanda` (idempotente). 400 `HISTORIAL_INSUFICIENTE` si el producto/ruta
+        no tiene historial previo a `fecha_base`; 500 `ARTEFACTO_CORRUPTO` si el hash del artefacto no
+        coincide (no se sirve predicción).
       operationId: predecir_demanda_api_v1_predictions_demand_post
       requestBody:
         content:
@@ -135,6 +183,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DemandResponse'
+        '400':
+          description: '`SIN_MODELO_PRODUCTIVO` o `HISTORIAL_INSUFICIENTE`'
+        '500':
+          description: '`ARTEFACTO_CORRUPTO`: hash del artefacto inválido; alerta crítica'
         '422':
           description: Validation Error
           content:
@@ -371,6 +423,255 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/KardexPage'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/inventory/adjustments:
+    post:
+      tags:
+      - Inventory
+      summary: Ajuste manual de existencias
+      description: 'Requiere `inventario:ajustar`. Tipos: `incremento`, `decremento`, `fijar`. Registra
+        un movimiento `ajuste` en el kardex (cantidad con signo) con el motivo. 404 `PRODUCTO_NO_ENCONTRADO`;
+        409 `PRODUCTO_INACTIVO`; 400 `STOCK_INSUFICIENTE` si deja el stock bajo lo reservado, `CANTIDAD_INVALIDA`
+        o `AJUSTE_SIN_CAMBIO`.'
+      operationId: ajustar_existencias_api_v1_inventory_adjustments_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AjusteRequest'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AjusteResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/v1/products:
+    get:
+      tags:
+      - Products
+      summary: Listar productos
+      description: 'Requiere `inventario:leer`. Por defecto solo activos (`activo=true`); `activo=false`
+        lista las bajas. Filtros: `categoria_id` y `q` (SKU o nombre).'
+      operationId: listar_productos_api_v1_products_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: activo
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          default: true
+          title: Activo
+      - name: categoria_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Categoria Id
+      - name: q
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            maxLength: 100
+          - type: 'null'
+          title: Q
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 200
+          minimum: 1
+          default: 50
+          title: Limit
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+          title: Offset
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductoPage'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - Products
+      summary: Crear producto
+      description: Requiere `productos:crear`. Crea también su existencia en 0. 409 `SKU_DUPLICADO`; 404
+        `CATEGORIA_NO_ENCONTRADA` / `PROVEEDOR_NO_ENCONTRADO`.
+      operationId: crear_producto_api_v1_products_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductoCreate'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductoOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/products/{producto_id}:
+    get:
+      tags:
+      - Products
+      summary: Detalle de un producto
+      description: Requiere `inventario:leer`. 404 `PRODUCTO_NO_ENCONTRADO`.
+      operationId: obtener_producto_api_v1_products__producto_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: producto_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Producto Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductoOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    patch:
+      tags:
+      - Products
+      summary: Actualizar producto (parcial)
+      description: Requiere `productos:editar`. No modifica existencias ni estado. 404 `PRODUCTO_NO_ENCONTRADO`;
+        409 `SKU_DUPLICADO`.
+      operationId: actualizar_producto_api_v1_products__producto_id__patch
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: producto_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Producto Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductoUpdate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductoOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - Products
+      summary: Dar de baja un producto (baja lógica)
+      description: Requiere `productos:eliminar`. Marca `activo=false`; el historial se conserva. Idempotente.
+        409 `PRODUCTO_EN_USO` si tiene stock reservado o cargas vigentes.
+      operationId: eliminar_producto_api_v1_products__producto_id__delete
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: producto_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Producto Id
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/products/{producto_id}/reactivate:
+    post:
+      tags:
+      - Products
+      summary: Reactivar un producto dado de baja
+      description: Requiere `productos:eliminar`. Idempotente. 404 `PRODUCTO_NO_ENCONTRADO`.
+      operationId: reactivar_producto_api_v1_products__producto_id__reactivate_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: producto_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Producto Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductoOut'
         '422':
           description: Validation Error
           content:
@@ -650,6 +951,44 @@ paths:
                   $ref: '#/components/schemas/RouteItem'
                 type: array
                 title: Response Listar Rutas Api V1 Catalog Routes Get
+      security:
+      - HTTPBearer: []
+  /api/v1/catalog/categories:
+    get:
+      tags:
+      - Catalog
+      summary: Categorías de producto
+      description: Cualquier usuario autenticado. Alimenta el formulario de productos.
+      operationId: listar_categorias_api_v1_catalog_categories_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/CategoriaItem'
+                type: array
+                title: Response Listar Categorias Api V1 Catalog Categories Get
+      security:
+      - HTTPBearer: []
+  /api/v1/catalog/suppliers:
+    get:
+      tags:
+      - Catalog
+      summary: Proveedores activos
+      description: Cualquier usuario autenticado. Alimenta el formulario de productos.
+      operationId: listar_proveedores_api_v1_catalog_suppliers_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/ProveedorItem'
+                type: array
+                title: Response Listar Proveedores Api V1 Catalog Suppliers Get
       security:
       - HTTPBearer: []
   /api/v1/purchasing/suggestions:
@@ -1349,6 +1688,467 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/liquidaciones:
+    post:
+      tags:
+      - Liquidaciones
+      summary: Crear o actualizar el borrador de la liquidación del día
+      description: 'Requiere `liquidaciones:registrar`. Un borrador puede guardarse incompleto y **no**
+        afecta al modelo. 400: `VENTA_FECHA_FUTURA`, `PRODUCTO_DUPLICADO_EN_CIERRE`, `PRODUCTO_INACTIVO`,
+        `UNIDADES_NO_CUADRAN` (vendido + devuelto + merma excede lo cargado), `CARGA_REQUIERE_JUSTIFICACION`.
+        409 `LIQUIDACION_DUPLICADA` si ya está cerrada.'
+      operationId: guardar_borrador_api_v1_liquidaciones_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LiquidacionRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiquidacionResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - Liquidaciones
+      summary: Historial de liquidaciones
+      description: Requiere `liquidaciones:leer` (Administrador y Gerente). Filtros por rango de fechas,
+        ruta, vendedor y estado; paginado, más recientes primero.
+      operationId: listar_api_v1_liquidaciones_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: desde
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Desde
+      - name: hasta
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Hasta
+      - name: ruta_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Ruta Id
+      - name: vendedor_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Vendedor Id
+      - name: estado
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/EstadoLiquidacion'
+          - type: 'null'
+          title: Estado
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 200
+          minimum: 1
+          default: 20
+          title: Limit
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+          title: Offset
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListadoLiquidaciones'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/liquidaciones/precarga:
+    get:
+      tags:
+      - Liquidaciones
+      summary: 'Precarga de la pantalla: carga despachada y liquidación vigente'
+      description: Requiere `liquidaciones:registrar`. Devuelve las presentaciones con la cantidad despachada
+        a la ruta ese día (editable, con justificación) y la liquidación vigente de la fecha/ruta si existe.
+        Sin carga despachada devuelve una advertencia, no un error.
+      operationId: precargar_api_v1_liquidaciones_precarga_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: fecha
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date
+          title: Fecha
+      - name: ruta_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Ruta Id
+      - name: vendedor_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Vendedor Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrecargaResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/liquidaciones/config:
+    get:
+      tags:
+      - Liquidaciones
+      summary: Umbral de diferencia de caja
+      description: Requiere `liquidaciones:leer`.
+      operationId: obtener_config_api_v1_liquidaciones_config_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiquidacionConfig-Output'
+      security:
+      - HTTPBearer: []
+    put:
+      tags:
+      - Liquidaciones
+      summary: Actualiza el umbral de diferencia de caja
+      description: Requiere `liquidaciones:corregir` (Administrador). Auditado.
+      operationId: actualizar_config_api_v1_liquidaciones_config_put
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LiquidacionConfig-Input'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiquidacionConfig-Output'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/v1/liquidaciones/{liquidacion_id}:
+    get:
+      tags:
+      - Liquidaciones
+      summary: Detalle de una liquidación
+      description: Requiere `liquidaciones:leer`. 404 `LIQUIDACION_NO_ENCONTRADA`.
+      operationId: obtener_api_v1_liquidaciones__liquidacion_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: liquidacion_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Liquidacion Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiquidacionResponse'
+        '404':
+          description: '`LIQUIDACION_NO_ENCONTRADA`'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/liquidaciones/{liquidacion_id}/cerrar:
+    post:
+      tags:
+      - Liquidaciones
+      summary: Cerrar la liquidación (alimenta el modelo)
+      description: 'Requiere `liquidaciones:cerrar`. Valida el cuadre de unidades (400 `UNIDADES_NO_CUADRAN`)
+        y de dinero (400 `MONTOS_NO_CUADRAN`); la diferencia de caja no bloquea: se registra y, sobre
+        el umbral, genera una alerta. En una sola transacción escribe `ventas_historicas` (origen `liquidacion`),
+        rellena `demanda_real`, encola `evaluate_production` y audita. 409 `LIQUIDACION_YA_CERRADA`, `LIQUIDACION_YA_ANULADA`,
+        `VENTAS_EXCEL_EXISTENTES`.'
+      operationId: cerrar_api_v1_liquidaciones__liquidacion_id__cerrar_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: liquidacion_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Liquidacion Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiquidacionResponse'
+        '404':
+          description: '`LIQUIDACION_NO_ENCONTRADA`'
+        '409':
+          description: Conflicto de estado de la liquidación
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/liquidaciones/{liquidacion_id}/corregir:
+    post:
+      tags:
+      - Liquidaciones
+      summary: Corregir una liquidación cerrada
+      description: Requiere `liquidaciones:corregir`. Incrementa `version`, hace UPSERT en `ventas_historicas`,
+        recalcula `demanda_real` y vuelve a encolar la evaluación; deja auditoría con el motivo. 409 `LIQUIDACION_NO_CERRADA`.
+      operationId: corregir_api_v1_liquidaciones__liquidacion_id__corregir_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: liquidacion_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Liquidacion Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CorreccionRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiquidacionResponse'
+        '404':
+          description: '`LIQUIDACION_NO_ENCONTRADA`'
+        '409':
+          description: Conflicto de estado de la liquidación
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/liquidaciones/{liquidacion_id}/anular:
+    post:
+      tags:
+      - Liquidaciones
+      summary: Anular una liquidación
+      description: Requiere `liquidaciones:corregir`. Motivo obligatorio. Si estaba cerrada revierte su
+        efecto en `ventas_historicas` y `demanda_real`. 409 `LIQUIDACION_YA_ANULADA`.
+      operationId: anular_api_v1_liquidaciones__liquidacion_id__anular_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: liquidacion_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Liquidacion Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnulacionRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiquidacionResponse'
+        '404':
+          description: '`LIQUIDACION_NO_ENCONTRADA`'
+        '409':
+          description: Conflicto de estado de la liquidación
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/bitacora:
+    get:
+      tags:
+      - Bitácora
+      summary: Consultar la bitácora de auditoría
+      description: 'Requiere `bitacora:leer` (Admin). Más reciente primero. Filtros: rango de fechas,
+        usuario, acción (texto parcial), origen (`http|servicio|worker`), resultado (`exito|error`) y
+        `request_id` (une la petición HTTP con sus casos de uso).'
+      operationId: consultar_bitacora_api_v1_bitacora_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: desde
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Desde
+      - name: hasta
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Hasta
+      - name: usuario_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Usuario Id
+      - name: accion
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Accion
+      - name: origen
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            pattern: ^(http|servicio|worker)$
+          - type: 'null'
+          title: Origen
+      - name: resultado
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            pattern: ^(exito|error)$
+          - type: 'null'
+          title: Resultado
+      - name: request_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Request Id
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 500
+          minimum: 1
+          default: 100
+          title: Limit
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+          title: Offset
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BitacoraPage'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /health:
     get:
       tags:
@@ -1386,6 +2186,47 @@ components:
       - producto_id
       - cantidad_aprobada
       title: AjusteCarga
+    AjusteRequest:
+      properties:
+        producto_id:
+          type: string
+          format: uuid
+          title: Producto Id
+        tipo:
+          $ref: '#/components/schemas/TipoAjuste'
+        cantidad:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*(?:\d{0,10}|(?=[\d.]{1,13}0*$)\d{0,10}\.\d{0,2}0*$)
+          title: Cantidad
+        motivo:
+          type: string
+          maxLength: 300
+          minLength: 5
+          title: Motivo
+      type: object
+      required:
+      - producto_id
+      - tipo
+      - cantidad
+      - motivo
+      title: AjusteRequest
+      description: 'Ajuste manual (ADR-16). `incremento`/`decremento` exigen `cantidad > 0`; `fijar` establece
+
+        el `stock_actual` resultante (`cantidad >= 0`).'
+    AjusteResponse:
+      properties:
+        movimiento:
+          $ref: '#/components/schemas/KardexEntry'
+        existencias:
+          $ref: '#/components/schemas/StockItem'
+      type: object
+      required:
+      - movimiento
+      - existencias
+      title: AjusteResponse
     AlertItem:
       properties:
         id:
@@ -1448,6 +2289,128 @@ components:
       - xgboost
       - lstm
       title: Algoritmo
+    AnulacionRequest:
+      properties:
+        motivo:
+          type: string
+          maxLength: 500
+          minLength: 5
+          title: Motivo
+      type: object
+      required:
+      - motivo
+      title: AnulacionRequest
+    BitacoraItem:
+      properties:
+        id:
+          type: integer
+          title: Id
+        ocurrido_en:
+          type: string
+          format: date-time
+          title: Ocurrido En
+        nivel:
+          type: string
+          title: Nivel
+        origen:
+          type: string
+          title: Origen
+        operacion:
+          type: string
+          title: Operacion
+        accion:
+          type: string
+          title: Accion
+        resultado:
+          type: string
+          title: Resultado
+        usuario_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Usuario Id
+        ip:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Ip
+        request_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Request Id
+        metodo:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Metodo
+        ruta:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Ruta
+        status_code:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Status Code
+        duracion_ms:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Duracion Ms
+        parametros:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Parametros
+        codigo_error:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Codigo Error
+        mensaje:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Mensaje
+      type: object
+      required:
+      - id
+      - ocurrido_en
+      - nivel
+      - origen
+      - operacion
+      - accion
+      - resultado
+      - usuario_id
+      - ip
+      - request_id
+      - metodo
+      - ruta
+      - status_code
+      - duracion_ms
+      - parametros
+      - codigo_error
+      - mensaje
+      title: BitacoraItem
+    BitacoraPage:
+      properties:
+        total:
+          type: integer
+          title: Total
+        registros:
+          items:
+            $ref: '#/components/schemas/BitacoraItem'
+          type: array
+          title: Registros
+      type: object
+      required:
+      - total
+      - registros
+      title: BitacoraPage
     Body_upload_excel_api_v1_etl_upload_excel_post:
       properties:
         file:
@@ -1473,6 +2436,20 @@ components:
       required:
       - file
       title: Body_upload_excel_api_v1_etl_upload_excel_post
+    CategoriaItem:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        nombre:
+          type: string
+          title: Nombre
+      type: object
+      required:
+      - id
+      - nombre
+      title: CategoriaItem
     CodigoErrorEtl:
       type: string
       enum:
@@ -1547,6 +2524,130 @@ components:
       - monto_vendido
       - comision_total
       title: ComisionVendedor
+    CorreccionRequest:
+      properties:
+        fecha:
+          type: string
+          format: date
+          title: Fecha
+        ruta_id:
+          type: string
+          format: uuid
+          title: Ruta Id
+        vendedor_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Vendedor Id
+        lineas:
+          items:
+            $ref: '#/components/schemas/LineaLiquidacion'
+          type: array
+          minItems: 1
+          title: Lineas
+        pagos:
+          $ref: '#/components/schemas/PagosLiquidacion-Input'
+        observaciones:
+          anyOf:
+          - type: string
+            maxLength: 1000
+          - type: 'null'
+          title: Observaciones
+        motivo:
+          type: string
+          maxLength: 500
+          minLength: 5
+          title: Motivo
+      type: object
+      required:
+      - fecha
+      - ruta_id
+      - lineas
+      - motivo
+      title: CorreccionRequest
+    CuadreDinero:
+      properties:
+        venta_total:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Venta Total
+        total_pagos:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Total Pagos
+        diferencia_venta_pagos:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Diferencia Venta Pagos
+        cuadra:
+          type: boolean
+          title: Cuadra
+        efectivo_esperado:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Efectivo Esperado
+        efectivo_entregado:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Efectivo Entregado
+        diferencia_caja:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Diferencia Caja
+        umbral_diferencia_caja:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Umbral Diferencia Caja
+        supera_umbral:
+          type: boolean
+          title: Supera Umbral
+      type: object
+      required:
+      - venta_total
+      - total_pagos
+      - diferencia_venta_pagos
+      - cuadra
+      - efectivo_esperado
+      - efectivo_entregado
+      - diferencia_caja
+      - umbral_diferencia_caja
+      - supera_umbral
+      title: CuadreDinero
+    CuadreUnidades:
+      properties:
+        cargadas:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Cargadas
+        vendidas:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Vendidas
+        devueltas:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Devueltas
+        merma:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Merma
+        diferencia:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Diferencia
+        cuadra:
+          type: boolean
+          title: Cuadra
+      type: object
+      required:
+      - cargadas
+      - vendidas
+      - devueltas
+      - merma
+      - diferencia
+      - cuadra
+      title: CuadreUnidades
     Degradacion:
       properties:
         umbral_mape:
@@ -1751,6 +2852,13 @@ components:
       - completado
       - fallido
       title: EstadoJob
+    EstadoLiquidacion:
+      type: string
+      enum:
+      - borrador
+      - cerrada
+      - anulada
+      title: EstadoLiquidacion
     EstadoLoteEtl:
       type: string
       enum:
@@ -1776,6 +2884,19 @@ components:
       - recibido
       - cancelado
       title: EstadoPedido
+    EtlConfig:
+      properties:
+        carga_excel_habilitada:
+          type: boolean
+          title: Carga Excel Habilitada
+        fuente_reentrenamiento:
+          $ref: '#/components/schemas/FuenteReentrenamiento'
+      type: object
+      required:
+      - carga_excel_habilitada
+      - fuente_reentrenamiento
+      title: EtlConfig
+      description: Política de datos del modelo (ADR-14).
     EtlResult:
       properties:
         lote_id:
@@ -1843,6 +2964,14 @@ components:
       - csv
       - xlsx
       title: FormatoReporte
+    FuenteReentrenamiento:
+      type: string
+      enum:
+      - excel_historico
+      - excel_mas_liquidacion
+      - liquidacion
+      title: FuenteReentrenamiento
+      description: Qué datos alimentan un entrenamiento (`ml.fuente_reentrenamiento`, ADR-14).
     HTTPValidationError:
       properties:
         detail:
@@ -1940,6 +3069,11 @@ components:
           type: string
           format: date-time
           title: Fecha Movimiento
+        motivo:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Motivo
       type: object
       required:
       - id
@@ -1972,6 +3106,399 @@ components:
       - limit
       - offset
       title: KardexPage
+    LineaLiquidacion:
+      properties:
+        producto_id:
+          type: string
+          format: uuid
+          title: Producto Id
+        cantidad_cargada:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*(?:\d{0,10}|(?=[\d.]{1,13}0*$)\d{0,10}\.\d{0,2}0*$)
+          title: Cantidad Cargada
+        cantidad_vendida:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*(?:\d{0,10}|(?=[\d.]{1,13}0*$)\d{0,10}\.\d{0,2}0*$)
+          title: Cantidad Vendida
+        cantidad_devuelta:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*(?:\d{0,10}|(?=[\d.]{1,13}0*$)\d{0,10}\.\d{0,2}0*$)
+          title: Cantidad Devuelta
+          default: '0'
+        cantidad_merma:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*(?:\d{0,10}|(?=[\d.]{1,13}0*$)\d{0,10}\.\d{0,2}0*$)
+          title: Cantidad Merma
+          default: '0'
+        precio_unitario:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*(?:\d{0,12}|(?=[\d.]{1,15}0*$)\d{0,12}\.\d{0,2}0*$)
+          - type: 'null'
+          title: Precio Unitario
+        agotado:
+          type: boolean
+          title: Agotado
+          default: false
+        justificacion_carga:
+          anyOf:
+          - type: string
+            maxLength: 500
+          - type: 'null'
+          title: Justificacion Carga
+      type: object
+      required:
+      - producto_id
+      - cantidad_cargada
+      - cantidad_vendida
+      title: LineaLiquidacion
+    LineaPrecarga:
+      properties:
+        producto_id:
+          type: string
+          format: uuid
+          title: Producto Id
+        sku:
+          type: string
+          title: Sku
+        producto_nombre:
+          type: string
+          title: Producto Nombre
+        cantidad_cargada:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Cantidad Cargada
+        precio_unitario:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Precio Unitario
+      type: object
+      required:
+      - producto_id
+      - sku
+      - producto_nombre
+      - cantidad_cargada
+      - precio_unitario
+      title: LineaPrecarga
+    LineaRespuesta:
+      properties:
+        producto_id:
+          type: string
+          format: uuid
+          title: Producto Id
+        sku:
+          type: string
+          title: Sku
+        producto_nombre:
+          type: string
+          title: Producto Nombre
+        cantidad_cargada:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Cantidad Cargada
+        cantidad_vendida:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Cantidad Vendida
+        cantidad_devuelta:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Cantidad Devuelta
+        cantidad_merma:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Cantidad Merma
+        precio_unitario:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Precio Unitario
+        monto_total:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Monto Total
+        agotado:
+          type: boolean
+          title: Agotado
+        justificacion_carga:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Justificacion Carga
+        diferencia_unidades:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Diferencia Unidades
+        cuadra:
+          type: boolean
+          title: Cuadra
+      type: object
+      required:
+      - producto_id
+      - sku
+      - producto_nombre
+      - cantidad_cargada
+      - cantidad_vendida
+      - cantidad_devuelta
+      - cantidad_merma
+      - precio_unitario
+      - monto_total
+      - agotado
+      - diferencia_unidades
+      - cuadra
+      title: LineaRespuesta
+    LiquidacionConfig-Input:
+      properties:
+        umbral_diferencia_caja:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*(?:\d{0,12}|(?=[\d.]{1,15}0*$)\d{0,12}\.\d{0,2}0*$)
+          title: Umbral Diferencia Caja
+      type: object
+      required:
+      - umbral_diferencia_caja
+      title: LiquidacionConfig
+    LiquidacionConfig-Output:
+      properties:
+        umbral_diferencia_caja:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*(?:\d{0,12}|(?=[\d.]{1,15}0*$)\d{0,12}\.\d{0,2}0*$)
+          title: Umbral Diferencia Caja
+      type: object
+      required:
+      - umbral_diferencia_caja
+      title: LiquidacionConfig
+    LiquidacionRequest:
+      properties:
+        fecha:
+          type: string
+          format: date
+          title: Fecha
+        ruta_id:
+          type: string
+          format: uuid
+          title: Ruta Id
+        vendedor_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Vendedor Id
+        lineas:
+          items:
+            $ref: '#/components/schemas/LineaLiquidacion'
+          type: array
+          minItems: 1
+          title: Lineas
+        pagos:
+          $ref: '#/components/schemas/PagosLiquidacion-Input'
+        observaciones:
+          anyOf:
+          - type: string
+            maxLength: 1000
+          - type: 'null'
+          title: Observaciones
+      type: object
+      required:
+      - fecha
+      - ruta_id
+      - lineas
+      title: LiquidacionRequest
+    LiquidacionResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        fecha:
+          type: string
+          format: date
+          title: Fecha
+        ruta_id:
+          type: string
+          format: uuid
+          title: Ruta Id
+        ruta_nombre:
+          type: string
+          title: Ruta Nombre
+        vendedor_id:
+          type: string
+          format: uuid
+          title: Vendedor Id
+        vendedor_nombre:
+          type: string
+          title: Vendedor Nombre
+        estado:
+          $ref: '#/components/schemas/EstadoLiquidacion'
+        version:
+          type: integer
+          title: Version
+        lote_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Lote Id
+        lineas:
+          items:
+            $ref: '#/components/schemas/LineaRespuesta'
+          type: array
+          title: Lineas
+        pagos:
+          $ref: '#/components/schemas/PagosLiquidacion-Output'
+        cuadre_unidades:
+          $ref: '#/components/schemas/CuadreUnidades'
+        cuadre_dinero:
+          $ref: '#/components/schemas/CuadreDinero'
+        devolucion_esperada:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Devolucion Esperada
+        observaciones:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Observaciones
+        advertencias:
+          items:
+            type: string
+          type: array
+          title: Advertencias
+        alerta_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Alerta Id
+        creado_en:
+          type: string
+          format: date-time
+          title: Creado En
+        cerrado_en:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Cerrado En
+        anulado_en:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Anulado En
+        anulado_motivo:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Anulado Motivo
+      type: object
+      required:
+      - id
+      - fecha
+      - ruta_id
+      - ruta_nombre
+      - vendedor_id
+      - vendedor_nombre
+      - estado
+      - version
+      - lineas
+      - pagos
+      - cuadre_unidades
+      - cuadre_dinero
+      - devolucion_esperada
+      - creado_en
+      title: LiquidacionResponse
+    LiquidacionResumen:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        fecha:
+          type: string
+          format: date
+          title: Fecha
+        ruta_id:
+          type: string
+          format: uuid
+          title: Ruta Id
+        ruta_nombre:
+          type: string
+          title: Ruta Nombre
+        vendedor_id:
+          type: string
+          format: uuid
+          title: Vendedor Id
+        vendedor_nombre:
+          type: string
+          title: Vendedor Nombre
+        estado:
+          $ref: '#/components/schemas/EstadoLiquidacion'
+        version:
+          type: integer
+          title: Version
+        unidades_vendidas:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Unidades Vendidas
+        venta_total:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Venta Total
+        diferencia_caja:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Diferencia Caja
+        cerrado_en:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Cerrado En
+      type: object
+      required:
+      - id
+      - fecha
+      - ruta_id
+      - ruta_nombre
+      - vendedor_id
+      - vendedor_nombre
+      - estado
+      - version
+      - unidades_vendidas
+      - venta_total
+      - diferencia_caja
+      title: LiquidacionResumen
+    ListadoLiquidaciones:
+      properties:
+        total:
+          type: integer
+          title: Total
+        liquidaciones:
+          items:
+            $ref: '#/components/schemas/LiquidacionResumen'
+          type: array
+          title: Liquidaciones
+      type: object
+      required:
+      - total
+      - liquidaciones
+      title: ListadoLiquidaciones
     LoadPlanItem:
       properties:
         producto_id:
@@ -2352,6 +3879,92 @@ components:
       - manual
       - degradacion
       title: MotivoEntrenamiento
+    PagosLiquidacion-Input:
+      properties:
+        efectivo:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*(?:\d{0,12}|(?=[\d.]{1,15}0*$)\d{0,12}\.\d{0,2}0*$)
+          title: Efectivo
+          default: '0'
+        transferencia:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*(?:\d{0,12}|(?=[\d.]{1,15}0*$)\d{0,12}\.\d{0,2}0*$)
+          title: Transferencia
+          default: '0'
+        credito:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*(?:\d{0,12}|(?=[\d.]{1,15}0*$)\d{0,12}\.\d{0,2}0*$)
+          title: Credito
+          default: '0'
+        cobro_saldos:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*(?:\d{0,12}|(?=[\d.]{1,15}0*$)\d{0,12}\.\d{0,2}0*$)
+          title: Cobro Saldos
+          default: '0'
+        gastos:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*(?:\d{0,12}|(?=[\d.]{1,15}0*$)\d{0,12}\.\d{0,2}0*$)
+          title: Gastos
+          default: '0'
+        efectivo_entregado:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*(?:\d{0,12}|(?=[\d.]{1,15}0*$)\d{0,12}\.\d{0,2}0*$)
+          title: Efectivo Entregado
+          default: '0'
+      type: object
+      title: PagosLiquidacion
+    PagosLiquidacion-Output:
+      properties:
+        efectivo:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*(?:\d{0,12}|(?=[\d.]{1,15}0*$)\d{0,12}\.\d{0,2}0*$)
+          title: Efectivo
+          default: '0'
+        transferencia:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*(?:\d{0,12}|(?=[\d.]{1,15}0*$)\d{0,12}\.\d{0,2}0*$)
+          title: Transferencia
+          default: '0'
+        credito:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*(?:\d{0,12}|(?=[\d.]{1,15}0*$)\d{0,12}\.\d{0,2}0*$)
+          title: Credito
+          default: '0'
+        cobro_saldos:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*(?:\d{0,12}|(?=[\d.]{1,15}0*$)\d{0,12}\.\d{0,2}0*$)
+          title: Cobro Saldos
+          default: '0'
+        gastos:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*(?:\d{0,12}|(?=[\d.]{1,15}0*$)\d{0,12}\.\d{0,2}0*$)
+          title: Gastos
+          default: '0'
+        efectivo_entregado:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*(?:\d{0,12}|(?=[\d.]{1,15}0*$)\d{0,12}\.\d{0,2}0*$)
+          title: Efectivo Entregado
+          default: '0'
+      type: object
+      title: PagosLiquidacion
     PedidoConfirmacion:
       properties:
         fecha_esperada:
@@ -2573,6 +4186,284 @@ components:
       - mae
       - rmse
       title: PeorProducto
+    PrecargaResponse:
+      properties:
+        fecha:
+          type: string
+          format: date
+          title: Fecha
+        ruta_id:
+          type: string
+          format: uuid
+          title: Ruta Id
+        vendedor_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Vendedor Id
+        carga_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Carga Id
+        lineas:
+          items:
+            $ref: '#/components/schemas/LineaPrecarga'
+          type: array
+          title: Lineas
+        liquidacion:
+          anyOf:
+          - $ref: '#/components/schemas/LiquidacionResponse'
+          - type: 'null'
+        advertencias:
+          items:
+            type: string
+          type: array
+          title: Advertencias
+      type: object
+      required:
+      - fecha
+      - ruta_id
+      - lineas
+      title: PrecargaResponse
+    ProductoCreate:
+      properties:
+        sku:
+          type: string
+          maxLength: 30
+          minLength: 1
+          title: Sku
+        nombre:
+          type: string
+          maxLength: 200
+          minLength: 2
+          title: Nombre
+        categoria_id:
+          type: string
+          format: uuid
+          title: Categoria Id
+        proveedor_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Proveedor Id
+        unidad_medida:
+          type: string
+          maxLength: 20
+          minLength: 1
+          title: Unidad Medida
+          default: unidad
+        precio_venta:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*(?:\d{0,12}|(?=[\d.]{1,15}0*$)\d{0,12}\.\d{0,2}0*$)
+          title: Precio Venta
+          default: '0'
+        costo_unitario:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*(?:\d{0,12}|(?=[\d.]{1,15}0*$)\d{0,12}\.\d{0,2}0*$)
+          title: Costo Unitario
+          default: '0'
+        stock_minimo:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*(?:\d{0,10}|(?=[\d.]{1,13}0*$)\d{0,10}\.\d{0,2}0*$)
+          title: Stock Minimo
+          default: '0'
+      type: object
+      required:
+      - sku
+      - nombre
+      - categoria_id
+      title: ProductoCreate
+    ProductoOut:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        sku:
+          type: string
+          title: Sku
+        nombre:
+          type: string
+          title: Nombre
+        categoria_id:
+          type: string
+          format: uuid
+          title: Categoria Id
+        categoria:
+          type: string
+          title: Categoria
+        proveedor_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Proveedor Id
+        unidad_medida:
+          type: string
+          title: Unidad Medida
+        precio_venta:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Precio Venta
+        costo_unitario:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Costo Unitario
+        stock_minimo:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Stock Minimo
+        activo:
+          type: boolean
+          title: Activo
+        stock_actual:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Stock Actual
+        stock_reservado:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Stock Reservado
+        stock_disponible:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Stock Disponible
+        creado_en:
+          type: string
+          format: date-time
+          title: Creado En
+      type: object
+      required:
+      - id
+      - sku
+      - nombre
+      - categoria_id
+      - categoria
+      - unidad_medida
+      - precio_venta
+      - costo_unitario
+      - stock_minimo
+      - activo
+      - stock_actual
+      - stock_reservado
+      - stock_disponible
+      - creado_en
+      title: ProductoOut
+    ProductoPage:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/ProductoOut'
+          type: array
+          title: Items
+        total:
+          type: integer
+          title: Total
+        limit:
+          type: integer
+          title: Limit
+        offset:
+          type: integer
+          title: Offset
+      type: object
+      required:
+      - items
+      - total
+      - limit
+      - offset
+      title: ProductoPage
+    ProductoUpdate:
+      properties:
+        sku:
+          anyOf:
+          - type: string
+            maxLength: 30
+            minLength: 1
+          - type: 'null'
+          title: Sku
+        nombre:
+          anyOf:
+          - type: string
+            maxLength: 200
+            minLength: 2
+          - type: 'null'
+          title: Nombre
+        categoria_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Categoria Id
+        proveedor_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Proveedor Id
+        unidad_medida:
+          anyOf:
+          - type: string
+            maxLength: 20
+            minLength: 1
+          - type: 'null'
+          title: Unidad Medida
+        precio_venta:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*(?:\d{0,12}|(?=[\d.]{1,15}0*$)\d{0,12}\.\d{0,2}0*$)
+          - type: 'null'
+          title: Precio Venta
+        costo_unitario:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*(?:\d{0,12}|(?=[\d.]{1,15}0*$)\d{0,12}\.\d{0,2}0*$)
+          - type: 'null'
+          title: Costo Unitario
+        stock_minimo:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*(?:\d{0,10}|(?=[\d.]{1,13}0*$)\d{0,10}\.\d{0,2}0*$)
+          - type: 'null'
+          title: Stock Minimo
+      type: object
+      title: ProductoUpdate
+      description: 'Actualización parcial. No modifica existencias (usar `POST /inventory/adjustments`)
+        ni el
+
+        estado (usar `DELETE` / `POST .../reactivate`).'
+    ProveedorItem:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        nombre:
+          type: string
+          title: Nombre
+      type: object
+      required:
+      - id
+      - nombre
+      title: ProveedorItem
     RangoFechas:
       properties:
         desde:
@@ -3001,6 +4892,14 @@ components:
       - generado_en
       - sugerencias
       title: SugerenciasResponse
+    TipoAjuste:
+      type: string
+      enum:
+      - incremento
+      - decremento
+      - fijar
+      title: TipoAjuste
+      description: Modalidad de un ajuste manual de existencias (ADR-16).
     TipoAlerta:
       type: string
       enum:
@@ -3008,6 +4907,7 @@ components:
       - quiebre_proyectado
       - mape_umbral
       - etl_error
+      - diferencia_caja
       title: TipoAlerta
     TipoEvaluacion:
       type: string

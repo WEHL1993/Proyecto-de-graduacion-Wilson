@@ -5,6 +5,7 @@ perezosa la implementación para evitar ciclos y mantener este módulo sin depen
 """
 
 import uuid
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -101,11 +102,15 @@ def calcular_metricas(y_real: Any, y_pred: Any) -> Metricas:
 
 
 def entrenar_y_evaluar(
-    ventas: pd.DataFrame, algoritmo: str, hiperparametros: dict[str, Any] | None = None
+    ventas: pd.DataFrame,
+    algoritmo: str,
+    hiperparametros: dict[str, Any] | None = None,
+    cobertura: Mapping[str, Sequence[tuple[date, date]]] | None = None,
 ) -> ResultadoEntrenamiento:
+    """`cobertura` (ruta_id -> rangos con datos) activa el modo con huecos de ADR-14."""
     from app.ml.pipeline import entrenar_y_evaluar as _entrenar
 
-    return _entrenar(ventas, algoritmo, hiperparametros)
+    return _entrenar(ventas, algoritmo, hiperparametros, cobertura=cobertura)
 
 
 def registrar_modelo(
@@ -117,6 +122,7 @@ def registrar_modelo(
     motivo: str,
     entrenado_por: uuid.UUID | None,
     raiz_artefactos: Path,
+    fuentes_datos: dict[str, Any] | None = None,
 ) -> "ModeloML":
     from app.ml.registry.model_registry import registrar_modelo as _registrar
 
@@ -128,6 +134,7 @@ def registrar_modelo(
         motivo=motivo,
         entrenado_por=entrenado_por,
         raiz_artefactos=raiz_artefactos,
+        fuentes_datos=fuentes_datos,
     )
 
 
