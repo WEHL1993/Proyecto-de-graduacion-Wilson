@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from 'react-router-dom'
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../../app/providers/AuthProvider'
 import { PERMISOS_VISTA } from '../../app/rbac'
 import { AlertBanner, FranjaAlertasCriticas } from '../alerts/AlertBanner'
@@ -11,6 +11,7 @@ const NAV = [
   { to: '/productos', etiqueta: 'Productos', permisos: PERMISOS_VISTA.productos },
   { to: '/ventas/liquidacion', etiqueta: 'Liquidación Diaria', permisos: PERMISOS_VISTA.liquidacion },
   { to: '/ventas/liquidaciones', etiqueta: 'Historial de Liquidaciones', permisos: PERMISOS_VISTA.liquidaciones },
+  { to: '/catalogos/rutas', etiqueta: 'Rutas', permisos: PERMISOS_VISTA.catalogos, prefijo: '/catalogos' },
   { to: '/etl', etiqueta: 'Carga de Datos (ETL)', permisos: PERMISOS_VISTA.etl },
   { to: '/politica-datos', etiqueta: 'Política de Datos', permisos: PERMISOS_VISTA.etlConfig },
   { to: '/reportes', etiqueta: 'Reportes', permisos: PERMISOS_VISTA.reportes },
@@ -19,6 +20,7 @@ const NAV = [
 
 export function AppShell() {
   const { usuario, canAny, logout } = useAuth()
+  const { pathname } = useLocation()
 
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
@@ -30,9 +32,11 @@ export function AppShell() {
               key={n.to}
               to={n.to}
               end
-              className={({ isActive }) =>
-                `whitespace-nowrap rounded-md px-3 py-2 text-sm ${isActive ? 'bg-brand/10 font-semibold text-brand' : 'text-ink hover:bg-surface'}`
-              }
+              className={({ isActive }) => {
+                // «Rutas» agrupa varias pantallas (/catalogos/*): queda activa en todas.
+                const activa = isActive || ('prefijo' in n && pathname.startsWith(n.prefijo))
+                return `whitespace-nowrap rounded-md px-3 py-2 text-sm ${activa ? 'bg-brand/10 font-semibold text-brand' : 'text-ink hover:bg-surface'}`
+              }}
             >
               {n.etiqueta}
             </NavLink>

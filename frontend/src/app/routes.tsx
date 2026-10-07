@@ -3,12 +3,15 @@ import { AppShell } from '../components/layout/AppShell'
 import { PermissionGate } from '../components/common/PermissionGate'
 import { AccessDeniedView } from '../views/AccessDeniedView'
 import { AdminUsersView } from '../views/AdminUsersView'
+import { EmployeesView } from '../views/EmployeesView'
 import { EtlUploadView } from '../views/EtlUploadView'
 import { InventoryView } from '../views/InventoryView'
 import { LiquidacionDiariaView } from '../views/LiquidacionDiariaView'
 import { LiquidacionesHistorialView } from '../views/LiquidacionesHistorialView'
 import { LoginView } from '../views/LoginView'
 import { ModelMonitoringView } from '../views/ModelMonitoringView'
+import { RoutesAdminView } from '../views/RoutesAdminView'
+import { RouteTeamView } from '../views/RouteTeamView'
 import { PoliticaDatosView } from '../views/PoliticaDatosView'
 import { ProductsView } from '../views/ProductsView'
 import { PurchasingView } from '../views/PurchasingView'
@@ -29,6 +32,7 @@ function Inicio() {
   if (canAny(PERMISOS_VISTA.etl)) return <Navigate to="/etl" replace />
   if (canAny(PERMISOS_VISTA.reportes)) return <Navigate to="/reportes" replace />
   if (canAny(PERMISOS_VISTA.usuarios)) return <Navigate to="/usuarios" replace />
+  if (canAny(PERMISOS_VISTA.catalogos)) return <Navigate to="/catalogos/rutas" replace />
   return <Navigate to="/acceso-denegado" replace />
 }
 
@@ -73,6 +77,30 @@ export function AppRoutes() {
           element={
             <PermissionGate guardRoute anyOf={PERMISOS_VISTA.productos}>
               <ProductsView />
+            </PermissionGate>
+          }
+        />
+        <Route
+          path="catalogos/rutas"
+          element={
+            <PermissionGate guardRoute anyOf={PERMISOS_VISTA.catalogos}>
+              <RoutesAdminView />
+            </PermissionGate>
+          }
+        />
+        <Route
+          path="catalogos/rutas/:rutaId/equipo"
+          element={
+            <PermissionGate guardRoute anyOf={PERMISOS_VISTA.catalogos}>
+              <RouteTeamView />
+            </PermissionGate>
+          }
+        />
+        <Route
+          path="catalogos/empleados"
+          element={
+            <PermissionGate guardRoute anyOf={PERMISOS_VISTA.catalogos}>
+              <EmployeesView />
             </PermissionGate>
           }
         />

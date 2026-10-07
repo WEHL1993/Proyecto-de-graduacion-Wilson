@@ -6,6 +6,7 @@ import type { ProductoOut } from '../types'
 import {
   FORM_AJUSTE_VACIO,
   FORM_PRODUCTO_VACIO,
+  presentacion,
   ProductsView,
   stockResultante,
   textoError,
@@ -58,6 +59,9 @@ const producto = (o: Partial<ProductoOut> = {}): ProductoOut => ({
   precio_venta: '12.50',
   costo_unitario: '8.00',
   stock_minimo: '10.00',
+  unidades_por_paquete: 6,
+  medida_ml: 3030,
+  sabor: 'COLA',
   activo: true,
   stock_actual: '40.00',
   stock_reservado: '10.00',
@@ -97,6 +101,37 @@ describe('validarProducto', () => {
   })
   it('limita el SKU a 30 caracteres', () => {
     expect(validarProducto({ ...valido, sku: 'x'.repeat(31) }).sku).toBeDefined()
+  })
+})
+
+describe('presentación en paquete (M02)', () => {
+  const valido = { ...FORM_PRODUCTO_VACIO, sku: 'A-1', nombre: 'Agua', categoria_id: 'c1' }
+  it('los valores por defecto del formulario siguen siendo válidos (compatibilidad)', () => {
+    expect(FORM_PRODUCTO_VACIO.unidades_por_paquete).toBe('1')
+    expect(validarProducto(valido)).toEqual({})
+  })
+  it('exige unidades por paquete entero >= 1', () => {
+    for (const malo of ['0', '', '1.5', '-2', 'x'])
+      expect(validarProducto({ ...valido, unidades_por_paquete: malo }).unidades_por_paquete).toBeDefined()
+    expect(validarProducto({ ...valido, unidades_por_paquete: '24' })).toEqual({})
+  })
+  it('la medida es opcional pero, si se indica, entera >= 1', () => {
+    expect(validarProducto({ ...valido, medida_ml: '' })).toEqual({})
+    expect(validarProducto({ ...valido, medida_ml: '3030' })).toEqual({})
+    expect(validarProducto({ ...valido, medida_ml: '0' }).medida_ml).toBeDefined()
+    expect(validarProducto({ ...valido, medida_ml: '1.5' }).medida_ml).toBeDefined()
+  })
+  it('limita el sabor a 60 caracteres', () => {
+    expect(validarProducto({ ...valido, sabor: 'x'.repeat(61) }).sabor).toBeDefined()
+  })
+  it('formatea la presentación', () => {
+    expect(presentacion({ unidades_por_paquete: 6, medida_ml: 3030, sabor: 'COLA' })).toBe('6 × 3030 ml · COLA')
+    expect(presentacion({ unidades_por_paquete: 12, medida_ml: null, sabor: null })).toBe('12')
+  })
+  it('la tabla muestra la presentación del producto', async () => {
+    montar()
+    const fila = (await screen.findByText('Gaseosa Cola 3030')).closest('tr')!
+    expect(within(fila).getByText('6 × 3030 ml · COLA')).toBeInTheDocument()
   })
 })
 

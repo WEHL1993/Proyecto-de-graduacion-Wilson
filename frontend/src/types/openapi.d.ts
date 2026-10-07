@@ -438,7 +438,11 @@ export interface paths {
          */
         get: operations["listar_rutas_api_v1_catalog_routes_get"];
         put?: never;
-        post?: never;
+        /**
+         * Crear ruta
+         * @description Requiere `catalogos:gestionar`. El código se guarda en mayúsculas. 409 `RUTA_DUPLICADA`.
+         */
+        post: operations["crear_ruta_api_v1_catalog_routes_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -479,6 +483,226 @@ export interface paths {
         get: operations["listar_proveedores_api_v1_catalog_suppliers_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/catalog/routes/admin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Rutas para administración
+         * @description Requiere `catalogos:leer`. Incluye inactivas (filtro `activa`) y el estado del equipo vigente (integrantes, suma de porcentajes).
+         */
+        get: operations["listar_rutas_admin_api_v1_catalog_routes_admin_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/catalog/teams/incomplete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Rutas con equipo incompleto
+         * @description Requiere `catalogos:leer`. Rutas activas sin equipo, sin vendedor o cuyo equipo vigente no suma 100,00.
+         */
+        get: operations["rutas_con_equipo_incompleto_api_v1_catalog_teams_incomplete_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/catalog/teams/misaligned": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Rutas con vendedor desalineado
+         * @description Requiere `catalogos:leer`. Rutas cuyo `vendedor_id` difiere del usuario del empleado vendedor del equipo (dos fuentes de verdad, ADR-18).
+         */
+        get: operations["rutas_desalineadas_api_v1_catalog_teams_misaligned_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/catalog/routes/{ruta_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Detalle de una ruta
+         * @description Requiere `catalogos:leer`. 404 `RUTA_NO_ENCONTRADA`.
+         */
+        get: operations["obtener_ruta_api_v1_catalog_routes__ruta_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Actualizar ruta (parcial)
+         * @description Requiere `catalogos:gestionar`. El código no se modifica. 409 `VENDEDOR_INCOHERENTE` si el usuario contradice al empleado vendedor del equipo vigente.
+         */
+        patch: operations["actualizar_ruta_api_v1_catalog_routes__ruta_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/catalog/routes/{ruta_id}/deactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Desactivar ruta (baja lógica)
+         * @description Requiere `catalogos:gestionar`. Idempotente. 409 `RUTA_CON_LIQUIDACIONES` si hay liquidaciones en borrador; 409 `RUTA_CON_CARGAS_VIGENTES` si hay cargas vigentes.
+         */
+        post: operations["desactivar_ruta_api_v1_catalog_routes__ruta_id__deactivate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/catalog/routes/{ruta_id}/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reactivar ruta
+         * @description Requiere `catalogos:gestionar`. Idempotente.
+         */
+        post: operations["activar_ruta_api_v1_catalog_routes__ruta_id__activate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/catalog/routes/{ruta_id}/team": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Equipo de una ruta
+         * @description Requiere `catalogos:leer`. Equipo vigente e historial de vigencias cerradas.
+         */
+        get: operations["obtener_equipo_api_v1_catalog_routes__ruta_id__team_get"];
+        /**
+         * Reemplazar el equipo de una ruta
+         * @description Requiere `catalogos:gestionar`. Cierra las vigencias anteriores (no las borra) y crea las nuevas. 400 `EQUIPO_NO_SUMA_100`, `EMPLEADO_REPETIDO`, `VENDEDOR_MULTIPLE`, `VIGENCIA_INVALIDA`; 404 `EMPLEADO_NO_ENCONTRADO`; 409 `EMPLEADO_INACTIVO`, `VENDEDOR_INCOHERENTE`, `RUTA_INACTIVA`.
+         */
+        put: operations["reemplazar_equipo_api_v1_catalog_routes__ruta_id__team_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/employees": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar empleados
+         * @description Requiere `catalogos:leer`. Por defecto solo activos; filtro `q` por nombre.
+         */
+        get: operations["listar_empleados_api_v1_employees_get"];
+        put?: never;
+        /**
+         * Crear empleado
+         * @description Requiere `catalogos:gestionar`. `usuario_id` es opcional y único. 404 `USUARIO_NO_ENCONTRADO`; 409 `USUARIO_YA_VINCULADO`.
+         */
+        post: operations["crear_empleado_api_v1_employees_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/employees/{empleado_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Detalle de un empleado
+         * @description Requiere `catalogos:leer`. 404 `EMPLEADO_NO_ENCONTRADO`.
+         */
+        get: operations["obtener_empleado_api_v1_employees__empleado_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Dar de baja un empleado (baja lógica)
+         * @description Requiere `catalogos:gestionar`. Idempotente. 409 `EMPLEADO_EN_USO` si integra el equipo vigente de una ruta.
+         */
+        delete: operations["eliminar_empleado_api_v1_employees__empleado_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Actualizar empleado (parcial)
+         * @description Requiere `catalogos:gestionar`. `usuario_id: null` desvincula al usuario.
+         */
+        patch: operations["actualizar_empleado_api_v1_employees__empleado_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/employees/{empleado_id}/reactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reactivar un empleado
+         * @description Requiere `catalogos:gestionar`. Idempotente.
+         */
+        post: operations["reactivar_empleado_api_v1_employees__empleado_id__reactivate_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1315,6 +1539,81 @@ export interface components {
             /** Pronosticos */
             pronosticos: components["schemas"]["DemandProductForecast"][];
         };
+        /** EmpleadoCreate */
+        EmpleadoCreate: {
+            /** Nombre Completo */
+            nombre_completo: string;
+            /** Usuario Id */
+            usuario_id?: string | null;
+        };
+        /** EmpleadoOut */
+        EmpleadoOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Nombre Completo */
+            nombre_completo: string;
+            /** Usuario Id */
+            usuario_id?: string | null;
+            /** Activo */
+            activo: boolean;
+            /**
+             * Creado En
+             * Format: date-time
+             */
+            creado_en: string;
+        };
+        /** EmpleadoPage */
+        EmpleadoPage: {
+            /** Items */
+            items: components["schemas"]["EmpleadoOut"][];
+            /** Total */
+            total: number;
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+        };
+        /** EmpleadoUpdate */
+        EmpleadoUpdate: {
+            /** Nombre Completo */
+            nombre_completo?: string | null;
+            /** Usuario Id */
+            usuario_id?: string | null;
+        };
+        /**
+         * EquipoReemplazo
+         * @description Reemplaza el equipo vigente: las vigencias anteriores se cierran, no se borran.
+         */
+        EquipoReemplazo: {
+            /** Integrantes */
+            integrantes: components["schemas"]["IntegranteIn"][];
+            /**
+             * Vigente Desde
+             * @description Inicio de la nueva vigencia; por defecto, hoy (UTC).
+             */
+            vigente_desde?: string | null;
+        };
+        /** EquipoRutaOut */
+        EquipoRutaOut: {
+            /**
+             * Ruta Id
+             * Format: uuid
+             */
+            ruta_id: string;
+            /** Integrantes */
+            integrantes: components["schemas"]["IntegranteOut"][];
+            /** Suma Porcentaje */
+            suma_porcentaje: string;
+            /** Suma 100 */
+            suma_100: boolean;
+            /** Tiene Vendedor */
+            tiene_vendedor: boolean;
+            /** Historial */
+            historial: components["schemas"]["IntegranteOut"][];
+        };
         /**
          * ErrorFila
          * @description Error de validación localizado por fila/columna (fila = número de fila en Excel).
@@ -1425,6 +1724,37 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** IntegranteIn */
+        IntegranteIn: {
+            /**
+             * Empleado Id
+             * Format: uuid
+             */
+            empleado_id: string;
+            rol_en_ruta: components["schemas"]["RolEnRuta"];
+            /** Porcentaje Reparto */
+            porcentaje_reparto: number | string;
+        };
+        /** IntegranteOut */
+        IntegranteOut: {
+            /**
+             * Empleado Id
+             * Format: uuid
+             */
+            empleado_id: string;
+            /** Nombre Completo */
+            nombre_completo: string;
+            rol_en_ruta: components["schemas"]["RolEnRuta"];
+            /** Porcentaje Reparto */
+            porcentaje_reparto: string;
+            /**
+             * Vigente Desde
+             * Format: date
+             */
+            vigente_desde: string;
+            /** Vigente Hasta */
+            vigente_hasta?: string | null;
         };
         /** JobStatus */
         JobStatus: {
@@ -2185,6 +2515,15 @@ export interface components {
              * @default 0
              */
             stock_minimo: number | string;
+            /**
+             * Unidades Por Paquete
+             * @default 1
+             */
+            unidades_por_paquete: number;
+            /** Medida Ml */
+            medida_ml?: number | null;
+            /** Sabor */
+            sabor?: string | null;
         };
         /** ProductoOut */
         ProductoOut: {
@@ -2214,6 +2553,12 @@ export interface components {
             costo_unitario: string;
             /** Stock Minimo */
             stock_minimo: string;
+            /** Unidades Por Paquete */
+            unidades_por_paquete: number;
+            /** Medida Ml */
+            medida_ml?: number | null;
+            /** Sabor */
+            sabor?: string | null;
             /** Activo */
             activo: boolean;
             /** Stock Actual */
@@ -2261,6 +2606,12 @@ export interface components {
             costo_unitario?: number | string | null;
             /** Stock Minimo */
             stock_minimo?: number | string | null;
+            /** Unidades Por Paquete */
+            unidades_por_paquete?: number | null;
+            /** Medida Ml */
+            medida_ml?: number | null;
+            /** Sabor */
+            sabor?: string | null;
         };
         /** ProveedorItem */
         ProveedorItem: {
@@ -2336,6 +2687,12 @@ export interface components {
              */
             solicitado_en: string;
         };
+        /**
+         * RolEnRuta
+         * @description Función de un empleado dentro del equipo de una ruta (M02, ADR-18).
+         * @enum {string}
+         */
+        RolEnRuta: "vendedor" | "chofer" | "auxiliar";
         /** RolItem */
         RolItem: {
             /** Id */
@@ -2414,6 +2771,30 @@ export interface components {
             /** Zona */
             zona?: string | null;
         };
+        /** RutaAdminOut */
+        RutaAdminOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Codigo */
+            codigo: string;
+            /** Nombre */
+            nombre: string;
+            /** Zona */
+            zona?: string | null;
+            /** Vendedor Id */
+            vendedor_id?: string | null;
+            /** Activa */
+            activa: boolean;
+            /** Integrantes */
+            integrantes: number;
+            /** Suma Porcentaje */
+            suma_porcentaje: string;
+            /** Equipo Completo */
+            equipo_completo: boolean;
+        };
         /** RutaAsignada */
         RutaAsignada: {
             /**
@@ -2425,6 +2806,75 @@ export interface components {
             codigo: string;
             /** Nombre */
             nombre: string;
+        };
+        /**
+         * RutaCreate
+         * @description El `codigo` se normaliza a mayúsculas y no se modifica después (lo usa el ETL).
+         */
+        RutaCreate: {
+            /** Codigo */
+            codigo: string;
+            /** Nombre */
+            nombre: string;
+            /** Zona */
+            zona?: string | null;
+            /** Vendedor Id */
+            vendedor_id?: string | null;
+        };
+        /**
+         * RutaDesalineada
+         * @description Dos fuentes de verdad del vendedor (ADR-18); se resuelve en M05/M06.
+         */
+        RutaDesalineada: {
+            /**
+             * Ruta Id
+             * Format: uuid
+             */
+            ruta_id: string;
+            /** Codigo */
+            codigo: string;
+            /** Nombre */
+            nombre: string;
+            /** Vendedor Id Ruta */
+            vendedor_id_ruta?: string | null;
+            /**
+             * Empleado Vendedor Id
+             * Format: uuid
+             */
+            empleado_vendedor_id: string;
+            /** Empleado Vendedor */
+            empleado_vendedor: string;
+            /** Usuario Id Empleado */
+            usuario_id_empleado?: string | null;
+        };
+        /** RutaEquipoIncompleto */
+        RutaEquipoIncompleto: {
+            /**
+             * Ruta Id
+             * Format: uuid
+             */
+            ruta_id: string;
+            /** Codigo */
+            codigo: string;
+            /** Nombre */
+            nombre: string;
+            /** Integrantes */
+            integrantes: number;
+            /** Suma Porcentaje */
+            suma_porcentaje: string;
+            /** Tiene Vendedor */
+            tiene_vendedor: boolean;
+            /** Motivos */
+            motivos: string[];
+        };
+        /** RutaUpdate */
+        RutaUpdate: {
+            /** Nombre */
+            nombre?: string | null;
+            /** Zona */
+            zona?: string | null;
+            /** Vendedor Id */
+            vendedor_id?: string | null;
         };
         /**
          * Severidad
@@ -3588,6 +4038,39 @@ export interface operations {
             };
         };
     };
+    crear_ruta_api_v1_catalog_routes_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RutaCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RutaAdminOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     listar_categorias_api_v1_catalog_categories_get: {
         parameters: {
             query?: never;
@@ -3624,6 +4107,464 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProveedorItem"][];
+                };
+            };
+        };
+    };
+    listar_rutas_admin_api_v1_catalog_routes_admin_get: {
+        parameters: {
+            query?: {
+                activa?: boolean | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RutaAdminOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rutas_con_equipo_incompleto_api_v1_catalog_teams_incomplete_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RutaEquipoIncompleto"][];
+                };
+            };
+        };
+    };
+    rutas_desalineadas_api_v1_catalog_teams_misaligned_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RutaDesalineada"][];
+                };
+            };
+        };
+    };
+    obtener_ruta_api_v1_catalog_routes__ruta_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ruta_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RutaAdminOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    actualizar_ruta_api_v1_catalog_routes__ruta_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ruta_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RutaUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RutaAdminOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    desactivar_ruta_api_v1_catalog_routes__ruta_id__deactivate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ruta_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RutaAdminOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    activar_ruta_api_v1_catalog_routes__ruta_id__activate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ruta_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RutaAdminOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    obtener_equipo_api_v1_catalog_routes__ruta_id__team_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ruta_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EquipoRutaOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reemplazar_equipo_api_v1_catalog_routes__ruta_id__team_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ruta_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EquipoReemplazo"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EquipoRutaOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listar_empleados_api_v1_employees_get: {
+        parameters: {
+            query?: {
+                activo?: boolean | null;
+                q?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmpleadoPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    crear_empleado_api_v1_employees_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmpleadoCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmpleadoOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    obtener_empleado_api_v1_employees__empleado_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                empleado_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmpleadoOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    eliminar_empleado_api_v1_employees__empleado_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                empleado_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    actualizar_empleado_api_v1_employees__empleado_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                empleado_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmpleadoUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmpleadoOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reactivar_empleado_api_v1_employees__empleado_id__reactivate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                empleado_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmpleadoOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

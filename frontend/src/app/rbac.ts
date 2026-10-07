@@ -16,6 +16,8 @@ export const PERMISOS_VISTA = {
   liquidaciones: ['liquidaciones:leer'],
   // Política de datos (cierre del arranque ETL): solo Administrador.
   etlConfig: ['etl:configurar'],
+  // M02 (ADR-18): rutas, empleados y equipos de ruta. Escribir exige además `catalogos:gestionar`.
+  catalogos: ['catalogos:leer'],
 } as const
 
 export type Vista = keyof typeof PERMISOS_VISTA

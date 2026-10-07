@@ -22,6 +22,10 @@ export interface FormProducto {
   precio_venta: string
   costo_unitario: string
   stock_minimo: string
+  /** Presentación en paquete (M02): unidades por paquete, medida en ml (opcional) y sabor (opcional). */
+  unidades_por_paquete: string
+  medida_ml: string
+  sabor: string
 }
 
 export const FORM_PRODUCTO_VACIO: FormProducto = {
@@ -33,6 +37,9 @@ export const FORM_PRODUCTO_VACIO: FormProducto = {
   precio_venta: '0',
   costo_unitario: '0',
   stock_minimo: '0',
+  unidades_por_paquete: '1',
+  medida_ml: '',
+  sabor: '',
 }
 
 export const formDesdeProducto = (p: ProductoOut): FormProducto => ({
@@ -44,7 +51,19 @@ export const formDesdeProducto = (p: ProductoOut): FormProducto => ({
   precio_venta: String(p.precio_venta),
   costo_unitario: String(p.costo_unitario),
   stock_minimo: String(p.stock_minimo),
+  unidades_por_paquete: String(p.unidades_por_paquete),
+  medida_ml: p.medida_ml == null ? '' : String(p.medida_ml),
+  sabor: p.sabor ?? '',
 })
+
+/** Presentación legible: «6 × 3030 ml · COLA»; sin medida en ml solo se muestran las unidades. */
+export function presentacion(p: Pick<ProductoOut, 'unidades_por_paquete' | 'medida_ml' | 'sabor'>): string {
+  const medida = p.medida_ml == null ? '' : ` × ${p.medida_ml} ml`
+  const sabor = p.sabor ? ` · ${p.sabor}` : ''
+  return `${p.unidades_por_paquete}${medida}${sabor}`
+}
+
+const esEnteroPositivo = (v: string) => /^\d+$/.test(v.trim()) && Number(v) >= 1
 
 const esNoNegativo = (v: string) => v.trim() !== '' && Number.isFinite(Number(v)) && Number(v) >= 0
 
@@ -59,6 +78,9 @@ export function validarProducto(f: FormProducto): Partial<Record<keyof FormProdu
   if (!esNoNegativo(f.precio_venta)) e.precio_venta = 'Debe ser un número ≥ 0.'
   if (!esNoNegativo(f.costo_unitario)) e.costo_unitario = 'Debe ser un número ≥ 0.'
   if (!esNoNegativo(f.stock_minimo)) e.stock_minimo = 'Debe ser un número ≥ 0.'
+  if (!esEnteroPositivo(f.unidades_por_paquete)) e.unidades_por_paquete = 'Entero ≥ 1.'
+  if (f.medida_ml.trim() !== '' && !esEnteroPositivo(f.medida_ml)) e.medida_ml = 'Entero ≥ 1 o vacío.'
+  if (f.sabor.trim().length > 60) e.sabor = 'Máximo 60 caracteres.'
   return e
 }
 
@@ -71,6 +93,9 @@ const aCreate = (f: FormProducto): ProductoCreate => ({
   precio_venta: f.precio_venta.trim(),
   costo_unitario: f.costo_unitario.trim(),
   stock_minimo: f.stock_minimo.trim(),
+  unidades_por_paquete: Number(f.unidades_por_paquete),
+  medida_ml: f.medida_ml.trim() === '' ? null : Number(f.medida_ml),
+  sabor: f.sabor.trim() || null,
 })
 
 const aUpdate = (f: FormProducto): ProductoUpdate => aCreate(f)
@@ -223,6 +248,20 @@ function ModalProducto({ producto, onCerrar }: { producto: ProductoOut | null; o
           <Campo etiqueta="Stock mínimo">
             <input inputMode="decimal" value={form.stock_minimo} onChange={(e) => set('stock_minimo', e.target.value)} className={CLASE_INPUT} />
             {mostrar('stock_minimo')}
+          </Campo>
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          <Campo etiqueta="Unidades por paquete">
+            <input inputMode="numeric" value={form.unidades_por_paquete} onChange={(e) => set('unidades_por_paquete', e.target.value)} className={CLASE_INPUT} />
+            {mostrar('unidades_por_paquete')}
+          </Campo>
+          <Campo etiqueta="Medida (ml, opcional)">
+            <input inputMode="numeric" value={form.medida_ml} onChange={(e) => set('medida_ml', e.target.value)} className={CLASE_INPUT} />
+            {mostrar('medida_ml')}
+          </Campo>
+          <Campo etiqueta="Sabor (opcional)">
+            <input value={form.sabor} onChange={(e) => set('sabor', e.target.value)} className={CLASE_INPUT} maxLength={60} />
+            {mostrar('sabor')}
           </Campo>
         </div>
         {edicion && (
@@ -438,12 +477,13 @@ export function ProductsView() {
         {!!productos.data?.items.length && (
           <>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[760px] text-sm">
+              <table className="w-full min-w-[860px] text-sm">
                 <caption className="sr-only">Catálogo de productos</caption>
                 <thead>
                   <tr className="border-b border-line text-left text-xs text-muted">
                     <th className="py-2 pr-3">Producto</th>
                     <th className="py-2 pr-3">Categoría</th>
+                    <th className="py-2 pr-3">Presentación</th>
                     <th className="py-2 pr-3 text-right">Precio</th>
                     <th className="py-2 pr-3 text-right">Stock</th>
                     <th className="py-2 pr-3 text-right">Disponible</th>
@@ -463,6 +503,7 @@ export function ProductsView() {
                           )}
                         </td>
                         <td className="py-2 pr-3 text-xs">{p.categoria}</td>
+                        <td className="num py-2 pr-3 text-xs">{presentacion(p)}</td>
                         <td className="num py-2 pr-3 text-right">{fmt(p.precio_venta)}</td>
                         <td className="num py-2 pr-3 text-right">{fmt(p.stock_actual)}</td>
                         <td className={`num py-2 pr-3 text-right font-medium ${p.activo && bajo ? 'text-bad' : ''}`}>
