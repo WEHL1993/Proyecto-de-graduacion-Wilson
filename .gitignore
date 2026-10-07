@@ -77,6 +77,7 @@ backend/data/
 data/staging/*
 data/rejected/*
 data/processed/*
+data/reportes/*
 !data/**/.gitkeep
 *.tmp
 *.temp
@@ -102,3 +103,8 @@ desktop.ini
 *~
 
 CLAUDE.md
+
+# Respaldos de BD (contienen datos reales y hashes): nunca versionar
+*.sql
+!infra/postgres/init/*.sql
+respaldos/

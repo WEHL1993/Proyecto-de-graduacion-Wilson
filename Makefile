@@ -17,7 +17,7 @@ BACKEND := backend
 
 .DEFAULT_GOAL := help
 .PHONY: help env install up down logs ps migrate migrate-local downgrade revision \
-        openapi openapi-check seed frontend-test frontend-build test test-docker lint format clean-db
+        openapi openapi-check seed seed-catalogos frontend-test frontend-build test test-docker lint format clean-db
 
 help: ## Muestra esta ayuda
 	@$(SYS_PY) -c "import re; [print(f'  make {m[0]:<15} {m[1]}') for m in re.findall(r'^([a-zA-Z_-]+):.*?## (.*)$$', open('Makefile', encoding='utf-8').read(), re.M)]"
@@ -66,6 +66,9 @@ openapi-check: ## Falla si docs/architecture/openapi.yaml está desactualizado
 
 seed: ## Aplica seeds de roles, permisos, usuario admin y parametros_sistema
 	cd $(BACKEND) && $(VENV_PY) -m app.db.seeds.seed_rbac
+
+seed-catalogos: ## Importa catálogos desde data/raw (dry-run; escribir: make seed-catalogos ARGS=--aplicar)
+	cd $(BACKEND) && $(VENV_PY) -m app.db.seeds.importar_catalogos $(ARGS)
 
 # ---------------------------------------------------------------- Calidad
 frontend-test: ## Pruebas del frontend (vitest)
