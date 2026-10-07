@@ -9,6 +9,10 @@ erDiagram
     proveedores ||--o{ productos : "suministra"
     proveedores ||--o{ usuarios : "cuenta_de_acceso"
     usuarios ||--o{ rutas : "vendedor_asignado"
+    productos ||--o{ producto_alias_excel : "se_llama_en_excel"
+    usuarios |o--o| empleados : "vinculo_opcional"
+    rutas ||--o{ equipo_ruta : "se_integra_por"
+    empleados ||--o{ equipo_ruta : "integra"
 
     productos ||--|| inventario : "existencia"
     productos ||--o{ kardex : "movimientos"
@@ -95,7 +99,34 @@ erDiagram
         numeric precio_venta
         numeric costo_unitario
         numeric stock_minimo
+        smallint unidades_por_paquete "default 1, CHECK > 0 (ADR-18)"
+        integer medida_ml "nullable, CHECK > 0 (ADR-18)"
+        varchar sabor "nullable (ADR-18)"
         boolean activo
+        timestamptz creado_en
+    }
+    producto_alias_excel {
+        uuid id PK
+        uuid producto_id FK
+        varchar alias UK "clave medida-SABOR del Excel (ADR-18)"
+        timestamptz creado_en
+    }
+    empleados {
+        uuid id PK
+        varchar nombre_completo
+        uuid usuario_id FK "nullable, UK (ADR-18)"
+        boolean activo
+        timestamptz creado_en
+        timestamptz actualizado_en
+    }
+    equipo_ruta {
+        uuid id PK
+        uuid ruta_id FK
+        uuid empleado_id FK
+        varchar rol_en_ruta "vendedor|chofer|auxiliar"
+        numeric porcentaje_reparto "0..100 (suma 100 la valida el servicio)"
+        date vigente_desde
+        date vigente_hasta "NULL = vigente"
         timestamptz creado_en
     }
     rutas {

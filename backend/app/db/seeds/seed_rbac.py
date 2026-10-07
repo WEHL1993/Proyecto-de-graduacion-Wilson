@@ -53,6 +53,8 @@ PERMISOS: dict[str, str] = {
     "liquidaciones:leer": "Consulta del historial de liquidaciones y su cuadre de caja.",
     "etl:configurar": "Cierre del arranque ETL y fuente de reentrenamiento (política de datos).",
     "bitacora:leer": "Consulta de la bitácora de auditoría del sistema (ADR-15).",
+    "catalogos:leer": "Consulta de rutas, empleados y equipos de ruta (M02, ADR-18).",
+    "catalogos:gestionar": "Alta y edición de rutas, empleados y equipos de ruta (M02, ADR-18).",
 }
 
 # Matriz 1.4 de la especificación (columna Worker se excluye: no es un rol de login).
@@ -66,6 +68,7 @@ MATRIZ_ROL_PERMISO: dict[str, tuple[str, ...]] = {
         "productos:crear",
         "productos:editar",
         "productos:eliminar",
+        "catalogos:leer",
         "alertas:leer",
     ),
     NombreRol.ENCARGADO_VENTAS: (
@@ -97,6 +100,7 @@ MATRIZ_ROL_PERMISO: dict[str, tuple[str, ...]] = {
         "ml:reentrenar",
         "alertas:leer",
         "liquidaciones:leer",
+        "catalogos:leer",
     ),
     NombreRol.PROVEEDOR: ("pedido_proveedor:confirmar",),
     NombreRol.LIQUIDADOR: (

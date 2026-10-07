@@ -8,6 +8,7 @@ from app.api.v1 import (
     auth,
     bitacora,
     catalog,
+    employees,
     etl,
     inventory,
     liquidaciones,
@@ -30,6 +31,7 @@ api_router.include_router(products.router)
 api_router.include_router(ml.router)
 api_router.include_router(alerts.router)
 api_router.include_router(catalog.router)
+api_router.include_router(employees.router)
 api_router.include_router(purchasing.router)
 api_router.include_router(users.router)
 api_router.include_router(reports.router)

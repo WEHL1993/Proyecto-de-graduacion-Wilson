@@ -7,7 +7,17 @@ Importar este paquete garantiza que `Base.metadata` contenga todas las tablas
 from app.domain.models.auth import Permiso, Rol, RolPermiso, Usuario, UsuarioRol
 from app.domain.models.base import Base
 from app.domain.models.bitacora import Bitacora
-from app.domain.models.catalog import Categoria, Inventario, Kardex, Producto, Proveedor, Ruta
+from app.domain.models.catalog import (
+    Categoria,
+    Empleado,
+    EquipoRuta,
+    Inventario,
+    Kardex,
+    Producto,
+    ProductoAliasExcel,
+    Proveedor,
+    Ruta,
+)
 from app.domain.models.ml import (
     Alerta,
     JobML,
@@ -38,6 +48,9 @@ __all__ = [
     "Proveedor",
     "Producto",
     "Ruta",
+    "ProductoAliasExcel",
+    "Empleado",
+    "EquipoRuta",
     "Inventario",
     "Kardex",
     # Operación comercial

@@ -954,6 +954,33 @@ paths:
                 title: Response Listar Rutas Api V1 Catalog Routes Get
       security:
       - HTTPBearer: []
+    post:
+      tags:
+      - Catalog
+      summary: Crear ruta
+      description: Requiere `catalogos:gestionar`. El código se guarda en mayúsculas. 409 `RUTA_DUPLICADA`.
+      operationId: crear_ruta_api_v1_catalog_routes_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RutaCreate'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RutaAdminOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
   /api/v1/catalog/categories:
     get:
       tags:
@@ -992,6 +1019,482 @@ paths:
                 title: Response Listar Proveedores Api V1 Catalog Suppliers Get
       security:
       - HTTPBearer: []
+  /api/v1/catalog/routes/admin:
+    get:
+      tags:
+      - Catalog
+      summary: Rutas para administración
+      description: Requiere `catalogos:leer`. Incluye inactivas (filtro `activa`) y el estado del equipo
+        vigente (integrantes, suma de porcentajes).
+      operationId: listar_rutas_admin_api_v1_catalog_routes_admin_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: activa
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Activa
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RutaAdminOut'
+                title: Response Listar Rutas Admin Api V1 Catalog Routes Admin Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/catalog/teams/incomplete:
+    get:
+      tags:
+      - Catalog
+      summary: Rutas con equipo incompleto
+      description: Requiere `catalogos:leer`. Rutas activas sin equipo, sin vendedor o cuyo equipo vigente
+        no suma 100,00.
+      operationId: rutas_con_equipo_incompleto_api_v1_catalog_teams_incomplete_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/RutaEquipoIncompleto'
+                type: array
+                title: Response Rutas Con Equipo Incompleto Api V1 Catalog Teams Incomplete Get
+      security:
+      - HTTPBearer: []
+  /api/v1/catalog/teams/misaligned:
+    get:
+      tags:
+      - Catalog
+      summary: Rutas con vendedor desalineado
+      description: Requiere `catalogos:leer`. Rutas cuyo `vendedor_id` difiere del usuario del empleado
+        vendedor del equipo (dos fuentes de verdad, ADR-18).
+      operationId: rutas_desalineadas_api_v1_catalog_teams_misaligned_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/RutaDesalineada'
+                type: array
+                title: Response Rutas Desalineadas Api V1 Catalog Teams Misaligned Get
+      security:
+      - HTTPBearer: []
+  /api/v1/catalog/routes/{ruta_id}:
+    get:
+      tags:
+      - Catalog
+      summary: Detalle de una ruta
+      description: Requiere `catalogos:leer`. 404 `RUTA_NO_ENCONTRADA`.
+      operationId: obtener_ruta_api_v1_catalog_routes__ruta_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: ruta_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Ruta Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RutaAdminOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    patch:
+      tags:
+      - Catalog
+      summary: Actualizar ruta (parcial)
+      description: Requiere `catalogos:gestionar`. El código no se modifica. 409 `VENDEDOR_INCOHERENTE`
+        si el usuario contradice al empleado vendedor del equipo vigente.
+      operationId: actualizar_ruta_api_v1_catalog_routes__ruta_id__patch
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: ruta_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Ruta Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RutaUpdate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RutaAdminOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/catalog/routes/{ruta_id}/deactivate:
+    post:
+      tags:
+      - Catalog
+      summary: Desactivar ruta (baja lógica)
+      description: Requiere `catalogos:gestionar`. Idempotente. 409 `RUTA_CON_LIQUIDACIONES` si hay liquidaciones
+        en borrador; 409 `RUTA_CON_CARGAS_VIGENTES` si hay cargas vigentes.
+      operationId: desactivar_ruta_api_v1_catalog_routes__ruta_id__deactivate_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: ruta_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Ruta Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RutaAdminOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/catalog/routes/{ruta_id}/activate:
+    post:
+      tags:
+      - Catalog
+      summary: Reactivar ruta
+      description: Requiere `catalogos:gestionar`. Idempotente.
+      operationId: activar_ruta_api_v1_catalog_routes__ruta_id__activate_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: ruta_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Ruta Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RutaAdminOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/catalog/routes/{ruta_id}/team:
+    get:
+      tags:
+      - Catalog
+      summary: Equipo de una ruta
+      description: Requiere `catalogos:leer`. Equipo vigente e historial de vigencias cerradas.
+      operationId: obtener_equipo_api_v1_catalog_routes__ruta_id__team_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: ruta_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Ruta Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EquipoRutaOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    put:
+      tags:
+      - Catalog
+      summary: Reemplazar el equipo de una ruta
+      description: Requiere `catalogos:gestionar`. Cierra las vigencias anteriores (no las borra) y crea
+        las nuevas. 400 `EQUIPO_NO_SUMA_100`, `EMPLEADO_REPETIDO`, `VENDEDOR_MULTIPLE`, `VIGENCIA_INVALIDA`;
+        404 `EMPLEADO_NO_ENCONTRADO`; 409 `EMPLEADO_INACTIVO`, `VENDEDOR_INCOHERENTE`, `RUTA_INACTIVA`.
+      operationId: reemplazar_equipo_api_v1_catalog_routes__ruta_id__team_put
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: ruta_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Ruta Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EquipoReemplazo'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EquipoRutaOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/employees:
+    get:
+      tags:
+      - Employees
+      summary: Listar empleados
+      description: Requiere `catalogos:leer`. Por defecto solo activos; filtro `q` por nombre.
+      operationId: listar_empleados_api_v1_employees_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: activo
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          default: true
+          title: Activo
+      - name: q
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            maxLength: 100
+          - type: 'null'
+          title: Q
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 200
+          minimum: 1
+          default: 50
+          title: Limit
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+          title: Offset
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmpleadoPage'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - Employees
+      summary: Crear empleado
+      description: Requiere `catalogos:gestionar`. `usuario_id` es opcional y único. 404 `USUARIO_NO_ENCONTRADO`;
+        409 `USUARIO_YA_VINCULADO`.
+      operationId: crear_empleado_api_v1_employees_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmpleadoCreate'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmpleadoOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/employees/{empleado_id}:
+    get:
+      tags:
+      - Employees
+      summary: Detalle de un empleado
+      description: Requiere `catalogos:leer`. 404 `EMPLEADO_NO_ENCONTRADO`.
+      operationId: obtener_empleado_api_v1_employees__empleado_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: empleado_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Empleado Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmpleadoOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    patch:
+      tags:
+      - Employees
+      summary: Actualizar empleado (parcial)
+      description: 'Requiere `catalogos:gestionar`. `usuario_id: null` desvincula al usuario.'
+      operationId: actualizar_empleado_api_v1_employees__empleado_id__patch
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: empleado_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Empleado Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmpleadoUpdate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmpleadoOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - Employees
+      summary: Dar de baja un empleado (baja lógica)
+      description: Requiere `catalogos:gestionar`. Idempotente. 409 `EMPLEADO_EN_USO` si integra el equipo
+        vigente de una ruta.
+      operationId: eliminar_empleado_api_v1_employees__empleado_id__delete
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: empleado_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Empleado Id
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/employees/{empleado_id}/reactivate:
+    post:
+      tags:
+      - Employees
+      summary: Reactivar un empleado
+      description: Requiere `catalogos:gestionar`. Idempotente.
+      operationId: reactivar_empleado_api_v1_employees__empleado_id__reactivate_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: empleado_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Empleado Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmpleadoOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/purchasing/suggestions:
     get:
       tags:
@@ -2801,6 +3304,148 @@ components:
       - generado_en
       - pronosticos
       title: DemandResponse
+    EmpleadoCreate:
+      properties:
+        nombre_completo:
+          type: string
+          maxLength: 150
+          minLength: 2
+          title: Nombre Completo
+        usuario_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Usuario Id
+      type: object
+      required:
+      - nombre_completo
+      title: EmpleadoCreate
+    EmpleadoOut:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        nombre_completo:
+          type: string
+          title: Nombre Completo
+        usuario_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Usuario Id
+        activo:
+          type: boolean
+          title: Activo
+        creado_en:
+          type: string
+          format: date-time
+          title: Creado En
+      type: object
+      required:
+      - id
+      - nombre_completo
+      - activo
+      - creado_en
+      title: EmpleadoOut
+    EmpleadoPage:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/EmpleadoOut'
+          type: array
+          title: Items
+        total:
+          type: integer
+          title: Total
+        limit:
+          type: integer
+          title: Limit
+        offset:
+          type: integer
+          title: Offset
+      type: object
+      required:
+      - items
+      - total
+      - limit
+      - offset
+      title: EmpleadoPage
+    EmpleadoUpdate:
+      properties:
+        nombre_completo:
+          anyOf:
+          - type: string
+            maxLength: 150
+            minLength: 2
+          - type: 'null'
+          title: Nombre Completo
+        usuario_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Usuario Id
+      type: object
+      title: EmpleadoUpdate
+    EquipoReemplazo:
+      properties:
+        integrantes:
+          items:
+            $ref: '#/components/schemas/IntegranteIn'
+          type: array
+          maxItems: 20
+          minItems: 1
+          title: Integrantes
+        vigente_desde:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Vigente Desde
+          description: Inicio de la nueva vigencia; por defecto, hoy (UTC).
+      type: object
+      required:
+      - integrantes
+      title: EquipoReemplazo
+      description: 'Reemplaza el equipo vigente: las vigencias anteriores se cierran, no se borran.'
+    EquipoRutaOut:
+      properties:
+        ruta_id:
+          type: string
+          format: uuid
+          title: Ruta Id
+        integrantes:
+          items:
+            $ref: '#/components/schemas/IntegranteOut'
+          type: array
+          title: Integrantes
+        suma_porcentaje:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Suma Porcentaje
+        suma_100:
+          type: boolean
+          title: Suma 100
+        tiene_vendedor:
+          type: boolean
+          title: Tiene Vendedor
+        historial:
+          items:
+            $ref: '#/components/schemas/IntegranteOut'
+          type: array
+          title: Historial
+      type: object
+      required:
+      - ruta_id
+      - integrantes
+      - suma_porcentaje
+      - suma_100
+      - tiene_vendedor
+      - historial
+      title: EquipoRutaOut
     ErrorFila:
       properties:
         fila:
@@ -2982,6 +3627,61 @@ components:
           title: Detail
       type: object
       title: HTTPValidationError
+    IntegranteIn:
+      properties:
+        empleado_id:
+          type: string
+          format: uuid
+          title: Empleado Id
+        rol_en_ruta:
+          $ref: '#/components/schemas/RolEnRuta'
+        porcentaje_reparto:
+          anyOf:
+          - type: number
+            maximum: 100.0
+            minimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*(?:\d{0,3}|(?=[\d.]{1,6}0*$)\d{0,3}\.\d{0,2}0*$)
+          title: Porcentaje Reparto
+      type: object
+      required:
+      - empleado_id
+      - rol_en_ruta
+      - porcentaje_reparto
+      title: IntegranteIn
+    IntegranteOut:
+      properties:
+        empleado_id:
+          type: string
+          format: uuid
+          title: Empleado Id
+        nombre_completo:
+          type: string
+          title: Nombre Completo
+        rol_en_ruta:
+          $ref: '#/components/schemas/RolEnRuta'
+        porcentaje_reparto:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Porcentaje Reparto
+        vigente_desde:
+          type: string
+          format: date
+          title: Vigente Desde
+        vigente_hasta:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Vigente Hasta
+      type: object
+      required:
+      - empleado_id
+      - nombre_completo
+      - rol_en_ruta
+      - porcentaje_reparto
+      - vigente_desde
+      title: IntegranteOut
     JobStatus:
       properties:
         job_id:
@@ -4281,6 +4981,24 @@ components:
             pattern: ^(?!^[-+.]*$)[+-]?0*(?:\d{0,10}|(?=[\d.]{1,13}0*$)\d{0,10}\.\d{0,2}0*$)
           title: Stock Minimo
           default: '0'
+        unidades_por_paquete:
+          type: integer
+          maximum: 1000.0
+          minimum: 1.0
+          title: Unidades Por Paquete
+          default: 1
+        medida_ml:
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
+          title: Medida Ml
+        sabor:
+          anyOf:
+          - type: string
+            maxLength: 60
+          - type: 'null'
+          title: Sabor
       type: object
       required:
       - sku
@@ -4327,6 +5045,19 @@ components:
           type: string
           pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
           title: Stock Minimo
+        unidades_por_paquete:
+          type: integer
+          title: Unidades Por Paquete
+        medida_ml:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Medida Ml
+        sabor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Sabor
         activo:
           type: boolean
           title: Activo
@@ -4357,6 +5088,7 @@ components:
       - precio_venta
       - costo_unitario
       - stock_minimo
+      - unidades_por_paquete
       - activo
       - stock_actual
       - stock_reservado
@@ -4445,6 +5177,25 @@ components:
             pattern: ^(?!^[-+.]*$)[+-]?0*(?:\d{0,10}|(?=[\d.]{1,13}0*$)\d{0,10}\.\d{0,2}0*$)
           - type: 'null'
           title: Stock Minimo
+        unidades_por_paquete:
+          anyOf:
+          - type: integer
+            maximum: 1000.0
+            minimum: 1.0
+          - type: 'null'
+          title: Unidades Por Paquete
+        medida_ml:
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
+          title: Medida Ml
+        sabor:
+          anyOf:
+          - type: string
+            maxLength: 60
+          - type: 'null'
+          title: Sabor
       type: object
       title: ProductoUpdate
       description: 'Actualización parcial. No modifica existencias (usar `POST /inventory/adjustments`)
@@ -4562,6 +5313,14 @@ components:
       - estado
       - solicitado_en
       title: RetrainResponse
+    RolEnRuta:
+      type: string
+      enum:
+      - vendedor
+      - chofer
+      - auxiliar
+      title: RolEnRuta
+      description: Función de un empleado dentro del equipo de una ruta (M02, ADR-18).
     RolItem:
       properties:
         id:
@@ -4714,6 +5473,52 @@ components:
       - codigo
       - nombre
       title: RouteItem
+    RutaAdminOut:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        codigo:
+          type: string
+          title: Codigo
+        nombre:
+          type: string
+          title: Nombre
+        zona:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Zona
+        vendedor_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Vendedor Id
+        activa:
+          type: boolean
+          title: Activa
+        integrantes:
+          type: integer
+          title: Integrantes
+        suma_porcentaje:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Suma Porcentaje
+        equipo_completo:
+          type: boolean
+          title: Equipo Completo
+      type: object
+      required:
+      - id
+      - codigo
+      - nombre
+      - activa
+      - integrantes
+      - suma_porcentaje
+      - equipo_completo
+      title: RutaAdminOut
     RutaAsignada:
       properties:
         id:
@@ -4732,6 +5537,136 @@ components:
       - codigo
       - nombre
       title: RutaAsignada
+    RutaCreate:
+      properties:
+        codigo:
+          type: string
+          maxLength: 20
+          minLength: 1
+          title: Codigo
+        nombre:
+          type: string
+          maxLength: 100
+          minLength: 2
+          title: Nombre
+        zona:
+          anyOf:
+          - type: string
+            maxLength: 100
+          - type: 'null'
+          title: Zona
+        vendedor_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Vendedor Id
+      type: object
+      required:
+      - codigo
+      - nombre
+      title: RutaCreate
+      description: El `codigo` se normaliza a mayúsculas y no se modifica después (lo usa el ETL).
+    RutaDesalineada:
+      properties:
+        ruta_id:
+          type: string
+          format: uuid
+          title: Ruta Id
+        codigo:
+          type: string
+          title: Codigo
+        nombre:
+          type: string
+          title: Nombre
+        vendedor_id_ruta:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Vendedor Id Ruta
+        empleado_vendedor_id:
+          type: string
+          format: uuid
+          title: Empleado Vendedor Id
+        empleado_vendedor:
+          type: string
+          title: Empleado Vendedor
+        usuario_id_empleado:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Usuario Id Empleado
+      type: object
+      required:
+      - ruta_id
+      - codigo
+      - nombre
+      - empleado_vendedor_id
+      - empleado_vendedor
+      title: RutaDesalineada
+      description: Dos fuentes de verdad del vendedor (ADR-18); se resuelve en M05/M06.
+    RutaEquipoIncompleto:
+      properties:
+        ruta_id:
+          type: string
+          format: uuid
+          title: Ruta Id
+        codigo:
+          type: string
+          title: Codigo
+        nombre:
+          type: string
+          title: Nombre
+        integrantes:
+          type: integer
+          title: Integrantes
+        suma_porcentaje:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Suma Porcentaje
+        tiene_vendedor:
+          type: boolean
+          title: Tiene Vendedor
+        motivos:
+          items:
+            type: string
+          type: array
+          title: Motivos
+      type: object
+      required:
+      - ruta_id
+      - codigo
+      - nombre
+      - integrantes
+      - suma_porcentaje
+      - tiene_vendedor
+      - motivos
+      title: RutaEquipoIncompleto
+    RutaUpdate:
+      properties:
+        nombre:
+          anyOf:
+          - type: string
+            maxLength: 100
+            minLength: 2
+          - type: 'null'
+          title: Nombre
+        zona:
+          anyOf:
+          - type: string
+            maxLength: 100
+          - type: 'null'
+          title: Zona
+        vendedor_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Vendedor Id
+      type: object
+      title: RutaUpdate
     Severidad:
       type: string
       enum:

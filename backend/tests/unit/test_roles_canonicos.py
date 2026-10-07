@@ -49,6 +49,12 @@ MATRIZ_ANTERIOR: dict[str, set[str]] = {
     "Proveedor": {"pedido_proveedor:confirmar"},
     "Liquidador": {"liquidaciones:registrar", "liquidaciones:cerrar", "liquidaciones:leer"},
 }
+# M02 (ADR-18): únicos permisos añadidos a la matriz tras el renombrado. Ningún otro rol cambia.
+ALTAS_M02: dict[str, set[str]] = {
+    "Admin": {"catalogos:leer", "catalogos:gestionar"},
+    "Inventario": {"catalogos:leer"},
+    "Gerente": {"catalogos:leer"},
+}
 RENOMBRE = {
     "Admin": NombreRol.ADMINISTRADOR,
     "Inventario": NombreRol.ENCARGADO_INVENTARIO,
@@ -69,7 +75,8 @@ def test_los_roles_sembrados_son_exactamente_los_canonicos():
 
 @pytest.mark.parametrize("anterior", list(MATRIZ_ANTERIOR))
 def test_cada_rol_conserva_los_mismos_permisos_tras_el_renombrado(anterior):
-    assert set(MATRIZ_ROL_PERMISO[RENOMBRE[anterior]]) == MATRIZ_ANTERIOR[anterior]
+    esperado = MATRIZ_ANTERIOR[anterior] | ALTAS_M02.get(anterior, set())
+    assert set(MATRIZ_ROL_PERMISO[RENOMBRE[anterior]]) == esperado
 
 
 def test_liquidador_tiene_exactamente_tres_permisos():

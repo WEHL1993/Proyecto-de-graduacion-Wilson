@@ -21,6 +21,14 @@ class NombreRol(StrEnum):
     LIQUIDADOR = "Liquidador"
 
 
+class RolEnRuta(StrEnum):
+    """Función de un empleado dentro del equipo de una ruta (M02, ADR-18)."""
+
+    VENDEDOR = "vendedor"
+    CHOFER = "chofer"
+    AUXILIAR = "auxiliar"
+
+
 class EstadoCarga(StrEnum):
     BORRADOR = "borrador"
     PENDIENTE_APROBACION = "pendiente_aprobacion"

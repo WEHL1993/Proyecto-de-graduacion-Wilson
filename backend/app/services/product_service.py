@@ -37,6 +37,9 @@ def _a_dto(producto: Producto, inv: Inventario | None, categoria: str) -> Produc
         precio_venta=producto.precio_venta,
         costo_unitario=producto.costo_unitario,
         stock_minimo=producto.stock_minimo,
+        unidades_por_paquete=producto.unidades_por_paquete,
+        medida_ml=producto.medida_ml,
+        sabor=producto.sabor,
         activo=producto.activo,
         stock_actual=actual,
         stock_reservado=reservado,
@@ -57,6 +60,11 @@ def _normalizar_sku(sku: str) -> str:
     if not limpio:
         raise AppError("SKU_INVALIDO", "El SKU no puede estar vacío.")
     return limpio
+
+
+def _limpiar_sabor(sabor: str | None) -> str | None:
+    limpio = (sabor or "").strip()
+    return limpio or None
 
 
 def _obtener(db: Session, producto_id: uuid.UUID, *, bloquear: bool = False) -> Producto:
@@ -123,6 +131,7 @@ def crear(db: Session, datos: ProductoCreate, actor_id: uuid.UUID) -> ProductoOu
 
     campos = datos.model_dump()
     campos.update(sku=sku, nombre=datos.nombre.strip(), unidad_medida=datos.unidad_medida.strip())
+    campos["sabor"] = _limpiar_sabor(datos.sabor)
     try:
         producto = product_repo.crear(db, campos)
         db.commit()
@@ -161,6 +170,12 @@ def actualizar(
         producto.costo_unitario = datos.costo_unitario
     if datos.stock_minimo is not None:
         producto.stock_minimo = datos.stock_minimo
+    if datos.unidades_por_paquete is not None:
+        producto.unidades_por_paquete = datos.unidades_por_paquete
+    if "medida_ml" in campos:  # None explícito = quitar la medida
+        producto.medida_ml = datos.medida_ml
+    if "sabor" in campos:
+        producto.sabor = _limpiar_sabor(datos.sabor)
 
     try:
         db.commit()

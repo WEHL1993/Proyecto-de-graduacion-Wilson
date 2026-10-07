@@ -16,6 +16,9 @@ class ProductoCreate(BaseModel):
     precio_venta: Decimal = Field(default=Decimal("0"), ge=0, max_digits=14, decimal_places=2)
     costo_unitario: Decimal = Field(default=Decimal("0"), ge=0, max_digits=14, decimal_places=2)
     stock_minimo: Decimal = Field(default=Decimal("0"), ge=0, max_digits=12, decimal_places=2)
+    unidades_por_paquete: int = Field(default=1, ge=1, le=1000)
+    medida_ml: int | None = Field(default=None, ge=1)
+    sabor: str | None = Field(default=None, max_length=60)
 
 
 class ProductoUpdate(BaseModel):
@@ -30,6 +33,9 @@ class ProductoUpdate(BaseModel):
     precio_venta: Decimal | None = Field(default=None, ge=0, max_digits=14, decimal_places=2)
     costo_unitario: Decimal | None = Field(default=None, ge=0, max_digits=14, decimal_places=2)
     stock_minimo: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
+    unidades_por_paquete: int | None = Field(default=None, ge=1, le=1000)
+    medida_ml: int | None = Field(default=None, ge=1)
+    sabor: str | None = Field(default=None, max_length=60)
 
 
 class ProductoOut(BaseModel):
@@ -43,6 +49,9 @@ class ProductoOut(BaseModel):
     precio_venta: Decimal
     costo_unitario: Decimal
     stock_minimo: Decimal
+    unidades_por_paquete: int
+    medida_ml: int | None = None
+    sabor: str | None = None
     activo: bool
     stock_actual: Decimal
     stock_reservado: Decimal
