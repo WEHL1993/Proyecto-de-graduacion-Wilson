@@ -66,8 +66,9 @@ def crear_orden(db: DBSession, usuario: Gestiona, solicitud: PedidoCreate) -> Pe
     response_model=PedidoPage,
     summary="Pedidos a proveedor",
     description=(
-        "Requiere `pedido_proveedor:gestionar` o `inventario:ajustar` (Bodega, para recibir): "
-        "todos los pedidos; o `pedido_proveedor:confirmar`: solo los del proveedor del usuario."
+        "Requiere `pedido_proveedor:gestionar` o `inventario:ajustar` (EncargadoBodega, para "
+        "recibir): todos los pedidos; o `pedido_proveedor:confirmar`: solo los del "
+        "proveedor del usuario."
     ),
 )
 def listar_ordenes(
@@ -132,8 +133,8 @@ def confirmar_orden(
     response_model=PedidoOut,
     summary="Recepción física en bodega (confirmado → recibido)",
     description=(
-        "Requiere `inventario:ajustar` (Bodega). Registra la entrada en el kardex e incrementa "
-        "`stock_actual` en `inventario`."
+        "Requiere `inventario:ajustar` (EncargadoBodega). Registra la entrada en el kardex e "
+        "incrementa `stock_actual` en `inventario`."
     ),
 )
 def recibir_orden(db: DBSession, usuario: Recibe, pedido_id: UUID) -> PedidoOut:

@@ -6,6 +6,7 @@ from collections.abc import Iterable, Sequence
 from sqlalchemy import func, or_, select, true, update
 from sqlalchemy.orm import Session, selectinload
 
+from app.domain.enums import NombreRol
 from app.domain.models.auth import Rol, Usuario
 from app.domain.models.catalog import Ruta
 
@@ -110,7 +111,7 @@ def contar_admins_activos(db: Session, *, excluyendo: uuid.UUID | None = None) -
     stmt = (
         select(func.count())
         .select_from(Usuario)
-        .where(Usuario.activo.is_(True), Usuario.roles.any(Rol.nombre == "Admin"))
+        .where(Usuario.activo.is_(True), Usuario.roles.any(Rol.nombre == NombreRol.ADMINISTRADOR))
     )
     if excluyendo is not None:
         stmt = stmt.where(Usuario.id != excluyendo)

@@ -20,7 +20,7 @@ import { LiquidacionDiariaView } from './LiquidacionDiariaView'
 const permisos = vi.hoisted(() => ({ lista: ['liquidaciones:registrar', 'liquidaciones:cerrar', 'liquidaciones:corregir', 'liquidaciones:leer'] }))
 vi.mock('../app/providers/AuthProvider', () => ({
   useAuth: () => ({
-    usuario: { id: 'u', nombre_completo: 'Admin', roles: ['Admin'], permisos: permisos.lista },
+    usuario: { id: 'u', nombre_completo: 'Admin', roles: ['Administrador'], permisos: permisos.lista },
     can: (p: string) => permisos.lista.includes(p),
     canAny: (ps: readonly string[]) => ps.some((p) => permisos.lista.includes(p)),
   }),

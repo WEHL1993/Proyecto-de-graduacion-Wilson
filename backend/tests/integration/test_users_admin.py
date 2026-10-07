@@ -18,7 +18,7 @@ LOGIN = "/api/v1/auth/login"
 @pytest.fixture
 def entorno(db_tx, cliente):
     db = db_tx
-    for nombre in ("Admin", "Ventas", "Proveedor"):
+    for nombre in ("Administrador", "EncargadoVentas", "Proveedor"):
         if db.scalar(select(Rol).where(Rol.nombre == nombre)) is None:
             db.add(Rol(nombre=nombre, descripcion=nombre))
     sufijo = uuid.uuid4().hex[:6]
@@ -29,14 +29,14 @@ def entorno(db_tx, cliente):
     db.add_all(rutas)
     db.flush()
     admin = crear_usuario(db, "admin-fase8")
-    admin.roles = [db.scalar(select(Rol).where(Rol.nombre == "Admin"))]
+    admin.roles = [db.scalar(select(Rol).where(Rol.nombre == "Administrador"))]
     db.commit()
     return SimpleNamespace(
         db=db,
         client=cliente,
         rutas=rutas,
         admin=admin,
-        h=encabezados(admin, "usuarios:gestionar", roles=("Admin",)),
+        h=encabezados(admin, "usuarios:gestionar", roles=("Administrador",)),
     )
 
 
@@ -45,7 +45,7 @@ def _nuevo(email: str | None = None, **extra):
         "email": email or f"nuevo-{uuid.uuid4().hex[:8]}@ds.gt",
         "nombre_completo": "Vendedor Nuevo",
         "password": "ClaveSegura123",
-        "roles": ["Ventas"],
+        "roles": ["EncargadoVentas"],
         **extra,
     }
 
@@ -59,7 +59,7 @@ def test_exige_permiso_y_autenticacion(entorno):
     e = entorno
     assert e.client.get(BASE).status_code == 401
     ventas = crear_usuario(e.db, "ventas")
-    sin_permiso = encabezados(ventas, "carga_ruta:generar", roles=("Ventas",))
+    sin_permiso = encabezados(ventas, "carga_ruta:generar", roles=("EncargadoVentas",))
     assert e.client.get(BASE, headers=sin_permiso).status_code == 403
     assert e.client.post(BASE, json=_nuevo(), headers=sin_permiso).status_code == 403
 
@@ -70,12 +70,12 @@ def test_crear_usuario_con_rol_y_rutas_y_puede_iniciar_sesion(entorno):
     r = e.client.post(BASE, json=_nuevo(ruta_ids=[str(e.rutas[0].id)]), headers=e.h)
     assert r.status_code == 201, r.text
     u = r.json()
-    assert u["roles"] == ["Ventas"] and u["activo"] is True
+    assert u["roles"] == ["EncargadoVentas"] and u["activo"] is True
     assert [x["id"] for x in u["rutas"]] == [str(e.rutas[0].id)]
     assert "password" not in u and "password_hash" not in u
 
     login = e.client.post(LOGIN, json={"email": u["email"], "password": "ClaveSegura123"})
-    assert login.status_code == 200 and login.json()["usuario"]["roles"] == ["Ventas"]
+    assert login.status_code == 200 and login.json()["usuario"]["roles"] == ["EncargadoVentas"]
 
 
 # TC-USR-03
@@ -123,9 +123,11 @@ def test_cambiar_clave_y_rol(entorno):
     e = entorno
     u = e.client.post(BASE, json=_nuevo(), headers=e.h).json()
     r = e.client.patch(
-        f"{BASE}/{u['id']}", json={"password": "OtraClave12345", "roles": ["Admin"]}, headers=e.h
+        f"{BASE}/{u['id']}",
+        json={"password": "OtraClave12345", "roles": ["Administrador"]},
+        headers=e.h,
     )
-    assert r.status_code == 200 and r.json()["roles"] == ["Admin"]
+    assert r.status_code == 200 and r.json()["roles"] == ["Administrador"]
     viejo = e.client.post(LOGIN, json={"email": u["email"], "password": "ClaveSegura123"})
     nuevo = e.client.post(LOGIN, json={"email": u["email"], "password": "OtraClave12345"})
     assert viejo.status_code == 401 and nuevo.status_code == 200
@@ -154,7 +156,7 @@ def test_protege_al_administrador(entorno):
     assert propio.json()["codigo"] == "AUTOMODIFICACION_NO_PERMITIDA"
 
     # Deja a `segundo` como único admin activo distinto del actor y luego desactiva al actor.
-    segundo = e.client.post(BASE, json=_nuevo(roles=["Admin"]), headers=e.h).json()
+    segundo = e.client.post(BASE, json=_nuevo(roles=["Administrador"]), headers=e.h).json()
     conservados = [e.admin.id, uuid.UUID(segundo["id"])]
     e.db.execute(update(Usuario).where(Usuario.id.not_in(conservados)).values(activo=False))
     e.db.execute(update(Usuario).where(Usuario.id == e.admin.id).values(activo=False))
@@ -162,7 +164,9 @@ def test_protege_al_administrador(entorno):
 
     ultimo = e.client.patch(f"{BASE}/{segundo['id']}/status", json={"activo": False}, headers=e.h)
     assert ultimo.status_code == 409 and ultimo.json()["codigo"] == "ULTIMO_ADMIN"
-    quitar = e.client.patch(f"{BASE}/{segundo['id']}", json={"roles": ["Ventas"]}, headers=e.h)
+    quitar = e.client.patch(
+        f"{BASE}/{segundo['id']}", json={"roles": ["EncargadoVentas"]}, headers=e.h
+    )
     assert quitar.status_code == 409 and quitar.json()["codigo"] == "ULTIMO_ADMIN"
 
 
@@ -171,8 +175,8 @@ def test_listar_roles_y_filtros(entorno):
     e = entorno
     e.client.post(BASE, json=_nuevo("filtro-uno@ds.gt"), headers=e.h)
     roles = e.client.get(f"{BASE}/roles", headers=e.h).json()
-    assert {"Admin", "Ventas"} <= {r["nombre"] for r in roles}
+    assert {"Administrador", "EncargadoVentas"} <= {r["nombre"] for r in roles}
 
-    por_rol = _usuarios(e, rol="Ventas", q="filtro-uno")
+    por_rol = _usuarios(e, rol="EncargadoVentas", q="filtro-uno")
     assert len(por_rol) == 1 and por_rol[0]["email"] == "filtro-uno@ds.gt"
-    assert _usuarios(e, rol="Admin", q="filtro-uno") == []
+    assert _usuarios(e, rol="Administrador", q="filtro-uno") == []

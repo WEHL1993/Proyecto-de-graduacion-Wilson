@@ -31,14 +31,14 @@ def test_hash_password_no_es_texto_plano_y_verifica_correctamente():
 def test_create_access_token_incluye_claims_y_es_decodificable():
     token, expires_in = create_access_token(
         sub="11111111-1111-1111-1111-111111111111",
-        roles=["Ventas"],
+        roles=["EncargadoVentas"],
         perms=["carga_ruta:generar"],
     )
     assert expires_in == get_settings().jwt_expire_minutes * 60
 
     payload = decode_access_token(token)
     assert payload["sub"] == "11111111-1111-1111-1111-111111111111"
-    assert payload["roles"] == ["Ventas"]
+    assert payload["roles"] == ["EncargadoVentas"]
     assert payload["perms"] == ["carga_ruta:generar"]
     assert payload["exp"] > datetime.now(UTC).timestamp()
 
@@ -68,7 +68,7 @@ def test_get_current_user_token_vencido_lanza_401():
     settings = get_settings()
     payload = {
         "sub": "11111111-1111-1111-1111-111111111111",
-        "roles": ["Ventas"],
+        "roles": ["EncargadoVentas"],
         "perms": [],
         "exp": datetime.now(UTC) - timedelta(minutes=1),
     }
@@ -82,17 +82,21 @@ def test_get_current_user_token_vencido_lanza_401():
 
 def test_get_current_user_token_valido_devuelve_usuario():
     token, _ = create_access_token(
-        sub="11111111-1111-1111-1111-111111111111", roles=["Admin"], perms=["usuarios:gestionar"]
+        sub="11111111-1111-1111-1111-111111111111",
+        roles=["Administrador"],
+        perms=["usuarios:gestionar"],
     )
     usuario = get_current_user(_credenciales(token))
     assert isinstance(usuario, UsuarioAutenticado)
-    assert usuario.roles == ["Admin"]
+    assert usuario.roles == ["Administrador"]
     assert usuario.permisos == ["usuarios:gestionar"]
 
 
 def test_require_permission_deniega_con_403_si_falta_el_permiso():
     usuario = UsuarioAutenticado(
-        id="11111111-1111-1111-1111-111111111111", roles=["Bodega"], permisos=["inventario:leer"]
+        id="11111111-1111-1111-1111-111111111111",
+        roles=["EncargadoBodega"],
+        permisos=["inventario:leer"],
     )
     dependencia = require_permission("ml:reentrenar")
     with pytest.raises(AppError) as exc_info:

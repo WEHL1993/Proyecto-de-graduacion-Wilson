@@ -4,9 +4,10 @@ Sugerencia: `cantidad_a_pedir = max(0, (demanda_proyectada + stock_minimo) - sto
 la demanda agregada (todas las rutas) de los próximos N días del modelo en producción.
 
 Estados: `borrador → enviado → confirmado → recibido` (más `cancelado` desde borrador/enviado).
-  - enviar:    Encargado de Compras (`pedido_proveedor:gestionar`).
+  - enviar:    EncargadoCompras (`pedido_proveedor:gestionar`).
   - confirmar: el Proveedor (`pedido_proveedor:confirmar`), solo sobre sus propios pedidos.
-  - recibir:   Bodega/Inventario (`inventario:ajustar`): entrada en kardex + `stock_actual`.
+  - recibir:   EncargadoBodega/EncargadoInventario (`inventario:ajustar`):
+               entrada en kardex + `stock_actual`.
 """
 
 import uuid
@@ -17,7 +18,7 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
-from app.domain.enums import EstadoPedido, ReferenciaTipo
+from app.domain.enums import EstadoPedido, NombreRol, ReferenciaTipo
 from app.domain.models.operations import PedidoProveedor
 from app.repositories import catalog_repo, purchasing_repo, user_repo
 from app.schemas.auth import UsuarioAutenticado
@@ -222,7 +223,7 @@ def obtener(db: Session, usuario: UsuarioAutenticado, pedido_id: uuid.UUID) -> P
 # ------------------------------------------------------------------ transiciones
 @auditar
 def enviar(db: Session, pedido_id: uuid.UUID) -> PedidoOut:
-    """`borrador → enviado`: Compras aprueba y envía la orden."""
+    """`borrador → enviado`: EncargadoCompras aprueba y envía la orden."""
     pedido = _bloquear(db, pedido_id, (EstadoPedido.BORRADOR,), "enviar")
     pedido.estado = EstadoPedido.ENVIADO
     db.commit()
@@ -256,8 +257,8 @@ def confirmar(
 
 @auditar
 def recibir(db: Session, pedido_id: uuid.UUID, usuario_id: uuid.UUID) -> PedidoOut:
-    """`confirmado → recibido`: Bodega valida el ingreso físico. Registra la entrada en `kardex`
-    e incrementa `stock_actual`, todo atómico con el cambio de estado."""
+    """`confirmado → recibido`: EncargadoBodega valida el ingreso físico. Registra la entrada en
+    `kardex` e incrementa `stock_actual`, todo atómico con el cambio de estado."""
     pedido = _bloquear(db, pedido_id, (EstadoPedido.CONFIRMADO,), "recibir")
     inventory_service.registrar_entrada(
         db,
@@ -273,9 +274,11 @@ def recibir(db: Session, pedido_id: uuid.UUID, usuario_id: uuid.UUID) -> PedidoO
 
 # ------------------------------------------------------------------ utilidades
 def _proveedor_del_usuario(db: Session, usuario: UsuarioAutenticado) -> uuid.UUID | None:
-    """Proveedor al que está atado el usuario. `None` solo para Admin (sin restricción)."""
+    """Proveedor al que está atado el usuario. `None` solo para Administrador (sin restricción)."""
     proveedor_id = user_repo.proveedor_id_de(db, usuario.id)
-    if proveedor_id is None and "Admin" not in usuario.roles:
+    if (
+        proveedor_id is None and NombreRol.ADMINISTRADOR not in usuario.roles
+    ):  # TODO: migrar a permiso
         raise AppError(
             "PROVEEDOR_NO_ASOCIADO",
             "Su usuario no está asociado a un proveedor.",
@@ -285,7 +288,8 @@ def _proveedor_del_usuario(db: Session, usuario: UsuarioAutenticado) -> uuid.UUI
 
 
 def _alcance(db: Session, usuario: UsuarioAutenticado) -> uuid.UUID | None:
-    """Compras y Bodega (que recibe) ven todos los pedidos; el Proveedor, solo los suyos."""
+    """EncargadoCompras y EncargadoBodega (que recibe) ven todos los pedidos; el Proveedor,
+    solo los suyos."""
     if {"pedido_proveedor:gestionar", "inventario:ajustar"} & set(usuario.permisos):
         return None
     return _proveedor_del_usuario(db, usuario)

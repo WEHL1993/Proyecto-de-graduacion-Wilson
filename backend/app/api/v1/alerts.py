@@ -22,7 +22,7 @@ PuedeLeer = Annotated[UsuarioAutenticado, Depends(require_permission("alertas:le
     summary="Bandeja de alertas",
     description=(
         "Requiere permiso `alertas:leer`. Solo devuelve los tipos que corresponden al rol del "
-        "usuario (stock/quiebre → inventario y compras; `mape_umbral` → Gerente/Admin; "
+        "usuario (stock/quiebre → inventario y compras; `mape_umbral` → Gerente/Administrador; "
         "`etl_error` → quienes cargan datos). Críticas primero, luego las más recientes."
     ),
 )

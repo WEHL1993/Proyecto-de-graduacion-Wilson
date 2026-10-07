@@ -65,10 +65,10 @@ def obtener_carga_vigente(
     response_model=LoadPlanResponse,
     summary="Despacho físico de una carga aprobada",
     description=(
-        "Requiere `carga_ruta:despachar` (Bodega). Solo una carga `aprobada` puede despacharse "
-        "(400 `ESTADO_CARGA_INVALIDO`); descuenta `stock_reservado` y `stock_actual` con la "
-        "cantidad aprobada y registra la salida en el kardex (400 `STOCK_INSUFICIENTE` si la "
-        "existencia física no alcanza)."
+        "Requiere `carga_ruta:despachar` (EncargadoBodega). Solo una carga `aprobada` puede "
+        "despacharse (400 `ESTADO_CARGA_INVALIDO`); descuenta `stock_reservado` y `stock_actual` "
+        "con la cantidad aprobada y registra la salida en el kardex (400 `STOCK_INSUFICIENTE` "
+        "si la existencia física no alcanza)."
     ),
 )
 def despachar_carga(db: DBSession, usuario: CurrentUser, carga_id: UUID) -> LoadPlanResponse:

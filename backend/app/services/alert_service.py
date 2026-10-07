@@ -13,7 +13,8 @@ from app.schemas.auth import UsuarioAutenticado
 from app.services.bitacora_service import auditar
 
 # Cada tipo de alerta lo ven quienes tienen algún permiso de su dominio (matriz 1.4), de modo
-# que Bodega no ve el MAPE ni Gerente los errores de ETL. Admin tiene todos los permisos.
+# que EncargadoBodega no ve el MAPE ni Gerente los errores de ETL.
+# Administrador tiene todos los permisos.
 PERMISOS_POR_TIPO: dict[TipoAlerta, frozenset[str]] = {
     TipoAlerta.STOCK_BAJO: frozenset({"inventario:leer", "inventario:ajustar"}),
     TipoAlerta.QUIEBRE_PROYECTADO: frozenset(

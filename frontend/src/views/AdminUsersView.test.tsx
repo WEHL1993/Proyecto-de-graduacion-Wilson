@@ -5,7 +5,7 @@ import type { UsuarioOut } from '../types'
 import { AdminUsersView, FORM_VACIO, validarFormulario } from './AdminUsersView'
 
 vi.mock('../app/providers/AuthProvider', () => ({
-  useAuth: () => ({ usuario: { id: 'yo', nombre_completo: 'Admin', roles: ['Admin'], permisos: [] }, can: () => true, canAny: () => true }),
+  useAuth: () => ({ usuario: { id: 'yo', nombre_completo: 'Admin', roles: ['Administrador'], permisos: [] }, can: () => true, canAny: () => true }),
 }))
 
 const api = vi.hoisted(() => ({
@@ -24,7 +24,7 @@ const usuario = (o: Partial<UsuarioOut>): UsuarioOut => ({
   email: 'ana@ds.gt',
   nombre_completo: 'Ana Ventas',
   activo: true,
-  roles: ['Ventas'],
+  roles: ['EncargadoVentas'],
   rutas: [{ id: 'r1', codigo: 'R-01', nombre: 'Ruta 1' }],
   creado_en: '2026-01-01T00:00:00Z',
   ...o,
@@ -42,19 +42,19 @@ function montar() {
 beforeEach(() => {
   vi.clearAllMocks()
   api.listarRoles.mockResolvedValue([
-    { id: 1, nombre: 'Admin' },
-    { id: 2, nombre: 'Ventas' },
+    { id: 1, nombre: 'Administrador' },
+    { id: 2, nombre: 'EncargadoVentas' },
     { id: 3, nombre: 'Proveedor' },
   ])
   api.listarRutas.mockResolvedValue([{ id: 'r1', codigo: 'R-01', nombre: 'Ruta 1' }, { id: 'r2', codigo: 'R-02', nombre: 'Ruta 2' }])
   api.listarUsuarios.mockResolvedValue({
     total: 2,
-    usuarios: [usuario({}), usuario({ id: 'yo', email: 'admin@ds.gt', nombre_completo: 'Admin', roles: ['Admin'], rutas: [] })],
+    usuarios: [usuario({}), usuario({ id: 'yo', email: 'admin@ds.gt', nombre_completo: 'Admin', roles: ['Administrador'], rutas: [] })],
   })
 })
 
 describe('validarFormulario', () => {
-  const valido = { ...FORM_VACIO, email: 'a@b.co', nombre_completo: 'Ana Ruiz', password: 'ClaveSegura1', roles: ['Ventas'] }
+  const valido = { ...FORM_VACIO, email: 'a@b.co', nombre_completo: 'Ana Ruiz', password: 'ClaveSegura1', roles: ['EncargadoVentas'] }
   it('acepta un alta completa', () => expect(validarFormulario(valido, false)).toEqual({}))
   it('exige correo, nombre, contraseña y rol en el alta', () => {
     expect(Object.keys(validarFormulario(FORM_VACIO, false)).sort()).toEqual(['email', 'nombre_completo', 'password', 'roles'])
@@ -74,7 +74,7 @@ describe('<AdminUsersView />', () => {
   it('lista usuarios con badges de rol, rutas y estado', async () => {
     montar()
     const fila = (await screen.findByText('Ana Ventas')).closest('tr')!
-    expect(within(fila).getByText('Ventas')).toBeInTheDocument()
+    expect(within(fila).getByText('EncargadoVentas')).toBeInTheDocument()
     expect(within(fila).getByText('R-01')).toBeInTheDocument()
     expect(within(fila).getByRole('switch')).toHaveAttribute('aria-checked', 'true')
   })
@@ -101,14 +101,14 @@ describe('<AdminUsersView />', () => {
     fireEvent.change(within(dialogo).getByLabelText(/^Correo electrónico/), { target: { value: 'nuevo@ds.gt' } })
     fireEvent.change(within(dialogo).getByLabelText(/^Nombre completo/), { target: { value: 'Nuevo Vendedor' } })
     fireEvent.change(within(dialogo).getByLabelText(/^Contraseña/), { target: { value: 'ClaveSegura1' } })
-    fireEvent.click(await within(dialogo).findByLabelText('Ventas'))
+    fireEvent.click(await within(dialogo).findByLabelText('EncargadoVentas'))
     fireEvent.click(await within(dialogo).findByLabelText('R-02 · Ruta 2'))
     fireEvent.click(within(dialogo).getByRole('button', { name: 'Crear usuario' }))
 
     await waitFor(() => expect(api.crearUsuario).toHaveBeenCalled())
     expect(api.crearUsuario.mock.calls[0][0]).toMatchObject({
       email: 'nuevo@ds.gt',
-      roles: ['Ventas'],
+      roles: ['EncargadoVentas'],
       ruta_ids: ['r2'],
       proveedor_id: null,
     })
@@ -129,7 +129,7 @@ describe('<AdminUsersView />', () => {
     await waitFor(() => expect(api.actualizarUsuario).toHaveBeenCalled())
     const [id, datos] = api.actualizarUsuario.mock.calls[0]
     expect(id).toBe('u1')
-    expect(datos).toMatchObject({ nombre_completo: 'Ana M. Ventas', roles: ['Ventas'], ruta_ids: ['r1'] })
+    expect(datos).toMatchObject({ nombre_completo: 'Ana M. Ventas', roles: ['EncargadoVentas'], ruta_ids: ['r1'] })
     expect(datos).not.toHaveProperty('password')
   })
 
@@ -147,7 +147,7 @@ describe('<AdminUsersView />', () => {
     fireEvent.change(within(dialogo).getByLabelText(/^Correo electrónico/), { target: { value: 'dup@ds.gt' } })
     fireEvent.change(within(dialogo).getByLabelText(/^Nombre completo/), { target: { value: 'Nombre Dup' } })
     fireEvent.change(within(dialogo).getByLabelText(/^Contraseña/), { target: { value: 'ClaveSegura1' } })
-    fireEvent.click(await within(dialogo).findByLabelText('Ventas'))
+    fireEvent.click(await within(dialogo).findByLabelText('EncargadoVentas'))
     fireEvent.click(within(dialogo).getByRole('button', { name: 'Crear usuario' }))
     expect(await within(dialogo).findByText('Ya existe un usuario con ese correo.')).toBeInTheDocument()
   })

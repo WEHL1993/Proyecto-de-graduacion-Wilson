@@ -157,10 +157,10 @@ def test_listado_de_productos_usa_activos_por_defecto(monkeypatch):
 def test_seed_define_los_permisos_nuevos_y_su_matriz():
     nuevos = {"productos:crear", "productos:editar", "productos:eliminar"}
     assert nuevos <= PERMISOS.keys()
-    assert nuevos <= set(MATRIZ_ROL_PERMISO["Admin"])
-    assert nuevos <= set(MATRIZ_ROL_PERMISO["Inventario"])
-    for rol in ("Bodega", "Ventas", "Compras", "Gerente", "Proveedor"):
+    assert nuevos <= set(MATRIZ_ROL_PERMISO["Administrador"])
+    assert nuevos <= set(MATRIZ_ROL_PERMISO["EncargadoInventario"])
+    for rol in ("EncargadoBodega", "EncargadoVentas", "EncargadoCompras", "Gerente", "Proveedor"):
         assert not nuevos & set(MATRIZ_ROL_PERMISO[rol]), rol
     # El ajuste de stock ya existía y sigue en Admin, Inventario y Bodega.
-    for rol in ("Admin", "Inventario", "Bodega"):
+    for rol in ("Administrador", "EncargadoInventario", "EncargadoBodega"):
         assert "inventario:ajustar" in MATRIZ_ROL_PERMISO[rol]

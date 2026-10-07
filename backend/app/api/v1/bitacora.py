@@ -22,7 +22,7 @@ Auditor = Annotated[UsuarioAutenticado, Depends(require_permission("bitacora:lee
     response_model=BitacoraPage,
     summary="Consultar la bitácora de auditoría",
     description=(
-        "Requiere `bitacora:leer` (Admin). Más reciente primero. Filtros: rango de fechas, "
+        "Requiere `bitacora:leer` (Administrador). Más reciente primero. Filtros: rango de fechas, "
         "usuario, acción (texto parcial), origen (`http|servicio|worker`), resultado "
         "(`exito|error`) y `request_id` (une la petición HTTP con sus casos de uso)."
     ),

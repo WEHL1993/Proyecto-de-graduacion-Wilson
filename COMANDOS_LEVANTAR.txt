@@ -33,7 +33,7 @@ OPCIÓN B: CON MAKE (postgres + backend en Docker)
 
 OPCIÓN C: LOCAL SIN DOCKER (Windows / PowerShell)
 -------------------------------------------------
-1) Base de datos: PostgreSQL 16 corriendo en localhost:5432
+1) Base de datos: PostgreSQL 16 corriendo en localhost:5433
    (o solo postgres con Docker):
      docker compose -f infra/docker-compose.yml --env-file .env up -d postgres
 

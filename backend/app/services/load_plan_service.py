@@ -138,7 +138,7 @@ def obtener_vigente(db: Session, ruta_id: uuid.UUID, fecha_operacion: date) -> L
 
 @auditar
 def enviar(db: Session, solicitud: LoadPlanRequest) -> LoadPlanResponse:
-    """`borrador → pendiente_aprobacion` (Ventas envía el plan a aprobación)."""
+    """`borrador → pendiente_aprobacion` (EncargadoVentas envía el plan a aprobación)."""
     carga = _cargar_para_decidir(db, solicitud.carga_id, (EstadoCarga.BORRADOR,), "enviar")
     carga.estado = EstadoCarga.PENDIENTE_APROBACION
     if solicitud.observaciones:
@@ -217,7 +217,7 @@ def rechazar(db: Session, solicitud: LoadPlanRequest, usuario_id: uuid.UUID) -> 
 # ------------------------------------------------------------------ despachar
 @auditar
 def despachar(db: Session, carga_id: uuid.UUID, usuario_id: uuid.UUID) -> LoadPlanResponse:
-    """`aprobada → despachada` (Bodega confirma la salida física del camión, ADR-06).
+    """`aprobada → despachada` (EncargadoBodega confirma la salida física del camión, ADR-06).
 
     Consume la reserva y descuenta `stock_actual` con la cantidad aprobada de cada producto, y
     registra la salida en el kardex. Atómico con el cambio de estado.

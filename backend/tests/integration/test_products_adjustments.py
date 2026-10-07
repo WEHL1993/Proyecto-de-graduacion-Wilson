@@ -55,7 +55,7 @@ def entorno(db_tx, cliente):
         proveedor=proveedor,
         usuario=usuario,
         sufijo=sufijo,
-        h=encabezados(usuario, *ADMIN, roles=("Admin",)),
+        h=encabezados(usuario, *ADMIN, roles=("Administrador",)),
     )
 
 

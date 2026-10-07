@@ -8,6 +8,19 @@ CHECK de los modelos ORM y de las migraciones.
 from enum import StrEnum
 
 
+class NombreRol(StrEnum):
+    """Nombres canónicos de los roles sembrados (`roles.nombre`)."""
+
+    ADMINISTRADOR = "Administrador"
+    ENCARGADO_INVENTARIO = "EncargadoInventario"
+    ENCARGADO_VENTAS = "EncargadoVentas"
+    ENCARGADO_BODEGA = "EncargadoBodega"
+    ENCARGADO_COMPRAS = "EncargadoCompras"
+    GERENTE = "Gerente"
+    PROVEEDOR = "Proveedor"
+    LIQUIDADOR = "Liquidador"
+
+
 class EstadoCarga(StrEnum):
     BORRADOR = "borrador"
     PENDIENTE_APROBACION = "pendiente_aprobacion"

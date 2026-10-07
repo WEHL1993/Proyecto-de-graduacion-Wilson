@@ -3,7 +3,7 @@
 export const PERMISOS_VISTA = {
   dashboard: ['carga_ruta:generar', 'carga_ruta:aprobar'],
   monitoreo: ['ml:metricas:leer'],
-  // Compras gestiona, Proveedor confirma, Bodega recibe.
+  // EncargadoCompras gestiona, Proveedor confirma, EncargadoBodega recibe.
   compras: ['pedido_proveedor:gestionar', 'pedido_proveedor:confirmar', 'inventario:ajustar'],
   inventario: ['inventario:leer'],
   // ADR-16: quien consulta inventario ve el catálogo; las acciones se habilitan por `productos:*`.
@@ -11,7 +11,7 @@ export const PERMISOS_VISTA = {
   etl: ['etl:cargar'],
   reportes: ['reportes:leer'],
   usuarios: ['usuarios:gestionar'],
-  // ADR-14: el admin liquida (registrar); Administrador y Gerente consultan el historial.
+  // ADR-14: Administrador y Liquidador liquidan (registrar); Administrador, Liquidador y Gerente consultan el historial.
   liquidacion: ['liquidaciones:registrar'],
   liquidaciones: ['liquidaciones:leer'],
   // Política de datos (cierre del arranque ETL): solo Administrador.

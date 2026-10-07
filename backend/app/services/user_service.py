@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
 from app.core.security import hash_password
+from app.domain.enums import NombreRol
 from app.domain.models.auth import Rol, Usuario
 from app.domain.models.catalog import Ruta
 from app.repositories import user_repo
@@ -19,8 +20,8 @@ from app.schemas.users import (
 )
 from app.services.bitacora_service import auditar
 
-ROL_PROVEEDOR = "Proveedor"
-ROL_ADMIN = "Admin"
+ROL_PROVEEDOR = NombreRol.PROVEEDOR
+ROL_ADMIN = NombreRol.ADMINISTRADOR
 
 
 def _a_dto(usuario: Usuario, rutas: list[Ruta]) -> UsuarioOut:
@@ -141,7 +142,7 @@ def actualizar(
         roles = _resolver_roles(db, datos.roles)
         era_admin = any(r.nombre == ROL_ADMIN for r in usuario.roles)
         if era_admin and ROL_ADMIN not in {r.nombre for r in roles}:
-            _proteger_admin(db, usuario, actor_id, "quitar el rol Admin")
+            _proteger_admin(db, usuario, actor_id, "quitar el rol Administrador")
         usuario.roles = roles
     if datos.roles is not None or "proveedor_id" in campos:
         nuevo = datos.proveedor_id if "proveedor_id" in campos else usuario.proveedor_id

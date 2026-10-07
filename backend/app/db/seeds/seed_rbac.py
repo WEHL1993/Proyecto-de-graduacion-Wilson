@@ -12,17 +12,21 @@ from sqlalchemy.orm import Session
 from app.core import parametros
 from app.core.database import get_sessionmaker
 from app.core.security import hash_password
+from app.domain.enums import NombreRol
 from app.domain.models.auth import Permiso, Rol, Usuario
 from app.domain.models.ml import ParametroSistema
 
 ROLES: dict[str, str] = {
-    "Admin": "Acceso total al sistema.",
-    "Inventario": "Carga de histórico y gestión de existencias.",
-    "Ventas": "Generación y aprobación de cargas de ruta.",
-    "Bodega": "Despacho de cargas y ajuste de inventario.",
-    "Compras": "Gestión de pedidos a proveedores.",
-    "Gerente": "Aprobación de cargas y monitoreo de modelos ML.",
-    "Proveedor": "Confirmación de pedidos propios (acceso restringido por proveedor_id).",
+    NombreRol.ADMINISTRADOR: "Acceso total al sistema.",
+    NombreRol.ENCARGADO_INVENTARIO: "Carga de histórico y gestión de existencias.",
+    NombreRol.ENCARGADO_VENTAS: "Generación y aprobación de cargas de ruta.",
+    NombreRol.ENCARGADO_BODEGA: "Despacho de cargas y ajuste de inventario.",
+    NombreRol.ENCARGADO_COMPRAS: "Gestión de pedidos a proveedores.",
+    NombreRol.GERENTE: "Aprobación de cargas y monitoreo de modelos ML.",
+    NombreRol.PROVEEDOR: "Confirmación de pedidos propios (acceso restringido por proveedor_id).",
+    NombreRol.LIQUIDADOR: (
+        "Responsable de registrar y cerrar la liquidación diaria por ruta y vendedor (ADR-14)."
+    ),
 }
 
 PERMISOS: dict[str, str] = {
@@ -53,8 +57,8 @@ PERMISOS: dict[str, str] = {
 
 # Matriz 1.4 de la especificación (columna Worker se excluye: no es un rol de login).
 MATRIZ_ROL_PERMISO: dict[str, tuple[str, ...]] = {
-    "Admin": tuple(PERMISOS),
-    "Inventario": (
+    NombreRol.ADMINISTRADOR: tuple(PERMISOS),
+    NombreRol.ENCARGADO_INVENTARIO: (
         "etl:cargar",
         "prediccion:consultar",
         "inventario:leer",
@@ -64,7 +68,7 @@ MATRIZ_ROL_PERMISO: dict[str, tuple[str, ...]] = {
         "productos:eliminar",
         "alertas:leer",
     ),
-    "Ventas": (
+    NombreRol.ENCARGADO_VENTAS: (
         "etl:cargar",
         "prediccion:consultar",
         "carga_ruta:generar",
@@ -72,19 +76,19 @@ MATRIZ_ROL_PERMISO: dict[str, tuple[str, ...]] = {
         "inventario:leer",
         "alertas:leer",
     ),
-    "Bodega": (
+    NombreRol.ENCARGADO_BODEGA: (
         "carga_ruta:despachar",
         "inventario:leer",
         "inventario:ajustar",
         "alertas:leer",
     ),
-    "Compras": (
+    NombreRol.ENCARGADO_COMPRAS: (
         "prediccion:consultar",
         "inventario:leer",
         "pedido_proveedor:gestionar",
         "alertas:leer",
     ),
-    "Gerente": (
+    NombreRol.GERENTE: (
         "reportes:leer",
         "prediccion:consultar",
         "carga_ruta:aprobar",
@@ -94,7 +98,12 @@ MATRIZ_ROL_PERMISO: dict[str, tuple[str, ...]] = {
         "alertas:leer",
         "liquidaciones:leer",
     ),
-    "Proveedor": ("pedido_proveedor:confirmar",),
+    NombreRol.PROVEEDOR: ("pedido_proveedor:confirmar",),
+    NombreRol.LIQUIDADOR: (
+        "liquidaciones:registrar",
+        "liquidaciones:cerrar",
+        "liquidaciones:leer",
+    ),
 }
 
 ADMIN_EMAIL = "admin@ds.gt"
@@ -158,8 +167,8 @@ def seed_admin(session: Session, roles_por_nombre: dict[str, Rol]) -> Usuario:
         )
         session.add(admin)
         session.flush()
-    if roles_por_nombre["Admin"] not in admin.roles:
-        admin.roles.append(roles_por_nombre["Admin"])
+    if roles_por_nombre[NombreRol.ADMINISTRADOR] not in admin.roles:
+        admin.roles.append(roles_por_nombre[NombreRol.ADMINISTRADOR])
     return admin
 
 

@@ -140,7 +140,7 @@ export interface paths {
         put?: never;
         /**
          * Despacho físico de una carga aprobada
-         * @description Requiere `carga_ruta:despachar` (Bodega). Solo una carga `aprobada` puede despacharse (400 `ESTADO_CARGA_INVALIDO`); descuenta `stock_reservado` y `stock_actual` con la cantidad aprobada y registra la salida en el kardex (400 `STOCK_INSUFICIENTE` si la existencia física no alcanza).
+         * @description Requiere `carga_ruta:despachar` (EncargadoBodega). Solo una carga `aprobada` puede despacharse (400 `ESTADO_CARGA_INVALIDO`); descuenta `stock_reservado` y `stock_actual` con la cantidad aprobada y registra la salida en el kardex (400 `STOCK_INSUFICIENTE` si la existencia física no alcanza).
          */
         post: operations["despachar_carga_api_v1_routes_load_plans__carga_id__dispatch_post"];
         delete?: never;
@@ -394,7 +394,7 @@ export interface paths {
         };
         /**
          * Bandeja de alertas
-         * @description Requiere permiso `alertas:leer`. Solo devuelve los tipos que corresponden al rol del usuario (stock/quiebre → inventario y compras; `mape_umbral` → Gerente/Admin; `etl_error` → quienes cargan datos). Críticas primero, luego las más recientes.
+         * @description Requiere permiso `alertas:leer`. Solo devuelve los tipos que corresponden al rol del usuario (stock/quiebre → inventario y compras; `mape_umbral` → Gerente/Administrador; `etl_error` → quienes cargan datos). Críticas primero, luego las más recientes.
          */
         get: operations["listar_alertas_api_v1_alerts_get"];
         put?: never;
@@ -514,7 +514,7 @@ export interface paths {
         };
         /**
          * Pedidos a proveedor
-         * @description Requiere `pedido_proveedor:gestionar` o `inventario:ajustar` (Bodega, para recibir): todos los pedidos; o `pedido_proveedor:confirmar`: solo los del proveedor del usuario.
+         * @description Requiere `pedido_proveedor:gestionar` o `inventario:ajustar` (EncargadoBodega, para recibir): todos los pedidos; o `pedido_proveedor:confirmar`: solo los del proveedor del usuario.
          */
         get: operations["listar_ordenes_api_v1_purchasing_orders_get"];
         put?: never;
@@ -620,7 +620,7 @@ export interface paths {
         put?: never;
         /**
          * Recepción física en bodega (confirmado → recibido)
-         * @description Requiere `inventario:ajustar` (Bodega). Registra la entrada en el kardex e incrementa `stock_actual` en `inventario`.
+         * @description Requiere `inventario:ajustar` (EncargadoBodega). Registra la entrada en el kardex e incrementa `stock_actual` en `inventario`.
          */
         post: operations["recibir_orden_api_v1_purchasing_orders__pedido_id__receive_post"];
         delete?: never;
@@ -685,7 +685,7 @@ export interface paths {
         head?: never;
         /**
          * Actualizar usuario (parcial)
-         * @description Edita nombre, contraseña, roles y rutas comerciales. 404 `USUARIO_NO_ENCONTRADO`; 409 `ULTIMO_ADMIN` / `AUTOMODIFICACION_NO_PERMITIDA` al retirar el rol Admin.
+         * @description Edita nombre, contraseña, roles y rutas comerciales. 404 `USUARIO_NO_ENCONTRADO`; 409 `ULTIMO_ADMIN` / `AUTOMODIFICACION_NO_PERMITIDA` al retirar el rol Administrador.
          */
         patch: operations["actualizar_usuario_api_v1_users__usuario_id__patch"];
         trace?: never;
@@ -947,7 +947,7 @@ export interface paths {
         };
         /**
          * Consultar la bitácora de auditoría
-         * @description Requiere `bitacora:leer` (Admin). Más reciente primero. Filtros: rango de fechas, usuario, acción (texto parcial), origen (`http|servicio|worker`), resultado (`exito|error`) y `request_id` (une la petición HTTP con sus casos de uso).
+         * @description Requiere `bitacora:leer` (Administrador). Más reciente primero. Filtros: rango de fechas, usuario, acción (texto parcial), origen (`http|servicio|worker`), resultado (`exito|error`) y `request_id` (une la petición HTTP con sus casos de uso).
          */
         get: operations["consultar_bitacora_api_v1_bitacora_get"];
         put?: never;

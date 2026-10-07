@@ -13,7 +13,7 @@ function sembrarSesion(permisos: string[]) {
     JSON.stringify({
       token: 't',
       expiraEn: Date.now() + 3_600_000,
-      usuario: { id: 'u1', nombre_completo: 'Ana Ventas', roles: ['Ventas'], permisos },
+      usuario: { id: 'u1', nombre_completo: 'Ana Ventas', roles: ['EncargadoVentas'], permisos },
     }),
   )
 }

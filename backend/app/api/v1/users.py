@@ -65,7 +65,7 @@ def crear_usuario(db: DBSession, _usuario: Administra, datos: UsuarioCreate) -> 
     summary="Actualizar usuario (parcial)",
     description=(
         "Edita nombre, contraseña, roles y rutas comerciales. 404 `USUARIO_NO_ENCONTRADO`; "
-        "409 `ULTIMO_ADMIN` / `AUTOMODIFICACION_NO_PERMITIDA` al retirar el rol Admin."
+        "409 `ULTIMO_ADMIN` / `AUTOMODIFICACION_NO_PERMITIDA` al retirar el rol Administrador."
     ),
 )
 def actualizar_usuario(

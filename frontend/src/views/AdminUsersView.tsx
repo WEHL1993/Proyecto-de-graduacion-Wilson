@@ -17,12 +17,13 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 const COLOR_ROL: Record<string, string> = {
-  Admin: 'bg-bad/10 text-bad',
+  Administrador: 'bg-bad/10 text-bad',
   Gerente: 'bg-brand/10 text-brand',
-  Ventas: 'bg-good/10 text-good',
-  Inventario: 'bg-warn/10 text-warn',
-  Bodega: 'bg-warn/10 text-warn',
-  Compras: 'bg-brand/10 text-brand',
+  EncargadoVentas: 'bg-good/10 text-good',
+  EncargadoInventario: 'bg-warn/10 text-warn',
+  EncargadoBodega: 'bg-warn/10 text-warn',
+  EncargadoCompras: 'bg-brand/10 text-brand',
+  Liquidador: 'bg-good/10 text-good',
 }
 
 export function RolBadge({ rol }: { rol: string }) {

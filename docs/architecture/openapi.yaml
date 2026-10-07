@@ -270,9 +270,10 @@ paths:
       tags:
       - Routes
       summary: Despacho físico de una carga aprobada
-      description: Requiere `carga_ruta:despachar` (Bodega). Solo una carga `aprobada` puede despacharse
-        (400 `ESTADO_CARGA_INVALIDO`); descuenta `stock_reservado` y `stock_actual` con la cantidad aprobada
-        y registra la salida en el kardex (400 `STOCK_INSUFICIENTE` si la existencia física no alcanza).
+      description: Requiere `carga_ruta:despachar` (EncargadoBodega). Solo una carga `aprobada` puede
+        despacharse (400 `ESTADO_CARGA_INVALIDO`); descuenta `stock_reservado` y `stock_actual` con la
+        cantidad aprobada y registra la salida en el kardex (400 `STOCK_INSUFICIENTE` si la existencia
+        física no alcanza).
       operationId: despachar_carga_api_v1_routes_load_plans__carga_id__dispatch_post
       security:
       - HTTPBearer: []
@@ -866,8 +867,8 @@ paths:
       - Alerts
       summary: Bandeja de alertas
       description: Requiere permiso `alertas:leer`. Solo devuelve los tipos que corresponden al rol del
-        usuario (stock/quiebre → inventario y compras; `mape_umbral` → Gerente/Admin; `etl_error` → quienes
-        cargan datos). Críticas primero, luego las más recientes.
+        usuario (stock/quiebre → inventario y compras; `mape_umbral` → Gerente/Administrador; `etl_error`
+        → quienes cargan datos). Críticas primero, luego las más recientes.
       operationId: listar_alertas_api_v1_alerts_get
       security:
       - HTTPBearer: []
@@ -1058,8 +1059,8 @@ paths:
       tags:
       - Purchasing
       summary: Pedidos a proveedor
-      description: 'Requiere `pedido_proveedor:gestionar` o `inventario:ajustar` (Bodega, para recibir):
-        todos los pedidos; o `pedido_proveedor:confirmar`: solo los del proveedor del usuario.'
+      description: 'Requiere `pedido_proveedor:gestionar` o `inventario:ajustar` (EncargadoBodega, para
+        recibir): todos los pedidos; o `pedido_proveedor:confirmar`: solo los del proveedor del usuario.'
       operationId: listar_ordenes_api_v1_purchasing_orders_get
       security:
       - HTTPBearer: []
@@ -1234,8 +1235,8 @@ paths:
       tags:
       - Purchasing
       summary: Recepción física en bodega (confirmado → recibido)
-      description: Requiere `inventario:ajustar` (Bodega). Registra la entrada en el kardex e incrementa
-        `stock_actual` en `inventario`.
+      description: Requiere `inventario:ajustar` (EncargadoBodega). Registra la entrada en el kardex e
+        incrementa `stock_actual` en `inventario`.
       operationId: recibir_orden_api_v1_purchasing_orders__pedido_id__receive_post
       security:
       - HTTPBearer: []
@@ -1375,7 +1376,7 @@ paths:
       - Users
       summary: Actualizar usuario (parcial)
       description: Edita nombre, contraseña, roles y rutas comerciales. 404 `USUARIO_NO_ENCONTRADO`; 409
-        `ULTIMO_ADMIN` / `AUTOMODIFICACION_NO_PERMITIDA` al retirar el rol Admin.
+        `ULTIMO_ADMIN` / `AUTOMODIFICACION_NO_PERMITIDA` al retirar el rol Administrador.
       operationId: actualizar_usuario_api_v1_users__usuario_id__patch
       security:
       - HTTPBearer: []
@@ -2051,9 +2052,9 @@ paths:
       tags:
       - Bitácora
       summary: Consultar la bitácora de auditoría
-      description: 'Requiere `bitacora:leer` (Admin). Más reciente primero. Filtros: rango de fechas,
-        usuario, acción (texto parcial), origen (`http|servicio|worker`), resultado (`exito|error`) y
-        `request_id` (une la petición HTTP con sus casos de uso).'
+      description: 'Requiere `bitacora:leer` (Administrador). Más reciente primero. Filtros: rango de
+        fechas, usuario, acción (texto parcial), origen (`http|servicio|worker`), resultado (`exito|error`)
+        y `request_id` (une la petición HTTP con sus casos de uso).'
       operationId: consultar_bitacora_api_v1_bitacora_get
       security:
       - HTTPBearer: []
