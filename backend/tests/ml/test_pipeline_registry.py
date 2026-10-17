@@ -156,3 +156,14 @@ def test_datos_insuficientes_para_entrenar(ventas):
     corto = ventas[ventas["fecha"] >= ventas["fecha"].max() - pd.Timedelta(days=40)]
     with pytest.raises(contracts.DatosInsuficientes):
         entrenar_y_evaluar(corto, "xgboost", HP["xgboost"])
+
+
+def test_min_train_dias_permite_entrenar_con_historia_corta_y_queda_registrado(ventas):
+    corto = ventas[ventas["fecha"] > ventas["fecha"].max() - pd.Timedelta(days=92)]
+    with pytest.raises(contracts.DatosInsuficientes):  # 28 + 60 + 14 = 102 > 92
+        contracts.entrenar_y_evaluar(corto, "xgboost", HP["xgboost"])
+
+    res = contracts.entrenar_y_evaluar(corto, "xgboost", HP["xgboost"], min_train_dias=50)
+
+    assert res.informe["configuracion"]["min_train_dias"] == 50
+    assert {m.tipo_evaluacion for m in res.metricas} == {"backtest", "holdout"}

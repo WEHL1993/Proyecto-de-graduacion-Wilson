@@ -106,11 +106,18 @@ def entrenar_y_evaluar(
     algoritmo: str,
     hiperparametros: dict[str, Any] | None = None,
     cobertura: Mapping[str, Sequence[tuple[date, date]]] | None = None,
+    min_train_dias: int | None = None,
 ) -> ResultadoEntrenamiento:
-    """`cobertura` (ruta_id -> rangos con datos) activa el modo con huecos de ADR-14."""
+    """`cobertura` (ruta_id -> rangos con datos) activa el modo con huecos de ADR-14.
+
+    `min_train_dias` baja el entrenamiento mínimo del primer corte del backtest (por defecto 60)
+    cuando el histórico es corto; la configuración usada queda en el informe del modelo.
+    """
+    from app.ml.pipeline import ConfigEntrenamiento
     from app.ml.pipeline import entrenar_y_evaluar as _entrenar
 
-    return _entrenar(ventas, algoritmo, hiperparametros, cobertura=cobertura)
+    config = ConfigEntrenamiento(min_train_dias=min_train_dias) if min_train_dias else None
+    return _entrenar(ventas, algoritmo, hiperparametros, cobertura=cobertura, config=config)
 
 
 def registrar_modelo(

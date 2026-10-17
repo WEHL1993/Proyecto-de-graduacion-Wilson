@@ -18,11 +18,20 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--algoritmo", choices=["sklearn", "xgboost"], default="xgboost")
     parser.add_argument("--promover", action="store_true", help="Promueve el modelo a producción")
+    parser.add_argument(
+        "--min-train-dias",
+        type=int,
+        help="Entrenamiento mínimo del backtest (por defecto 60); bajarlo vuelve provisionales "
+        "las métricas.",
+    )
     args = parser.parse_args()
 
     with get_sessionmaker()() as db:
         modelo = training_service.entrenar_modelo(
-            db, algoritmo=args.algoritmo, promover=args.promover
+            db,
+            algoritmo=args.algoritmo,
+            promover=args.promover,
+            min_train_dias=args.min_train_dias,
         )
         print(f"Modelo {modelo.nombre} {modelo.version} ({modelo.algoritmo}) -> {modelo.estado}")
         print(f"Artefactos: ml_artifacts/{modelo.ruta_artefacto}  sha256={modelo.hash_artefacto}")

@@ -41,11 +41,14 @@ def entrenar_modelo(
     ventana_desde: date | None = None,
     ventana_hasta: date | None = None,
     fuente: FuenteReentrenamiento = FuenteReentrenamiento.EXCEL_HISTORICO,
+    min_train_dias: int | None = None,
 ) -> ModeloML:
     settings = get_settings()
     ventas, cobertura, fuentes_datos = _preparar_datos(db, fuente, ventana_desde, ventana_hasta)
     try:
-        resultado = contracts.entrenar_y_evaluar(ventas, algoritmo, hiperparametros, cobertura)
+        resultado = contracts.entrenar_y_evaluar(
+            ventas, algoritmo, hiperparametros, cobertura, min_train_dias=min_train_dias
+        )
     except contracts.HistorialInsuficiente as exc:
         raise AppError(
             "HISTORIAL_INSUFICIENTE",
