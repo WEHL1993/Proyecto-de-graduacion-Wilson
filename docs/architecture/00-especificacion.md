@@ -28,6 +28,8 @@
 | ADR-15 | **Bitácora de auditoría y respaldo** (`bitacora`, migración `0003`): registro *append-only* (trigger que bloquea `UPDATE`/`DELETE`/`TRUNCATE`) de todo lo que ejecuta el sistema. Columnas: `ocurrido_en`, `nivel` (INFO/WARNING/ERROR), `origen` (`http`\|`servicio`\|`worker`), `operacion` (lectura/escritura), `accion` (`services.etl_service.procesar_excel` o `METODO /ruta`), `resultado`, `usuario_id` (sin FK: sobrevive al borrado del usuario), `ip`, `request_id`, `metodo`, `ruta`, `status_code`, `duracion_ms`, `parametros` jsonb (saneado: sin contraseñas/tokens/hash, textos truncados, binarios como `<n bytes>`), `codigo_error`, `mensaje`. **Mapeo**: (1) middleware HTTP: una fila por petición (incluye 401/403 y 5xx; omite `/health`, `/docs`, `/openapi.json`) y fija el contexto (`core/contexto.py`: usuario del JWT, IP, `request_id`, devuelto en `X-Request-ID`); (2) decorador `@auditar` (`services/bitacora_service.py`) en **cada caso de uso público** de `services/` con sesión `db` y en los jobs del Worker: registra éxito o error con argumentos y duración y relanza la excepción; (3) el planificador del Worker fija origen `worker` y un `request_id` por job. Los helpers puros (cálculos, validaciones) no se auditan. Se escribe en una sesión/conexión **independiente** con `commit` propio, de modo que un `rollback` del caso de uso no borra su rastro; un fallo al registrar nunca rompe la operación (se informa por el logger `app.bitacora`). Los logs `app.auditoria` existentes se conservan. Consulta: `GET /bitacora` (permiso nuevo `bitacora:leer`, solo Admin; filtros por fechas, usuario, acción, origen, resultado y `request_id`). Limitaciones: no hay retención/archivado automático ni UI en el frontend; las funciones de `ml/` se auditan a través del servicio que las invoca (`training_service`, `prediction_service`...). | Auditoría y respaldo exigidos por el negocio: trazabilidad de quién ejecutó qué y con qué resultado, inmutable y consultable, sin acoplar `ml/` ni los repositorios al mecanismo |
 | ADR-16 | **Administración de productos con baja lógica y ajuste manual de stock** (migración `0004`). **CRUD** `/products` (`GET` lista/detalle con `inventario:leer`; `POST` `productos:crear`; `PATCH` `productos:editar`; `DELETE` y `POST /{id}/reactivate` `productos:eliminar`). **Permisos nuevos** `productos:crear|editar|eliminar` (no constan en la matriz 1.4 original): Admin e Inventario. **Baja lógica**: `DELETE` marca `activo=false` y nunca borra la fila (el producto está referenciado por ventas, cargas, kardex, pedidos y pronósticos); es idempotente y responde 204; se bloquea con 409 `PRODUCTO_EN_USO` si hay `stock_reservado > 0` o el producto está en una carga vigente (`borrador|pendiente_aprobacion|aprobada`). Un producto inactivo no entra en cargas nuevas, pronósticos nuevos (409 `PRODUCTO_INACTIVO`), alertas de stock bajo ni compras; su historial y kardex siguen consultables; `reactivate` lo devuelve a operación. El alta crea también la fila de `inventario` en 0 (misma transacción); `sku` se normaliza a mayúsculas y es único sin distinguir mayúsculas (409 `SKU_DUPLICADO`); `PATCH` no modifica existencias ni estado. **Ajuste de stock** `POST /inventory/adjustments` (`inventario:ajustar`): `tipo` = `incremento|decremento|fijar`, `cantidad`, `motivo` (5–300 caracteres, obligatorio). Bloquea la fila de `inventario` (`FOR UPDATE`) y no deja `stock_actual` por debajo de `stock_reservado` ni negativo (400 `STOCK_INSUFICIENTE`); 400 `CANTIDAD_INVALIDA` y `AJUSTE_SIN_CAMBIO`; 404/409 `PRODUCTO_NO_ENCONTRADO`/`PRODUCTO_INACTIVO`. **Desviación del ER**: `kardex.motivo varchar(300)` nullable (solo los ajustes lo llenan) y, para `tipo_movimiento='ajuste'`, `cantidad` se guarda **con signo** (positivo suma, negativo resta; en `fijar` es la diferencia) mientras el resto de movimientos conserva cantidades positivas; `saldo_resultante` sigue siendo el stock físico tras el movimiento. Si tras el ajuste `stock_disponible < stock_minimo` se abre una alerta `stock_bajo` (sin duplicar una abierta). Extensiones aditivas de apoyo al formulario: `GET /catalog/categories` y `GET /catalog/suppliers` (cualquier usuario autenticado) | Cierra el módulo de inventario (alta, edición, baja y ajuste) sin romper la trazabilidad: la baja lógica preserva las claves foráneas y el historial que alimenta al modelo, y el motivo + usuario en kardex deja auditable cada corrección manual |
 | ADR-17 | **Nombres canónicos de rol (M01)**, migración `0005`: `Administrador`, `EncargadoInventario`, `EncargadoVentas`, `EncargadoBodega`, `EncargadoCompras`, `Gerente`, `Proveedor`, `Liquidador` (antes `Admin`, `Inventario`, `Ventas`, `Bodega`, `Compras`). El `UPDATE` conserva los ids de `roles`, por lo que `usuarios_roles` y `roles_permisos` no cambian; los códigos de permiso no cambian. Constantes en `domain/enums.py::NombreRol`. `Liquidador` (registrar y cerrar la liquidación diaria) tiene solo `liquidaciones:registrar|cerrar|leer`; `corregir` es exclusivo del Administrador. Las filas ADR-13…ADR-16 conservan los nombres con que se redactaron. | Alinear código y documentación con los actores de la tesis sin romper permisos ni datos |
+| ADR-18 | **Catálogos y equipos de ruta (M02)**, migración `0006`. **(1) Empleados separados de usuarios:** `empleados` (personal de ruta: vendedor, chofer, auxiliar) no es `usuarios`; el vínculo `empleados.usuario_id` es opcional y único (`SET NULL`). Un chofer o auxiliar no necesita cuenta de acceso. **(2) Equipo con vigencia y porcentaje:** `equipo_ruta` (ruta, empleado, `rol_en_ruta` = `vendedor|chofer|auxiliar`, `porcentaje_reparto numeric(5,2)` entre 0 y 100, `vigente_desde`, `vigente_hasta`). Únicos parciales con vigencia abierta: un empleado no se repite en la misma ruta y solo hay un `vendedor` por ruta. La suma de porcentajes no cabe en un CHECK de fila: la valida el servicio y `PUT /catalog/routes/{id}/team` exige exactamente 100,00 (400 `EQUIPO_NO_SUMA_100`); el reemplazo **cierra** las vigencias anteriores, nunca las borra. Se permite un equipo sin vendedor; los informes `GET /catalog/teams/incomplete` (sin equipo, sin vendedor o suma ≠ 100) y `GET /catalog/teams/misaligned` lo señalan. **(3) Producto con presentación en paquete:** `productos.unidades_por_paquete` (smallint, default 1, > 0), `medida_ml` (integer nullable, > 0) y `sabor` (varchar(60) nullable); la unidad de venta es el paquete (`unidad_medida='paquete'` en los importados). **(4) Alias de Excel:** `producto_alias_excel` (`alias` único → `producto_id`) permite emparejar la clave `<medida>-<SABOR>` del ETL con el SKU (= código de la empresa) sin tocar `productos.sku`; hoy solo se llena desde `data/plantillas/alias_excel.csv` y el ETL todavía no la consulta. **(5) Dos fuentes de verdad del vendedor:** `rutas.vendedor_id` (usuario; lo usan liquidación y cargas) conserva su semántica y NO se sincroniza con el vendedor de `equipo_ruta` (empleado). Solo se rechaza una contradicción explícita (409 `VENDEDOR_INCOHERENTE`: ambos con usuario y distintos) y el informe de rutas desalineadas las lista; se resuelve en M05/M06. **Permisos nuevos** `catalogos:leer` (Administrador, Gerente, EncargadoInventario) y `catalogos:gestionar` (solo Administrador); `GET /catalog/routes|categories|suppliers` siguen abiertos a cualquier usuario autenticado. Bajas lógicas (`EMPLEADO_EN_USO`, `RUTA_CON_LIQUIDACIONES`, `RUTA_CON_CARGAS_VIGENTES`). Importador `python -m app.db.seeds.importar_catalogos` (dry-run por defecto, `--aplicar` para escribir, idempotente por SKU) | Prepara M06 (comisiones por reparto de equipo) sin romper liquidación, cargas ni ETL: todo es aditivo y el personal de ruta deja de depender de cuentas de usuario |
+| ADR-19 | **RBAC en base de datos (M01)**, migración `0007`. **(1) La BD es la fuente de verdad** de roles, permisos, `roles_permisos` y de qué pantalla exige qué permiso: nuevas tablas `pantallas` (clave, etiqueta, ruta, `ruta_prefijo`, grupo, orden, activo) y `pantallas_permisos` (la pantalla se muestra si el usuario tiene ALGUNO de sus permisos); `roles` gana `activo`, `es_sistema`, `requiere_proveedor`, `color` y `pantalla_inicio_id`; `permisos` gana `modulo` y `activo`. El menú, `PERMISOS_VISTA` (`rbac.ts`, eliminado), la pantalla de inicio y los colores de rol ya no están quemados en el frontend. **(2) Permisos en vivo:** el JWT solo identifica al usuario; `get_current_user` lee roles y permisos de la BD en cada petición (`rbac_permisos_en_vivo`, solo se apaga en pruebas sin BD; `@pytest.mark.rbac_vivo` lo activa). Un cambio de matriz, la desactivación de un rol o de una cuenta surte efecto de inmediato (401 `SESION_INVALIDA` si la cuenta ya no existe o está inactiva). Solo cuentan roles y permisos `activo`. **(3) Roles activables:** el modelo objetivo usa tres roles activos (Administrador, Gerente, Liquidador); los heredados (EncargadoInventario/Ventas/Bodega/Compras y Proveedor) se **desactivan** en la migración solo si no tienen usuarios asignados y se reactivan desde la matriz. Un rol inactivo no se puede asignar a usuarios nuevos; desactivar un rol que dejaría a un usuario activo sin ningún rol activo responde 409 `ROL_CON_USUARIOS`. El rol `es_sistema` (Administrador) no se edita ni se desactiva (409 `ROL_SISTEMA_PROTEGIDO`) y el seed siempre le asigna todos los permisos. **(4) Seed no destructivo:** el seed solo crea lo que falta; la matriz por defecto se aplica únicamente a roles y pantallas nuevos y nunca revierte lo editado (excepción: el rol de sistema). **(5) API** (permiso nuevo `roles:gestionar`, solo Administrador): `GET /rbac/matrix`, `PUT /rbac/roles/{id}/permissions`, `PATCH /rbac/roles/{id}` (activo, color, descripción, pantalla de inicio), `GET /rbac/users/{id}/access` («ver como»); `GET /auth/me` devuelve roles, permisos, `menu` y `pantalla_inicio` vigentes y el login los incluye. La protección de cada endpoint sigue siendo `require_permission("x:y")` en código; una prueba unitaria verifica que todo código exigido por la API exista en el catálogo sembrado. **(6) Vendedores:** el vendedor no es un rol ni inicia sesión; sus saldos y paquetes vendidos los captura el Liquidador. Migrar `vendedor_id` de `usuarios` a `empleados` queda para M05/M06 (ver ADR-18 punto 5) | Hace consultable y editable desde la BD lo que estaba en el código, con efecto inmediato y sin poder dejar al sistema sin administrador |
 
 Extensiones aditivas al contrato de `POST /predictions/demand` (ADR-11): campo opcional `persistir` (bool, por defecto `false`) que guarda los puntos en `pronosticos_demanda` con upsert idempotente; códigos 400 `SIN_MODELO_PRODUCTIVO`, `PRODUCTO_NO_ENCONTRADO`, `RUTA_NO_ENCONTRADA`, `HISTORIAL_INSUFICIENTE` (histórico < 28 días por serie) y 500 `ARTEFACTO_CORRUPTO`/`ARTEFACTO_NO_ENCONTRADO`. Entrenamiento: `python scripts/train_model.py --algoritmo xgboost [--promover]`.
 
@@ -144,6 +146,9 @@ stateDiagram-v2
 | `productos:crear` (ADR-16; alta de productos) | ✔ | ✔ | | | | | |  | |
 | `productos:editar` (ADR-16; edición de datos del producto) | ✔ | ✔ | | | | | |  | |
 | `productos:eliminar` (ADR-16; baja lógica y reactivación) | ✔ | ✔ | | | | | |  | |
+| `catalogos:leer` (ADR-18; consulta de rutas, empleados y equipos) | ✔ | ✔ | | | | ✔ | |  | |
+| `catalogos:gestionar` (ADR-18; alta y edición de rutas, empleados y equipos) | ✔ | | | | | | |  | |
+| `roles:gestionar` (ADR-19; matriz de permisos y activación de roles) | ✔ | | | | | | |  | |
 
 > El actor **Proveedor** accede únicamente a sus propios pedidos (restricción a nivel de fila por `proveedor_id` asociado a su usuario).
 
@@ -163,7 +168,6 @@ ds-predictive-platform/
 │   └── architecture/
 │       ├── 00-especificacion.md       # Este documento
 │       ├── openapi.yaml               # Contrato formal (sección 4)
-│       ├── er-diagram.mmd             # Diagrama ER (sección 3)
 │       └── qa-matrix.md               # Matriz de pruebas (sección 5)
 │
 ├── backend/
@@ -453,6 +457,10 @@ erDiagram
     proveedores ||--o{ productos : "suministra"
     proveedores ||--o{ usuarios : "cuenta_de_acceso"
     usuarios ||--o{ rutas : "vendedor_asignado"
+    productos ||--o{ producto_alias_excel : "se_llama_en_excel"
+    usuarios |o--o| empleados : "vinculo_opcional"
+    rutas ||--o{ equipo_ruta : "se_integra_por"
+    empleados ||--o{ equipo_ruta : "integra"
 
     productos ||--|| inventario : "existencia"
     productos ||--o{ kardex : "movimientos"
@@ -544,7 +552,34 @@ erDiagram
         numeric precio_venta
         numeric costo_unitario
         numeric stock_minimo
+        smallint unidades_por_paquete "default 1, CHECK > 0 (ADR-18)"
+        integer medida_ml "nullable, CHECK > 0 (ADR-18)"
+        varchar sabor "nullable (ADR-18)"
         boolean activo
+        timestamptz creado_en
+    }
+    producto_alias_excel {
+        uuid id PK
+        uuid producto_id FK
+        varchar alias UK "clave medida-SABOR del Excel (ADR-18)"
+        timestamptz creado_en
+    }
+    empleados {
+        uuid id PK
+        varchar nombre_completo
+        uuid usuario_id FK "nullable, UK (ADR-18)"
+        boolean activo
+        timestamptz creado_en
+        timestamptz actualizado_en
+    }
+    equipo_ruta {
+        uuid id PK
+        uuid ruta_id FK
+        uuid empleado_id FK
+        varchar rol_en_ruta "vendedor|chofer|auxiliar"
+        numeric porcentaje_reparto "0..100 (suma 100 la valida el servicio)"
+        date vigente_desde
+        date vigente_hasta "NULL = vigente"
         timestamptz creado_en
     }
     rutas {
@@ -749,6 +784,11 @@ erDiagram
 
 | Tabla | Restricción / Índice | Propósito |
 |-------|----------------------|-----------|
+| `productos` | `CHECK (unidades_por_paquete > 0)`; `CHECK (medida_ml IS NULL OR medida_ml > 0)` | Presentación en paquete (ADR-18) |
+| `producto_alias_excel` | `UNIQUE (alias)`; FK `producto_id` `RESTRICT` | Una clave de Excel apunta a un solo producto (ADR-18) |
+| `empleados` | `UNIQUE (usuario_id)` (nullable) | Un usuario se vincula a un solo empleado (ADR-18) |
+| `equipo_ruta` | `CHECK (porcentaje_reparto BETWEEN 0 AND 100)`; `CHECK (vigente_hasta IS NULL OR vigente_desde <= vigente_hasta)`; `CHECK (rol_en_ruta IN ('vendedor','chofer','auxiliar'))` | Integridad de fila (ADR-18); la suma 100 la valida el servicio |
+| `equipo_ruta` | `UNIQUE (ruta_id, empleado_id) WHERE vigente_hasta IS NULL`; `UNIQUE (ruta_id) WHERE rol_en_ruta='vendedor' AND vigente_hasta IS NULL` | Sin empleado repetido y un solo vendedor vigente por ruta (ADR-18) |
 | `ventas_historicas` | `UNIQUE (fecha_venta, producto_id, ruta_id, vendedor_id)` con `ON CONFLICT` en ETL | Idempotencia de re-cargas |
 | `ventas_historicas` | Índice `(producto_id, fecha_venta)` y `(ruta_id, fecha_venta)` | Series temporales por producto/ruta |
 | `ventas_historicas` | `CHECK (cantidad >= 0 AND precio_unitario >= 0)` | Calidad de datos |
@@ -1308,7 +1348,7 @@ components:
 
 ### 4.1 Endpoints implementados posteriormente al contrato de diseño
 
-> El bloque YAML anterior es el **contrato de diseño** inicial (`openapi.contract.yaml`, 6 operaciones: auth, ETL, predicciones, cargas y ML). Desde entonces se añadieron 51 operaciones por las ADR de liquidación diaria (ADR-14), productos/ajustes (ADR-16), compras, usuarios, reportes, bitácora y alertas. La fuente de verdad **vigente** es `docs/architecture/openapi.yaml`, generado desde FastAPI con `make openapi` y verificado por `tests/unit/test_app_and_openapi.py`. Tabla generada a partir de él (Swagger en `/docs` para esquemas y códigos de error):
+> El bloque YAML anterior es el **contrato de diseño** inicial (`openapi.contract.yaml`, 6 operaciones: auth, ETL, predicciones, cargas y ML). Desde entonces se añadieron 51 operaciones por las ADR de liquidación diaria (ADR-14), productos/ajustes (ADR-16), compras, usuarios, reportes, bitácora y alertas, y 16 más en M02 (ADR-18: rutas, equipos y empleados). La fuente de verdad **vigente** es `docs/architecture/openapi.yaml`, generado desde FastAPI con `make openapi` y verificado por `tests/unit/test_app_and_openapi.py`. Tabla generada a partir de él (Swagger en `/docs` para esquemas y códigos de error):
 
 | Módulo | Método | Ruta | Resumen |
 |---|---|---|---|
@@ -1318,9 +1358,25 @@ components:
 | Catalog | GET | `/api/v1/catalog/categories` | Categorías de producto |
 | Catalog | GET | `/api/v1/catalog/routes` | Rutas activas |
 | Catalog | GET | `/api/v1/catalog/suppliers` | Proveedores activos |
+| Catalog | GET | `/api/v1/catalog/routes/admin` | Rutas para administración (M02, ADR-18) |
+| Catalog | POST | `/api/v1/catalog/routes` | Crear ruta |
+| Catalog | GET | `/api/v1/catalog/routes/{ruta_id}` | Detalle de una ruta |
+| Catalog | PATCH | `/api/v1/catalog/routes/{ruta_id}` | Actualizar ruta |
+| Catalog | POST | `/api/v1/catalog/routes/{ruta_id}/activate` | Reactivar ruta |
+| Catalog | POST | `/api/v1/catalog/routes/{ruta_id}/deactivate` | Desactivar ruta (baja lógica) |
+| Catalog | GET | `/api/v1/catalog/routes/{ruta_id}/team` | Equipo vigente e historial de la ruta |
+| Catalog | PUT | `/api/v1/catalog/routes/{ruta_id}/team` | Reemplazar el equipo (suma 100, cierra vigencias) |
+| Catalog | GET | `/api/v1/catalog/teams/incomplete` | Rutas con equipo incompleto |
+| Catalog | GET | `/api/v1/catalog/teams/misaligned` | Rutas con vendedor desalineado |
 | ETL | GET | `/api/v1/etl/batches` | Historial de lotes ETL |
 | ETL | GET | `/api/v1/etl/config` | Política de datos del modelo |
 | ETL | PUT | `/api/v1/etl/config` | Cierra o reabre el arranque y fija la fuente de reentrenamiento |
+| Employees | GET | `/api/v1/employees` | Listar personal de ruta |
+| Employees | POST | `/api/v1/employees` | Crear empleado |
+| Employees | GET | `/api/v1/employees/{empleado_id}` | Detalle de un empleado |
+| Employees | PATCH | `/api/v1/employees/{empleado_id}` | Actualizar empleado |
+| Employees | DELETE | `/api/v1/employees/{empleado_id}` | Baja lógica de un empleado |
+| Employees | POST | `/api/v1/employees/{empleado_id}/reactivate` | Reactivar un empleado |
 | Health | GET | `/health` | Liveness del servicio |
 | Inventory | GET | `/api/v1/inventory` | Existencias por producto |
 | Inventory | POST | `/api/v1/inventory/adjustments` | Ajuste manual de existencias |
@@ -1471,7 +1527,7 @@ components:
 ## 6. Instrucciones de uso para Claude CLI
 
 1. Colocar este documento en `docs/architecture/00-especificacion.md` y referenciarlo desde `CLAUDE.md`.
-2. Extraer el bloque YAML de la sección 4 a `openapi.yaml`, y el bloque `erDiagram` de la sección 3.2 a `er-diagram.mmd`.
+2. Extraer el bloque YAML de la sección 4 a `openapi.yaml`.
 3. **Orden de implementación sugerido:** (1) `docker-compose` + BD y migraciones desde el ER; (2) seeds de roles/permisos/parámetros; (3) `core` + Auth + RBAC; (4) ETL; (5) `ml/` (features, evaluación, registro); (6) predicciones y carga de ruta; (7) Worker (evaluación y reentrenamiento); (8) frontend por vistas; (9) ejecución de la matriz de pruebas.
 4. Cada módulo debe ir acompañado de sus pruebas de la sección 5 antes de pasar al siguiente.
 5. Ante cualquier ambigüedad, prevalece el contrato OpenAPI y el ER; las desviaciones deben documentarse como ADR nuevas.
