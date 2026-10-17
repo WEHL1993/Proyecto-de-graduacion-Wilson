@@ -21,6 +21,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Sesión vigente: roles, permisos y menú
+         * @description Lee de la BD los roles y permisos actuales de quien consulta y el menú de pantallas autorizadas (ADR-19). El frontend lo refresca para reflejar cambios de la matriz.
+         */
+        get: operations["sesion_vigente_api_v1_auth_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/etl/upload-excel": {
         parameters: {
             query?: never;
@@ -934,6 +954,86 @@ export interface paths {
         patch: operations["cambiar_estado_usuario_api_v1_users__usuario_id__status_patch"];
         trace?: never;
     };
+    "/api/v1/rbac/matrix": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Matriz de roles, permisos y pantallas
+         * @description Requiere `roles:gestionar`. Todo proviene de las tablas RBAC.
+         */
+        get: operations["matriz_api_v1_rbac_matrix_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/rbac/roles/{rol_id}/permissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Reemplazar los permisos de un rol
+         * @description Guarda el conjunto completo. 404 `ROL_NO_ENCONTRADO`; 400 `PERMISO_INVALIDO`; 409 `ROL_SISTEMA_PROTEGIDO` (Administrador).
+         */
+        put: operations["reemplazar_permisos_api_v1_rbac_roles__rol_id__permissions_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/rbac/roles/{rol_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Activar/desactivar un rol y ajustar su presentación
+         * @description 404 `ROL_NO_ENCONTRADO`; 400 `PANTALLA_INVALIDA`; 409 `ROL_SISTEMA_PROTEGIDO` o `ROL_CON_USUARIOS` (usuarios activos que quedarían sin ningún rol activo).
+         */
+        patch: operations["actualizar_rol_api_v1_rbac_roles__rol_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/rbac/users/{usuario_id}/access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Pantallas autorizadas de un usuario
+         * @description Vista «ver como»: cada pantalla con el permiso que la habilita.
+         */
+        get: operations["acceso_de_usuario_api_v1_rbac_users__usuario_id__access_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/reports/inventory-turnover": {
         parameters: {
             query?: never;
@@ -1206,6 +1306,48 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AccesoSesion
+         * @description Lo que el frontend necesita para pintar la sesión: roles, permisos y menú vigentes.
+         */
+        AccesoSesion: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Nombre Completo */
+            nombre_completo: string;
+            /** Roles */
+            roles: string[];
+            /** Permisos */
+            permisos: string[];
+            /** Menu */
+            menu: components["schemas"]["PantallaMenu"][];
+            /**
+             * Pantalla Inicio
+             * @description Ruta a la que se entra tras iniciar sesión.
+             */
+            pantalla_inicio?: string | null;
+        };
+        /** AccesoUsuario */
+        AccesoUsuario: {
+            /**
+             * Usuario Id
+             * Format: uuid
+             */
+            usuario_id: string;
+            /** Nombre Completo */
+            nombre_completo: string;
+            /** Activo */
+            activo: boolean;
+            /** Roles */
+            roles: string[];
+            /** Permisos */
+            permisos: string[];
+            /** Pantallas */
+            pantallas: components["schemas"]["PantallaAcceso"][];
+        };
         /** AjusteCarga */
         AjusteCarga: {
             /**
@@ -1358,6 +1500,12 @@ export interface components {
          * @enum {string}
          */
         CodigoErrorEtl: "COLUMNAS_FALTANTES" | "TIPOS_INVALIDOS" | "DATOS_INVALIDOS";
+        /**
+         * ColorRol
+         * @description Color de un rol en la interfaz (`roles.color`); el frontend lo traduce a estilos.
+         * @enum {string}
+         */
+        ColorRol: "bad" | "brand" | "good" | "warn" | "neutral";
         /** ComisionReporte */
         ComisionReporte: {
             /** Periodo Desde */
@@ -2167,6 +2315,15 @@ export interface components {
             /** Lotes */
             lotes: components["schemas"]["LoteItem"][];
         };
+        /** MatrizAcceso */
+        MatrizAcceso: {
+            /** Roles */
+            roles: components["schemas"]["RolMatriz"][];
+            /** Permisos */
+            permisos: components["schemas"]["PermisoMatriz"][];
+            /** Pantallas */
+            pantallas: components["schemas"]["PantallaMatriz"][];
+        };
         /** MetricPoint */
         MetricPoint: {
             /**
@@ -2332,6 +2489,64 @@ export interface components {
              */
             efectivo_entregado: string;
         };
+        /** PantallaAcceso */
+        PantallaAcceso: {
+            /** Clave */
+            clave: string;
+            /** Etiqueta */
+            etiqueta: string;
+            /** Ruta */
+            ruta: string;
+            /** Grupo */
+            grupo: string;
+            /** Autorizada */
+            autorizada: boolean;
+            /**
+             * Via Permisos
+             * @description Permisos del usuario que la habilitan.
+             */
+            via_permisos: string[];
+        };
+        /** PantallaMatriz */
+        PantallaMatriz: {
+            /** Id */
+            id: number;
+            /** Clave */
+            clave: string;
+            /** Etiqueta */
+            etiqueta: string;
+            /** Ruta */
+            ruta: string;
+            /** Grupo */
+            grupo: string;
+            /** Orden */
+            orden: number;
+            /** Activo */
+            activo: boolean;
+            /**
+             * Permisos
+             * @description La pantalla se habilita con CUALQUIERA de estos.
+             */
+            permisos: string[];
+        };
+        /**
+         * PantallaMenu
+         * @description Entrada del menú lateral autorizada para el usuario.
+         */
+        PantallaMenu: {
+            /** Clave */
+            clave: string;
+            /** Etiqueta */
+            etiqueta: string;
+            /** Ruta */
+            ruta: string;
+            /** Ruta Prefijo */
+            ruta_prefijo?: string | null;
+            /** Grupo */
+            grupo: string;
+            /** Orden */
+            orden: number;
+        };
         /** PedidoConfirmacion */
         PedidoConfirmacion: {
             /**
@@ -2459,6 +2674,19 @@ export interface components {
              * @description MAPE del último periodo frente al anterior
              */
             tendencia?: ("sube" | "baja" | "estable") | null;
+        };
+        /** PermisoMatriz */
+        PermisoMatriz: {
+            /** Id */
+            id: number;
+            /** Codigo */
+            codigo: string;
+            /** Descripcion */
+            descripcion?: string | null;
+            /** Modulo */
+            modulo: string;
+            /** Activo */
+            activo: boolean;
         };
         /** PrecargaResponse */
         PrecargaResponse: {
@@ -2701,6 +2929,70 @@ export interface components {
             nombre: string;
             /** Descripcion */
             descripcion?: string | null;
+            /**
+             * Activo
+             * @default true
+             */
+            activo: boolean;
+            /**
+             * Requiere Proveedor
+             * @default false
+             */
+            requiere_proveedor: boolean;
+            /**
+             * Color
+             * @default neutral
+             */
+            color: string;
+        };
+        /** RolMatriz */
+        RolMatriz: {
+            /** Id */
+            id: number;
+            /** Nombre */
+            nombre: string;
+            /** Descripcion */
+            descripcion?: string | null;
+            /** Activo */
+            activo: boolean;
+            /** Es Sistema */
+            es_sistema: boolean;
+            /** Requiere Proveedor */
+            requiere_proveedor: boolean;
+            color: components["schemas"]["ColorRol"];
+            /**
+             * Pantalla Inicio
+             * @description Clave de la pantalla.
+             */
+            pantalla_inicio?: string | null;
+            /** Total Usuarios */
+            total_usuarios: number;
+            /**
+             * Permisos
+             * @description Códigos de permiso asignados al rol.
+             */
+            permisos: string[];
+        };
+        /** RolPermisosUpdate */
+        RolPermisosUpdate: {
+            /**
+             * Permisos
+             * @description Conjunto completo de códigos de permiso del rol.
+             */
+            permisos: string[];
+        };
+        /** RolUpdate */
+        RolUpdate: {
+            /** Descripcion */
+            descripcion?: string | null;
+            /** Activo */
+            activo?: boolean | null;
+            color?: components["schemas"]["ColorRol"] | null;
+            /**
+             * Pantalla Inicio
+             * @description Clave de pantalla; `null` explícito la quita.
+             */
+            pantalla_inicio?: string | null;
         };
         /** RotacionReporte */
         RotacionReporte: {
@@ -3101,6 +3393,13 @@ export interface components {
             roles: string[];
             /** Permisos */
             permisos: string[];
+            /**
+             * Menu
+             * @default []
+             */
+            menu: components["schemas"]["PantallaMenu"][];
+            /** Pantalla Inicio */
+            pantalla_inicio?: string | null;
         };
         /**
          * UsuarioUpdate
@@ -3220,6 +3519,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    sesion_vigente_api_v1_auth_me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccesoSesion"];
                 };
             };
         };
@@ -4970,6 +5289,127 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UsuarioOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    matriz_api_v1_rbac_matrix_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatrizAcceso"];
+                };
+            };
+        };
+    };
+    reemplazar_permisos_api_v1_rbac_roles__rol_id__permissions_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rol_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RolPermisosUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RolMatriz"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    actualizar_rol_api_v1_rbac_roles__rol_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rol_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RolUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RolMatriz"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    acceso_de_usuario_api_v1_rbac_users__usuario_id__access_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                usuario_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccesoUsuario"];
                 };
             };
             /** @description Validation Error */

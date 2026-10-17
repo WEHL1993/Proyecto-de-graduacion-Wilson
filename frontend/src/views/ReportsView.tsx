@@ -57,7 +57,7 @@ function Kpi({ etiqueta, valor, detalle }: { etiqueta: string; valor: string; de
 
 function Estado({ q, vacio }: { q: { isLoading: boolean; isError: boolean; error: unknown }; vacio?: boolean }) {
   if (q.isLoading) return <Cargando />
-  if (q.isError) return <AlertBanner>{mensajeError(q.error)}</AlertBanner>
+  if (q.isError) return <AlertBanner fijo>{mensajeError(q.error)}</AlertBanner>
   if (vacio) return <EmptyState titulo="Sin datos" detalle="No hay información para el periodo y la ruta seleccionados." />
   return null
 }

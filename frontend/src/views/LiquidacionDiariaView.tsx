@@ -343,7 +343,7 @@ export function LiquidacionDiariaView() {
           )}
 
           {!!validacion.errores.length && (
-            <AlertBanner>
+            <AlertBanner fijo>
               <ul className="list-disc pl-5">
                 {validacion.errores.map((e) => (
                   <li key={e}>{e}</li>
@@ -352,7 +352,7 @@ export function LiquidacionDiariaView() {
             </AlertBanner>
           )}
           {!validacion.errores.length && !!validacion.pendientes.length && (
-            <AlertBanner tipo="info">
+            <AlertBanner tipo="info" fijo>
               Para cerrar falta cuadrar:
               <ul className="list-disc pl-5">
                 {validacion.pendientes.map((e) => (

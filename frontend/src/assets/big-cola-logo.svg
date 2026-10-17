@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Creator: CorelDRAW X6 -->
+<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" width="114.21mm" height="111.59mm" version="1.1" shape-rendering="geometricPrecision" text-rendering="geometricPrecision" image-rendering="optimizeQuality" fill-rule="evenodd" clip-rule="evenodd"
+viewBox="0 0 11421 11159"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+ <defs>
+    <mask id="id0">
+      <linearGradient id="id1" gradientUnits="userSpaceOnUse" x1="9059.35" y1="2421.92" x2="8271.25" y2="3083.42">
+       <stop offset="0" stop-opacity="1" stop-color="white"/>
+       <stop offset="0.419608" stop-opacity="0.501961" stop-color="white"/>
+       <stop offset="1" stop-opacity="0" stop-color="white"/>
+      </linearGradient>
+     <rect fill="url(#id1)" x="4258" y="-21" width="8814" height="5547"/>
+    </mask>
+    <linearGradient id="id2" gradientUnits="userSpaceOnUse" x1="6242.77" y1="4681.7" x2="11087.8" y2="823.64">
+     <stop offset="0" stop-color="black"/>
+     <stop offset="0.709804" stop-color="#7F7F7F"/>
+     <stop offset="1" stop-color="#FEFEFE"/>
+    </linearGradient>
+    <linearGradient id="id3" gradientUnits="userSpaceOnUse" x1="8213.28" y1="4506.19" x2="11469.7" y2="3841.61">
+     <stop offset="0" stop-color="black"/>
+     <stop offset="1" stop-color="#FEFEFE"/>
+    </linearGradient>
+    <linearGradient id="id4" gradientUnits="userSpaceOnUse" x1="5091.62" y1="4645.73" x2="7846.08" y2="2341.49">
+     <stop offset="0" stop-color="black"/>
+     <stop offset="0.568627" stop-color="#7F7F7F"/>
+     <stop offset="1" stop-color="#FEFEFE"/>
+    </linearGradient>
+    <mask id="id5">
+      <linearGradient id="id6" gradientUnits="userSpaceOnUse" x1="3094.31" y1="-205.89" x2="6936.29" y2="4977.31">
+       <stop offset="0" stop-opacity="1" stop-color="white"/>
+       <stop offset="1" stop-opacity="0" stop-color="white"/>
+      </linearGradient>
+     <rect fill="url(#id6)" x="1120" y="-2181" width="7791" height="9132"/>
+    </mask>
+    <linearGradient id="id7" gradientUnits="userSpaceOnUse" x1="3475.78" y1="3673.59" x2="6554.82" y2="1097.83">
+     <stop offset="0" stop-color="black"/>
+     <stop offset="0.568627" stop-color="#7F7F7F"/>
+     <stop offset="1" stop-color="#FEFEFE"/>
+    </linearGradient>
+    <mask id="id8">
+      <linearGradient id="id9" gradientUnits="userSpaceOnUse" x1="2858.97" y1="1836.81" x2="3619.09" y2="2792.6">
+       <stop offset="0" stop-opacity="1" stop-color="white"/>
+       <stop offset="0.588235" stop-opacity="0.501961" stop-color="white"/>
+       <stop offset="1" stop-opacity="0" stop-color="white"/>
+      </linearGradient>
+     <rect fill="url(#id9)" x="-774" y="-2313" width="8026" height="9256"/>
+    </mask>
+    <linearGradient id="id10" gradientUnits="userSpaceOnUse" x1="1117.37" y1="4680.07" x2="5360.69" y2="-50.65">
+     <stop offset="0" stop-color="black"/>
+     <stop offset="0.45098" stop-color="#7F7F7F"/>
+     <stop offset="1" stop-color="#FEFEFE"/>
+    </linearGradient>
+    <linearGradient id="id11" gradientUnits="userSpaceOnUse" x1="7766.74" y1="5322.18" x2="9050.72" y2="4073.64">
+     <stop offset="0" stop-color="black"/>
+     <stop offset="0.568627" stop-color="#7F7F7F"/>
+     <stop offset="1" stop-color="#FEFEFE"/>
+    </linearGradient>
+ </defs>
+ <g id="Capa_x0020_1">
+  <metadata id="CorelCorpID_0Corel-Layer"/>
+  <g id="_203516784">
+   <rect fill="black" x="16" y="-1" width="11368" height="7079"/>
+   <polygon fill="url(#id2)" mask="url(#id0)" points="8597,-11 4268,-1 8278,4213 10792,2650 "/>
+   <polygon fill="url(#id3)" points="11402,4831 9220,4840 8281,3854 10061,3508 "/>
+   <polygon fill="url(#id4)" points="4517,-1 2076,-1 2759,6988 10861,6507 7487,3070 6228,4719 6330,2147 "/>
+   <polygon fill="url(#id7)" mask="url(#id5)" points="2574,-1 1133,-1 1130,6942 8494,6915 "/>
+   <polygon fill="url(#id10)" mask="url(#id8)" points="1500,-1 16,-1 26,6933 7242,6907 "/>
+   <polygon fill="#F1011E" points="11379,11149 -15,11149 -15,7079 3803,7079 4441,6083 4514,7077 6269,7077 6275,5098 7291,7077 11376,7077 "/>
+   <path fill="white" d="M-4 2115l-15 5423 1492 19c2127,182 2951,-694 2976,-1590l0 -81c-12,-469 -237,-935 -605,-1250 695,-1054 504,-2773 -3041,-2550l-807 28zm1639 3299l0 847 355 0c511,-3 515,-827 -5,-847l-349 0zm-3 -1990l0 847 355 0c511,-3 515,-827 -5,-847l-349 0z"/>
+   <rect fill="white" x="4422" y="2147" width="1908" height="5408"/>
+   <polygon fill="url(#id11)" points="9220,6073 7592,4297 7846,3323 9225,4840 "/>
+   <path fill="white" d="M10792 2660l-889 1672c-183,-186 -382,-310 -651,-386 -601,-82 -1078,225 -1110,903 3,856 173,1121 1078,1224l0 -1238 2175 0 0 2805 -1214 0 0 -342c-258,270 -731,409 -1483,379 -1475,-131 -2327,-1109 -2387,-2701 -128,-2729 2846,-3777 4482,-2316z"/>
+   <path fill="#FAE202" fill-rule="nonzero" d="M6656 9497l442 0c-13,191 -80,340 -202,445 -122,105 -286,158 -494,158 -233,0 -416,-68 -549,-205 -134,-136 -200,-323 -200,-561 0,-237 66,-423 198,-560 132,-137 312,-205 541,-205 210,0 376,51 496,152 120,102 188,247 203,436l-446 0c-7,-74 -31,-130 -72,-168 -41,-38 -100,-57 -175,-57 -92,0 -160,33 -206,100 -46,67 -69,168 -69,302 0,132 24,232 73,300 48,68 120,102 214,102 72,0 130,-21 172,-62 42,-41 67,-100 74,-177z"/>
+   <path id="1" fill="#FAE202" fill-rule="nonzero" d="M7490 9335c0,138 23,238 69,303 46,64 118,97 216,97 98,0 169,-32 214,-96 45,-64 68,-165 68,-303 0,-139 -23,-240 -68,-304 -45,-64 -117,-96 -214,-96 -98,0 -170,32 -216,97 -46,65 -69,166 -69,304zm-471 0c0,-237 68,-423 203,-560 135,-137 319,-205 553,-205 233,0 416,68 551,205 135,137 202,323 202,560 0,236 -67,423 -202,560 -135,137 -318,206 -551,206 -233,0 -418,-69 -553,-206 -135,-137 -203,-324 -203,-560z"/>
+   <polygon id="2" fill="#FAE202" fill-rule="nonzero" points="8529,10060 8529,8608 8996,8608 8996,9674 9630,9674 9630,10060 "/>
+   <path id="3" fill="#FAE202" fill-rule="nonzero" d="M10063 9563l293 0 -145 -503 -148 503zm-600 497l511 -1452 473 0 511 1452 -462 0 -55 -192 -462 0 -56 192 -459 0z"/>
+   <path fill="white" d="M10960 7721c57,0 112,15 166,44 54,29 96,71 126,125 30,54 45,111 45,170 0,58 -15,114 -45,168 -30,54 -71,96 -125,125 -54,30 -110,45 -168,45 -59,0 -115,-15 -168,-45 -54,-30 -95,-71 -125,-125 -30,-54 -45,-110 -45,-168 0,-59 15,-115 45,-170 30,-54 73,-96 127,-125 54,-29 110,-44 166,-44zm0 56c-48,0 -94,12 -139,37 -45,24 -80,59 -106,104 -25,45 -38,92 -38,141 0,49 13,95 37,140 25,45 60,80 105,104 45,25 92,37 140,37 49,0 95,-13 140,-37 45,-25 80,-60 104,-104 25,-45 37,-91 37,-140 0,-49 -13,-96 -38,-141 -25,-45 -60,-80 -106,-104 -45,-24 -91,-37 -138,-37zm-149 469l0 -363 125 0c43,0 74,3 93,10 19,7 34,18 46,35 11,17 17,34 17,53 0,26 -9,50 -29,69 -19,20 -44,31 -76,33 13,5 23,12 31,19 15,14 33,38 54,72l44 71 -71 0 -32 -57c-25,-45 -46,-73 -62,-85 -11,-8 -26,-12 -47,-12l-35 0 0 154 -59 0zm59 -205l71 0c34,0 57,-5 70,-15 12,-10 19,-24 19,-40 0,-11 -3,-20 -9,-29 -6,-9 -14,-15 -25,-19 -11,-4 -30,-6 -59,-6l-67 0 0 109z"/>
+  </g>
+ </g>
+</svg>

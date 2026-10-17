@@ -3,17 +3,23 @@ import { render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { AuthProvider } from '../../app/providers/AuthProvider'
-import { PERMISOS_VISTA } from '../../app/rbac'
 import { AppShell } from '../layout/AppShell'
 import { PermissionGate } from './PermissionGate'
 
+// ADR-19: el menú viene de la BD. Este mapa solo simula lo que el servidor devolvería.
+const PANTALLAS = [
+  { clave: 'dashboard', etiqueta: 'Dashboard de Ventas', ruta: '/', grupo: 'Ventas', orden: 10, requiere: ['carga_ruta:generar', 'carga_ruta:aprobar'] },
+  { clave: 'monitoreo', etiqueta: 'Monitoreo de Modelos', ruta: '/monitoreo', grupo: 'Analítica', orden: 20, requiere: ['ml:metricas:leer'] },
+]
+
 function sembrarSesion(permisos: string[]) {
+  const menu = PANTALLAS.filter((p) => p.requiere.some((r) => permisos.includes(r))).map(({ requiere: _r, ...p }) => p)
   localStorage.setItem(
     'ds.session',
     JSON.stringify({
       token: 't',
       expiraEn: Date.now() + 3_600_000,
-      usuario: { id: 'u1', nombre_completo: 'Ana Ventas', roles: ['EncargadoVentas'], permisos },
+      usuario: { id: 'u1', nombre_completo: 'Ana Ventas', roles: ['EncargadoVentas'], permisos, menu, pantalla_inicio: menu[0]?.ruta ?? null },
     }),
   )
 }
@@ -37,7 +43,7 @@ function montar(ruta: string) {
               <Route
                 path="/monitoreo"
                 element={
-                  <PermissionGate guardRoute anyOf={PERMISOS_VISTA.monitoreo}>
+                  <PermissionGate guardRoute pantalla="monitoreo">
                     <p>panel de monitoreo</p>
                   </PermissionGate>
                 }

@@ -18,22 +18,13 @@ import { PurchasingView } from '../views/PurchasingView'
 import { ReportsView } from '../views/ReportsView'
 import { SalesDashboardView } from '../views/SalesDashboardView'
 import { useAuth } from './providers/AuthProvider'
-import { PERMISOS_VISTA } from './rbac'
 
-/** Inicio: la primera vista a la que el rol tiene acceso (evita caer en «denegado» al entrar). */
+/** Inicio: la pantalla configurada para el rol en la BD (o la primera del menú autorizado). */
 function Inicio() {
-  const { canAny } = useAuth()
-  if (canAny(PERMISOS_VISTA.dashboard)) return <SalesDashboardView />
-  if (canAny(PERMISOS_VISTA.monitoreo)) return <Navigate to="/monitoreo" replace />
-  if (canAny(PERMISOS_VISTA.compras)) return <Navigate to="/compras" replace />
-  if (canAny(PERMISOS_VISTA.inventario)) return <Navigate to="/inventario" replace />
-  if (canAny(PERMISOS_VISTA.liquidacion)) return <Navigate to="/ventas/liquidacion" replace />
-  if (canAny(PERMISOS_VISTA.liquidaciones)) return <Navigate to="/ventas/liquidaciones" replace />
-  if (canAny(PERMISOS_VISTA.etl)) return <Navigate to="/etl" replace />
-  if (canAny(PERMISOS_VISTA.reportes)) return <Navigate to="/reportes" replace />
-  if (canAny(PERMISOS_VISTA.usuarios)) return <Navigate to="/usuarios" replace />
-  if (canAny(PERMISOS_VISTA.catalogos)) return <Navigate to="/catalogos/rutas" replace />
-  return <Navigate to="/acceso-denegado" replace />
+  const { usuario, puedeVer } = useAuth()
+  const destino = usuario?.pantalla_inicio
+  if (puedeVer('dashboard')) return <SalesDashboardView />
+  return <Navigate to={destino && destino !== '/' ? destino : '/acceso-denegado'} replace />
 }
 
 export function AppRoutes() {
@@ -51,7 +42,7 @@ export function AppRoutes() {
         <Route
           path="monitoreo"
           element={
-            <PermissionGate guardRoute anyOf={PERMISOS_VISTA.monitoreo}>
+            <PermissionGate guardRoute pantalla="monitoreo">
               <ModelMonitoringView />
             </PermissionGate>
           }
@@ -59,7 +50,7 @@ export function AppRoutes() {
         <Route
           path="compras"
           element={
-            <PermissionGate guardRoute anyOf={PERMISOS_VISTA.compras}>
+            <PermissionGate guardRoute pantalla="compras">
               <PurchasingView />
             </PermissionGate>
           }
@@ -67,7 +58,7 @@ export function AppRoutes() {
         <Route
           path="inventario"
           element={
-            <PermissionGate guardRoute anyOf={PERMISOS_VISTA.inventario}>
+            <PermissionGate guardRoute pantalla="inventario">
               <InventoryView />
             </PermissionGate>
           }
@@ -75,7 +66,7 @@ export function AppRoutes() {
         <Route
           path="productos"
           element={
-            <PermissionGate guardRoute anyOf={PERMISOS_VISTA.productos}>
+            <PermissionGate guardRoute pantalla="productos">
               <ProductsView />
             </PermissionGate>
           }
@@ -83,7 +74,7 @@ export function AppRoutes() {
         <Route
           path="catalogos/rutas"
           element={
-            <PermissionGate guardRoute anyOf={PERMISOS_VISTA.catalogos}>
+            <PermissionGate guardRoute pantalla="catalogos">
               <RoutesAdminView />
             </PermissionGate>
           }
@@ -91,7 +82,7 @@ export function AppRoutes() {
         <Route
           path="catalogos/rutas/:rutaId/equipo"
           element={
-            <PermissionGate guardRoute anyOf={PERMISOS_VISTA.catalogos}>
+            <PermissionGate guardRoute pantalla="catalogos">
               <RouteTeamView />
             </PermissionGate>
           }
@@ -99,7 +90,7 @@ export function AppRoutes() {
         <Route
           path="catalogos/empleados"
           element={
-            <PermissionGate guardRoute anyOf={PERMISOS_VISTA.catalogos}>
+            <PermissionGate guardRoute pantalla="catalogos">
               <EmployeesView />
             </PermissionGate>
           }
@@ -107,7 +98,7 @@ export function AppRoutes() {
         <Route
           path="ventas/liquidacion"
           element={
-            <PermissionGate guardRoute anyOf={PERMISOS_VISTA.liquidacion}>
+            <PermissionGate guardRoute pantalla="liquidacion">
               <LiquidacionDiariaView />
             </PermissionGate>
           }
@@ -115,7 +106,7 @@ export function AppRoutes() {
         <Route
           path="ventas/liquidaciones"
           element={
-            <PermissionGate guardRoute anyOf={PERMISOS_VISTA.liquidaciones}>
+            <PermissionGate guardRoute pantalla="liquidaciones">
               <LiquidacionesHistorialView />
             </PermissionGate>
           }
@@ -123,7 +114,7 @@ export function AppRoutes() {
         <Route
           path="politica-datos"
           element={
-            <PermissionGate guardRoute anyOf={PERMISOS_VISTA.etlConfig}>
+            <PermissionGate guardRoute pantalla="politica_datos">
               <PoliticaDatosView />
             </PermissionGate>
           }
@@ -131,7 +122,7 @@ export function AppRoutes() {
         <Route
           path="etl"
           element={
-            <PermissionGate guardRoute anyOf={PERMISOS_VISTA.etl}>
+            <PermissionGate guardRoute pantalla="etl">
               <EtlUploadView />
             </PermissionGate>
           }
@@ -139,7 +130,7 @@ export function AppRoutes() {
         <Route
           path="reportes"
           element={
-            <PermissionGate guardRoute anyOf={PERMISOS_VISTA.reportes}>
+            <PermissionGate guardRoute pantalla="reportes">
               <ReportsView />
             </PermissionGate>
           }
@@ -147,7 +138,7 @@ export function AppRoutes() {
         <Route
           path="usuarios"
           element={
-            <PermissionGate guardRoute anyOf={PERMISOS_VISTA.usuarios}>
+            <PermissionGate guardRoute pantalla="usuarios">
               <AdminUsersView />
             </PermissionGate>
           }

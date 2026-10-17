@@ -5,6 +5,9 @@ import { useAuth } from '../app/providers/AuthProvider'
 import { Button } from '../components/common/Button'
 import { Campo, CLASE_INPUT, Card } from '../components/common/Card'
 import { Modal } from '../components/common/Modal'
+import { AccesoPantallasPanel } from '../components/rbac/AccesoPantallasPanel'
+import { MatrizPermisosPanel } from '../components/rbac/MatrizPermisosPanel'
+import { RolBadge } from '../components/rbac/RolBadge'
 import { AlertBanner, Cargando, EmptyState } from '../components/feedback/feedback'
 import { useRoles, useUsuarioActions, useUsuarios } from '../hooks/useUsers'
 import { listarRutas } from '../services/catalogApi'
@@ -12,27 +15,8 @@ import type { UsuarioCreate, UsuarioOut, UsuarioUpdate } from '../types'
 import { mensajeError } from '../utils/errors'
 import { fmtFecha } from '../utils/format'
 
-const ROL_PROVEEDOR = 'Proveedor'
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
-const COLOR_ROL: Record<string, string> = {
-  Administrador: 'bg-bad/10 text-bad',
-  Gerente: 'bg-brand/10 text-brand',
-  EncargadoVentas: 'bg-good/10 text-good',
-  EncargadoInventario: 'bg-warn/10 text-warn',
-  EncargadoBodega: 'bg-warn/10 text-warn',
-  EncargadoCompras: 'bg-brand/10 text-brand',
-  Liquidador: 'bg-good/10 text-good',
-}
-
-export function RolBadge({ rol }: { rol: string }) {
-  return (
-    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${COLOR_ROL[rol] ?? 'bg-surface text-muted'}`}>
-      {rol}
-    </span>
-  )
-}
 
 // ---------------------------------------------------------------- formulario
 export interface FormUsuario {
@@ -62,33 +46,40 @@ export const formDesdeUsuario = (u: UsuarioOut): FormUsuario => ({
   proveedor_id: u.proveedor_id ?? '',
 })
 
-/** Errores por campo; vacío = válido. En edición la contraseña es opcional. */
-export function validarFormulario(f: FormUsuario, edicion: boolean): Partial<Record<keyof FormUsuario, string>> {
+/**
+ * Errores por campo; vacío = válido. En edición la contraseña es opcional.
+ * `rolesConProveedor`: nombres de los roles con `requiere_proveedor` en la BD (ADR-19).
+ */
+export function validarFormulario(
+  f: FormUsuario,
+  edicion: boolean,
+  rolesConProveedor: readonly string[] = [],
+): Partial<Record<keyof FormUsuario, string>> {
   const e: Partial<Record<keyof FormUsuario, string>> = {}
   if (!edicion && !EMAIL.test(f.email.trim())) e.email = 'Ingrese un correo válido.'
   if (f.nombre_completo.trim().length < 3) e.nombre_completo = 'Mínimo 3 caracteres.'
   if (f.password ? f.password.length < 8 : !edicion) e.password = 'Mínimo 8 caracteres.'
   if (!f.roles.length) e.roles = 'Seleccione al menos un rol.'
-  if (f.roles.includes(ROL_PROVEEDOR) && !UUID.test(f.proveedor_id.trim()))
+  if (f.roles.some((r) => rolesConProveedor.includes(r)) && !UUID.test(f.proveedor_id.trim()))
     e.proveedor_id = 'El rol Proveedor requiere el identificador (UUID) del proveedor.'
   return e
 }
 
-const aCreate = (f: FormUsuario): UsuarioCreate => ({
+const aCreate = (f: FormUsuario, conProveedor: boolean): UsuarioCreate => ({
   email: f.email.trim(),
   nombre_completo: f.nombre_completo.trim(),
   password: f.password,
   roles: f.roles,
   ruta_ids: f.ruta_ids,
-  proveedor_id: f.roles.includes(ROL_PROVEEDOR) ? f.proveedor_id.trim() : null,
+  proveedor_id: conProveedor ? f.proveedor_id.trim() : null,
   activo: true,
 })
 
-const aUpdate = (f: FormUsuario): UsuarioUpdate => ({
+const aUpdate = (f: FormUsuario, conProveedor: boolean): UsuarioUpdate => ({
   nombre_completo: f.nombre_completo.trim(),
   roles: f.roles,
   ruta_ids: f.ruta_ids,
-  proveedor_id: f.roles.includes(ROL_PROVEEDOR) ? f.proveedor_id.trim() : null,
+  proveedor_id: conProveedor ? f.proveedor_id.trim() : null,
   ...(f.password ? { password: f.password } : {}),
 })
 
@@ -103,7 +94,9 @@ function ModalUsuario({ usuario, onCerrar }: { usuario: UsuarioOut | null; onCer
   const rutas = useQuery({ queryKey: ['rutas'], queryFn: listarRutas })
   const { crear, actualizar } = useUsuarioActions()
   const mutacion = edicion ? actualizar : crear
-  const errores = validarFormulario(form, edicion)
+  const rolesConProveedor = (roles.data ?? []).filter((r) => r.requiere_proveedor).map((r) => r.nombre)
+  const conProveedor = form.roles.some((r) => rolesConProveedor.includes(r))
+  const errores = validarFormulario(form, edicion, rolesConProveedor)
   const set = <K extends keyof FormUsuario>(k: K, v: FormUsuario[K]) => setForm((f) => ({ ...f, [k]: v }))
 
   const enviar = (ev: FormEvent) => {
@@ -111,8 +104,8 @@ function ModalUsuario({ usuario, onCerrar }: { usuario: UsuarioOut | null; onCer
     setIntento(true)
     if (Object.keys(errores).length) return
     const alTerminar = { onSuccess: onCerrar }
-    if (usuario) actualizar.mutate({ id: usuario.id, datos: aUpdate(form) }, alTerminar)
-    else crear.mutate(aCreate(form), alTerminar)
+    if (usuario) actualizar.mutate({ id: usuario.id, datos: aUpdate(form, conProveedor) }, alTerminar)
+    else crear.mutate(aCreate(form, conProveedor), alTerminar)
   }
   const mostrar = (k: keyof FormUsuario) =>
     intento && errores[k] ? (
@@ -167,7 +160,9 @@ function ModalUsuario({ usuario, onCerrar }: { usuario: UsuarioOut | null; onCer
           <legend className="mb-1 text-xs font-medium text-muted">Roles</legend>
           {roles.isLoading && <Cargando texto="Cargando roles…" />}
           <div className="grid grid-cols-2 gap-1">
-            {roles.data?.map((r) => (
+            {roles.data
+              ?.filter((r) => r.activo !== false || form.roles.includes(r.nombre))
+              .map((r) => (
               <label key={r.id} className="flex items-center gap-2 text-sm" title={r.descripcion ?? undefined}>
                 <input type="checkbox" checked={form.roles.includes(r.nombre)} onChange={() => set('roles', alternar(form.roles, r.nombre))} />
                 {r.nombre}
@@ -177,7 +172,7 @@ function ModalUsuario({ usuario, onCerrar }: { usuario: UsuarioOut | null; onCer
           {mostrar('roles')}
         </fieldset>
 
-        {form.roles.includes(ROL_PROVEEDOR) && (
+        {conProveedor && (
           <Campo etiqueta="Proveedor asociado (UUID)">
             <input value={form.proveedor_id} onChange={(e) => set('proveedor_id', e.target.value)} className={CLASE_INPUT} placeholder="00000000-0000-0000-0000-000000000000" />
             {mostrar('proveedor_id')}
@@ -203,7 +198,7 @@ function ModalUsuario({ usuario, onCerrar }: { usuario: UsuarioOut | null; onCer
 }
 
 // ---------------------------------------------------------------- vista
-export function AdminUsersView() {
+function PanelUsuarios() {
   const { usuario: yo } = useAuth()
   const [q, setQ] = useState('')
   const [rol, setRol] = useState('')
@@ -213,6 +208,7 @@ export function AdminUsersView() {
   const usuarios = useUsuarios({ q: q.trim(), rol, activo: estado === '' ? undefined : estado === 'activos' })
   const roles = useRoles()
   const { cambiarEstado } = useUsuarioActions()
+  const colorDe = (nombre: string) => roles.data?.find((r) => r.nombre === nombre)?.color
 
   return (
     <div className="flex flex-col gap-4">
@@ -280,7 +276,7 @@ export function AdminUsersView() {
                       <td className="py-2 pr-3">
                         <div className="flex flex-wrap gap-1">
                           {u.roles.map((r) => (
-                            <RolBadge key={r} rol={r} />
+                            <RolBadge key={r} rol={r} color={colorDe(r)} />
                           ))}
                         </div>
                       </td>
@@ -319,6 +315,48 @@ export function AdminUsersView() {
       </Card>
 
       {modal && <ModalUsuario key={modal.usuario?.id ?? 'nuevo'} usuario={modal.usuario} onCerrar={() => setModal(null)} />}
+    </div>
+  )
+}
+
+type Pestana = 'usuarios' | 'matriz' | 'pantallas'
+
+/** Usuarios y Roles: altas, matriz permisos × roles y pantallas autorizadas (todo desde la BD). */
+export function AdminUsersView() {
+  const { can } = useAuth()
+  const [pestana, setPestana] = useState<Pestana>('usuarios')
+  const gestionaRoles = can('roles:gestionar')
+  const pestanas: { id: Pestana; etiqueta: string }[] = [
+    { id: 'usuarios', etiqueta: 'Usuarios' },
+    ...(gestionaRoles
+      ? [
+          { id: 'matriz' as const, etiqueta: 'Matriz de permisos' },
+          { id: 'pantallas' as const, etiqueta: 'Acceso por pantalla' },
+        ]
+      : []),
+  ]
+
+  return (
+    <div className="flex flex-col gap-4">
+      {pestanas.length > 1 && (
+        <div role="tablist" aria-label="Administración de acceso" className="flex gap-1 border-b border-line">
+          {pestanas.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              role="tab"
+              aria-selected={pestana === p.id}
+              onClick={() => setPestana(p.id)}
+              className={`-mb-px border-b-2 px-3 py-2 text-sm ${pestana === p.id ? 'border-brand font-semibold text-brand' : 'border-transparent text-muted hover:text-ink'}`}
+            >
+              {p.etiqueta}
+            </button>
+          ))}
+        </div>
+      )}
+      {pestana === 'usuarios' && <PanelUsuarios />}
+      {pestana === 'matriz' && gestionaRoles && <MatrizPermisosPanel />}
+      {pestana === 'pantallas' && gestionaRoles && <AccesoPantallasPanel />}
     </div>
   )
 }

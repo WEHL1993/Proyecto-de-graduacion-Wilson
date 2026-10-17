@@ -188,7 +188,7 @@ function Detalle({ id, onCerrar }: { id: string; onCerrar: () => void }) {
             <dt className="text-muted">Devolución esperada</dt>
             <dd className="num text-right">{fmt(data.devolucion_esperada)} u</dd>
           </dl>
-          {data.anulado_motivo && <AlertBanner tipo="info">Anulada: {data.anulado_motivo}</AlertBanner>}
+          {data.anulado_motivo && <AlertBanner tipo="info" fijo>Anulada: {data.anulado_motivo}</AlertBanner>}
         </div>
       )}
     </Modal>

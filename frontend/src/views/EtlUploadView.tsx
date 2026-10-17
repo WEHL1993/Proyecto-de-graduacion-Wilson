@@ -112,7 +112,7 @@ export function ErroresValidacion({ error }: { error: EtlValidationError }) {
   const multihoja = error.errores.some((e) => e.hoja)
   return (
     <div className="flex flex-col gap-2">
-      <AlertBanner>
+      <AlertBanner fijo>
         <strong>Lote rechazado ({error.codigo}).</strong> El archivo no cumple las validaciones: {fmtInt(error.total_errores)}{' '}
         {error.total_errores === 1 ? 'error' : 'errores'} detectados. Corrija el Excel y vuelva a cargarlo.
       </AlertBanner>
@@ -249,7 +249,7 @@ export function EtlUploadView() {
       </header>
 
       {bloqueado && (
-        <AlertBanner tipo="info">
+        <AlertBanner tipo="info" fijo>
           <strong>Carga de Excel deshabilitada.</strong> El arranque está cerrado: las ventas nuevas se registran en la
           liquidación diaria.
         </AlertBanner>
@@ -314,7 +314,7 @@ export function EtlUploadView() {
             </div>
           )}
           {duplicado && (
-            <AlertBanner tipo="info">
+            <AlertBanner tipo="info" fijo>
               <strong>Lote duplicado.</strong> {api?.mensaje ?? 'Este archivo ya fue cargado anteriormente.'} Revise el historial inferior.
             </AlertBanner>
           )}

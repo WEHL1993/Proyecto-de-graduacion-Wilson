@@ -1,7 +1,7 @@
+import { AlertTriangle, Bell } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../app/providers/AuthProvider'
-import { PERMISOS_VISTA } from '../../app/rbac'
 import { useAlertas, useReconocerAlerta } from '../../hooks/useAlerts'
 import type { AlertItem, TipoAlerta } from '../../types'
 import { mensajeError } from '../../utils/errors'
@@ -15,12 +15,13 @@ const ETIQUETA_TIPO: Record<TipoAlerta, string> = {
 }
 
 // Vista donde se atiende cada tipo de alerta.
-const DESTINO: Record<TipoAlerta, { to: string; permisos: readonly string[] }> = {
-  stock_bajo: { to: '/inventario', permisos: PERMISOS_VISTA.inventario },
-  quiebre_proyectado: { to: '/compras', permisos: PERMISOS_VISTA.compras },
-  mape_umbral: { to: '/monitoreo', permisos: PERMISOS_VISTA.monitoreo },
-  etl_error: { to: '/etl', permisos: PERMISOS_VISTA.etl },
-  diferencia_caja: { to: '/ventas/liquidaciones', permisos: PERMISOS_VISTA.liquidaciones },
+// `pantalla` es la clave en la BD (`pantallas.clave`): el enlace solo aparece si el usuario la ve.
+const DESTINO: Record<TipoAlerta, { to: string; pantalla: string }> = {
+  stock_bajo: { to: '/inventario', pantalla: 'inventario' },
+  quiebre_proyectado: { to: '/compras', pantalla: 'compras' },
+  mape_umbral: { to: '/monitoreo', pantalla: 'monitoreo' },
+  etl_error: { to: '/etl', pantalla: 'etl' },
+  diferencia_caja: { to: '/ventas/liquidaciones', pantalla: 'liquidaciones' },
 }
 
 const esCritica = (a: AlertItem) => a.severidad === 'critica'
@@ -31,7 +32,7 @@ const esCritica = (a: AlertItem) => a.severidad === 'critica'
  * alertas críticas, una franja visible en toda la aplicación.
  */
 export function AlertBanner() {
-  const { can, canAny } = useAuth()
+  const { can, puedeVer } = useAuth()
   const [abierto, setAbierto] = useState(false)
   const alertas = useAlertas(can('alertas:leer'))
   const reconocer = useReconocerAlerta()
@@ -48,23 +49,27 @@ export function AlertBanner() {
         aria-expanded={abierto}
         aria-controls="bandeja-alertas"
         onClick={() => setAbierto((v) => !v)}
-        className="rounded-md px-2 py-1 hover:bg-surface"
+        className="relative rounded-lg p-2 text-muted hover:bg-surface hover:text-ink"
       >
-        <span aria-hidden>🔔</span>{' '}
-        <span className="num">
-          {total} {total === 1 ? 'alerta' : 'alertas'}
-        </span>
-        {criticas > 0 && (
-          <span className="ml-1 font-semibold text-bad">
-            ({criticas} crítica{criticas > 1 ? 's' : ''})
+        <Bell aria-hidden className="h-5 w-5" />
+        {total > 0 && (
+          <span
+            aria-hidden
+            className={`num absolute -right-0.5 -top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[10px] font-bold text-white ${criticas > 0 ? 'bg-bad' : 'bg-brand'}`}
+          >
+            {total > 99 ? '99+' : total}
           </span>
         )}
+        <span className="sr-only">
+          {total} {total === 1 ? 'alerta' : 'alertas'}
+          {criticas > 0 && ` (${criticas} crítica${criticas > 1 ? 's' : ''})`}
+        </span>
       </button>
 
       {abierto && (
         <div
           id="bandeja-alertas"
-          className="absolute right-0 z-40 mt-1 max-h-96 w-[26rem] max-w-[90vw] overflow-auto rounded-lg border border-line bg-panel p-2 shadow-lg"
+          className="absolute right-0 z-40 mt-1 max-h-96 w-[26rem] max-w-[90vw] overflow-auto rounded-xl border border-line bg-panel p-2 shadow-lg"
         >
           {reconocer.isError && (
             <p role="alert" className="px-2 py-1 text-xs text-bad">
@@ -95,7 +100,7 @@ export function AlertBanner() {
                       >
                         Reconocer
                       </button>
-                      {canAny(destino.permisos) && (
+                      {puedeVer(destino.pantalla) && (
                         <Link to={destino.to} onClick={() => setAbierto(false)} className="text-brand underline">
                           Ir a resolver
                         </Link>
@@ -127,9 +132,7 @@ export function FranjaAlertasCriticas() {
   if (!criticas.length) return null
   return (
     <div role="alert" className="border-b border-bad bg-bad/10 px-4 py-2 text-sm">
-      <span aria-hidden className="mr-2">
-        ⛔
-      </span>
+      <AlertTriangle aria-hidden className="mr-2 inline h-4 w-4 -translate-y-px text-bad" />
       <strong className="text-bad">
         {criticas.length === 1 ? 'Alerta crítica: ' : `${criticas.length} alertas críticas. Primera: `}
       </strong>

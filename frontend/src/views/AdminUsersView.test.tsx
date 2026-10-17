@@ -44,7 +44,7 @@ beforeEach(() => {
   api.listarRoles.mockResolvedValue([
     { id: 1, nombre: 'Administrador' },
     { id: 2, nombre: 'EncargadoVentas' },
-    { id: 3, nombre: 'Proveedor' },
+    { id: 3, nombre: 'Proveedor', requiere_proveedor: true },
   ])
   api.listarRutas.mockResolvedValue([{ id: 'r1', codigo: 'R-01', nombre: 'Ruta 1' }, { id: 'r2', codigo: 'R-02', nombre: 'Ruta 2' }])
   api.listarUsuarios.mockResolvedValue({
@@ -65,8 +65,8 @@ describe('validarFormulario', () => {
   })
   it('el rol Proveedor exige un UUID de proveedor', () => {
     const f = { ...valido, roles: ['Proveedor'] }
-    expect(validarFormulario(f, false).proveedor_id).toBeDefined()
-    expect(validarFormulario({ ...f, proveedor_id: '6f1c2b1e-7f4c-4a55-9a53-0d5b6f2f7a11' }, false)).toEqual({})
+    expect(validarFormulario(f, false, ['Proveedor']).proveedor_id).toBeDefined()
+    expect(validarFormulario({ ...f, proveedor_id: '6f1c2b1e-7f4c-4a55-9a53-0d5b6f2f7a11' }, false, ['Proveedor'])).toEqual({})
   })
 })
 

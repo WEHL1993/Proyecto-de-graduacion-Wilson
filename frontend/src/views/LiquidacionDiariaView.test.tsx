@@ -2,7 +2,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { AxiosError } from 'axios'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { PERMISOS_VISTA } from '../app/rbac'
 import type { PrecargaResponse } from '../types'
 import {
   PAGOS_VACIOS,
@@ -93,11 +92,6 @@ describe('cálculos de la liquidación', () => {
     expect(validar([fila({ devuelta: '' })], { ...PAGOS_VACIOS, efectivo: '750' }).pendientes.join(' ')).toMatch(/faltan 3/)
     expect(validar([fila()], { ...PAGOS_VACIOS, efectivo: '700' }).pendientes.join(' ')).toMatch(/venta total/)
     expect(validar([fila()], { ...PAGOS_VACIOS, efectivo: '750' })).toEqual({ errores: [], pendientes: [] })
-  })
-
-  it('la vista de liquidación solo la habilita el permiso registrar', () => {
-    expect(PERMISOS_VISTA.liquidacion).toEqual(['liquidaciones:registrar'])
-    expect(PERMISOS_VISTA.liquidaciones).toEqual(['liquidaciones:leer'])
   })
 })
 

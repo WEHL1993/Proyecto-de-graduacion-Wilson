@@ -93,7 +93,7 @@ function Panel({ datos, modelos }: { datos: MetricsResponse; modelos: ModeloResu
   return (
     <>
       {deg.requiere_reentrenamiento && (
-        <AlertBanner>
+        <AlertBanner fijo>
           Degradación detectada: el MAPE superó el umbral durante {deg.periodos_consecutivos_actuales} periodos
           consecutivos. Se encoló un reentrenamiento automático.
         </AlertBanner>

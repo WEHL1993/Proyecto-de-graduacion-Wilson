@@ -1,9 +1,19 @@
+import type { PantallaMenu } from '../types'
+
 const CLAVE = 'ds.session'
 
 export interface Sesion {
   token: string
   expiraEn: number // epoch ms
-  usuario: { id: string; nombre_completo: string; roles: string[]; permisos: string[] }
+  /** Roles, permisos y menú vienen de la BD (ADR-19); se refrescan con `GET /auth/me`. */
+  usuario: {
+    id: string
+    nombre_completo: string
+    roles: string[]
+    permisos: string[]
+    menu: PantallaMenu[]
+    pantalla_inicio: string | null
+  }
 }
 
 export function leerSesion(): Sesion | null {
@@ -11,7 +21,11 @@ export function leerSesion(): Sesion | null {
     const cruda = localStorage.getItem(CLAVE)
     if (!cruda) return null
     const sesion = JSON.parse(cruda) as Sesion
-    return sesion.expiraEn > Date.now() ? sesion : null
+    if (sesion.expiraEn <= Date.now()) return null
+    // Sesiones guardadas antes de la ADR-19 no traen menú: se completa al refrescar.
+    sesion.usuario.menu ??= []
+    sesion.usuario.pantalla_inicio ??= null
+    return sesion
   } catch {
     return null
   }

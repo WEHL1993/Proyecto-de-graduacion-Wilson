@@ -9,6 +9,7 @@ vi.mock('../../app/providers/AuthProvider', () => ({
   useAuth: () => ({
     can: (p: string) => permisos.actuales.includes(p),
     canAny: (ps: readonly string[]) => ps.some((p) => permisos.actuales.includes(p)),
+    puedeVer: (clave: string) => clave === 'inventario' && permisos.actuales.includes('inventario:leer'),
   }),
 }))
 

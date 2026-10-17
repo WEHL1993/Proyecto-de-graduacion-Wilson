@@ -12,7 +12,7 @@ export function Card({
   className?: string
 }) {
   return (
-    <section className={`rounded-lg border border-line bg-panel p-4 ${className}`}>
+    <section className={`rounded-xl border border-line bg-panel p-5 shadow-sm ${className}`}>
       {(titulo || acciones) && (
         <header className="mb-3 flex items-center justify-between gap-2">
           {titulo && <h2 className="text-sm font-semibold">{titulo}</h2>}
@@ -34,4 +34,4 @@ export function Campo({ etiqueta, children }: { etiqueta: string; children: Reac
 }
 
 export const CLASE_INPUT =
-  'rounded-md border border-line bg-panel px-2.5 py-1.5 text-sm text-ink disabled:opacity-50'
+  'rounded-lg border border-line bg-white px-3 py-2 text-sm text-ink focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20 disabled:opacity-50'
