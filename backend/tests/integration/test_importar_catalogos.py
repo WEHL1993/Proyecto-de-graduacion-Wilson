@@ -243,3 +243,46 @@ def test_los_casos_reales_del_encargo(db_tx, libro):
         12,
     )
     assert _fila(db_tx, "900004").medida_ml is None
+
+
+# ------------------------------------------------------------------ merge de libros y alias
+def test_alias_automatico_solo_empates_unicos_y_el_etl_los_resuelve(db_tx, libro):
+    from app.repositories import catalog_repo
+
+    r = imp.ejecutar(db_tx, libro, None, aplicar=True, alias_automatico=True)
+
+    assert {"3030-COLA", "3300-COLA", "625-GO"} <= set(r.alias_creados)
+    assert "3030-MISTERIOSO" not in r.alias_creados
+    assert "3030-MISTERIOSO" in {c for c, _ in r.sin_empate}
+
+    resueltos = catalog_repo.mapear_skus(db_tx, {"3030-COLA", "900002", "no-existe"})
+    assert resueltos["3030-COLA"] == _fila(db_tx, "900001").id
+    assert resueltos["900002"] == _fila(db_tx, "900002").id  # un SKU real sigue resolviendo
+    assert "NO-EXISTE" not in resueltos
+
+
+def test_sin_alias_automatico_no_se_crean_alias(db_tx, libro):
+    r = imp.ejecutar(db_tx, libro, None, aplicar=True)
+    assert r.alias_creados == []
+
+
+def test_merge_de_varios_libros_une_productos_rutas_y_claves(db_tx, libro, tmp_path):
+    otro = tmp_path / "VENTAS DIARIAS OTRO MES.xlsx"
+    wb = openpyxl.Workbook()
+    wb.remove(wb.active)
+    precios = wb.create_sheet("CODIGOS Y PRECIOS")
+    precios.append(["Cantidad", "CODIGO", "DESCRIPCION", "PRECIO", "efectivo"])
+    precios.append([None, 900001, "BIG COLA PET NO RETORNABLE 3030 ML 6", 58, 0])  # precio nuevo
+    precios.append([None, 900010, "BIG UVA PET NO RETORNABLE 3030 ML 6", 56, 0])  # producto nuevo
+    hoja = wb.create_sheet("Trakas")
+    hoja.append(["Articulo", "Descripcion", "Saldo 31"])
+    hoja.append([3030, "Uva", 1])
+    wb.save(otro)
+
+    r = imp.ejecutar(db_tx, [libro, otro], None, aplicar=True, alias_automatico=True)
+
+    assert _fila(db_tx, "900010") is not None  # producto del segundo libro
+    assert _fila(db_tx, "900001").precio_venta == Decimal("58.00")  # el último libro manda
+    assert db_tx.scalar(select(Ruta).where(Ruta.nombre == "Trakas")) is not None
+    assert "3030-UVA" in r.alias_creados
+    assert "3030-COLA" in r.alias_creados  # claves del primer libro también se conservan

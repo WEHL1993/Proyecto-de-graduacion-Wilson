@@ -484,17 +484,19 @@ def test_producto_sin_los_campos_nuevos_conserva_los_valores_por_defecto(e):
 
 
 # ------------------------------------------------------------------ permisos sembrados
-def test_el_seed_otorga_los_permisos_nuevos_sin_quitar_los_existentes(e):
+def test_el_seed_es_idempotente_y_no_revierte_la_matriz_editada(e):
+    """ADR-19: la BD es la fuente de verdad. El seed solo completa al rol de sistema."""
     antes = {r.nombre: {p.codigo for p in r.permisos} for r in e.db.scalars(select(Rol)).all()}
     for _ in range(2):  # idempotente
         seed_roles_y_permisos(e.db)
     e.db.flush()
-    for nombre in ("Administrador", "Gerente", "EncargadoInventario"):
+    for nombre, previos in antes.items():
         rol = e.db.scalar(select(Rol).where(Rol.nombre == nombre))
         codigos = {p.codigo for p in rol.permisos}
-        assert set(MATRIZ_ROL_PERMISO[nombre]) <= codigos
-        assert antes.get(nombre, set()) <= codigos  # los usuarios existentes conservan acceso
+        assert previos <= codigos  # nunca quita
+        if not rol.es_sistema:
+            assert codigos == previos  # ni agrega: lo editado en la matriz se respeta
     admin = e.db.scalar(select(Rol).where(Rol.nombre == "Administrador"))
-    assert {"catalogos:leer", "catalogos:gestionar"} <= {p.codigo for p in admin.permisos}
+    assert set(MATRIZ_ROL_PERMISO["Administrador"]) <= {p.codigo for p in admin.permisos}
     bodega = e.db.scalar(select(Rol).where(Rol.nombre == "EncargadoBodega"))
     assert not {"catalogos:leer", "catalogos:gestionar"} & {p.codigo for p in bodega.permisos}

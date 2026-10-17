@@ -21,6 +21,7 @@ import argparse
 import csv
 import sys
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
@@ -33,6 +34,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.database import get_sessionmaker
 from app.db.seeds.catalogo_parser import DescripcionProducto, interpretar_descripcion
+from app.db.seeds.empate_alias import AMBIGUO, UNICO, Candidato, Propuesta, proponer
 from app.domain.models.catalog import (
     Categoria,
     Inventario,
@@ -43,9 +45,19 @@ from app.domain.models.catalog import (
 from app.services.etl_lectura import normalizar_texto, sku_desde_medida_sabor
 
 HOJA_PRODUCTOS = "CODIGOS Y PRECIOS"
-HOJAS_RUTA = ("Cornelio", "Antonio", "Cesar")
+# Marzo 2025: Cornelio/Antonio/Cesar; julio-septiembre 2026: Trakas/Cornelio/MESSI.
+HOJAS_RUTA = ("Cornelio", "Antonio", "Cesar", "Trakas", "MESSI")
 HOJAS_IGNORADAS = frozenset(
-    {"consumo", "luis", "codigos_y_precios", "clientes", "faltante", "merma"}
+    {
+        "consumo",
+        "luis",
+        "codigos_y_precios",
+        "clientes",
+        "faltante",
+        "merma",
+        "inventario",
+        "vendedores",
+    }
 )
 UNIDAD_PAQUETE = "paquete"
 MAX_ALIAS = 80
@@ -385,31 +397,73 @@ def _sincronizar_alias(
 # ------------------------------------------------------------------ orquestación
 def ejecutar(
     db: Session,
-    archivo: Path,
+    archivo: Path | Sequence[Path],
     alias_csv: Path | None,
     *,
     aplicar: bool,
+    alias_automatico: bool = False,
 ) -> Reporte:
-    """Corre el importador. Con `aplicar=False` no escribe nada (solo lecturas)."""
-    reporte = Reporte(aplicado=aplicar)
-    libro = _abrir(archivo)
-    try:
-        filas = leer_productos(libro, reporte)
-        reportar_duplicados_de_descripcion(filas, reporte)
-        hojas = clasificar_hojas(libro, reporte)
-        claves = leer_claves_ventas(libro, hojas)
-    finally:
-        libro.close()
+    """Corre el importador. Con `aplicar=False` no escribe nada (solo lecturas).
 
-    ids = _sincronizar_productos(db, filas, aplicar, reporte)
+    Acepta uno o varios libros y los une (merge): productos por código (el último libro manda
+    en descripción y precio), rutas por nombre de hoja y claves de venta por alias. Con
+    `alias_automatico`, los alias que empatan con un único producto del catálogo se registran
+    solos; los ambiguos y los sin candidato se reportan en `ventas_sin_empate`.
+    """
+    archivos = [archivo] if isinstance(archivo, Path) else list(archivo)
+    reporte = Reporte(aplicado=aplicar)
+    por_codigo: dict[str, FilaProducto] = {}
+    hojas: list[str] = []
+    claves: dict[str, set[str]] = {}
+    for ruta in archivos:
+        libro = _abrir(ruta)
+        try:
+            filas = leer_productos(libro, reporte)
+            reportar_duplicados_de_descripcion(filas, reporte)
+            hojas_libro = clasificar_hojas(libro, reporte)
+            for fila in filas:
+                por_codigo[fila.sku] = fila
+            hojas.extend(h for h in hojas_libro if h not in hojas)
+            for clave, donde in leer_claves_ventas(libro, hojas_libro).items():
+                claves.setdefault(clave, set()).update(donde)
+        finally:
+            libro.close()
+
+    ids = _sincronizar_productos(db, list(por_codigo.values()), aplicar, reporte)
     _sincronizar_rutas(db, hojas, aplicar, reporte)
     pares = leer_alias_csv(alias_csv, reporte) if alias_csv is not None else {}
+    propuestas: dict[str, Propuesta] = {}
+    if alias_automatico:
+        catalogo = [
+            Candidato(
+                f.sku,
+                f.descripcion.nombre,
+                f.descripcion.medida_ml,
+                f.descripcion.unidades_por_paquete,
+            )
+            for f in por_codigo.values()
+        ]
+        for clave in sorted(claves):
+            if clave.upper() in pares or clave.upper() in {s.upper() for s in ids}:
+                continue
+            propuesta = proponer(clave.upper(), catalogo, ", ".join(sorted(claves[clave])))
+            propuestas[clave.upper()] = propuesta
+            if propuesta.estado == UNICO:
+                pares.setdefault(clave.upper(), set()).add(propuesta.candidatos[0].sku)
+        reporte.notas.append(
+            f"Alias automáticos propuestos: {sum(p.estado == UNICO for p in propuestas.values())}."
+        )
     alias_vigentes = _sincronizar_alias(db, pares, ids, aplicar, reporte)
 
     conocidos = {s.upper() for s in ids} | {a.upper() for a in alias_vigentes}
     for clave in sorted(claves):
         if clave.upper() not in conocidos:
-            reporte.sin_empate.append((clave, "hojas: " + ", ".join(sorted(claves[clave]))))
+            detalle = "hojas: " + ", ".join(sorted(claves[clave]))
+            propuesta = propuestas.get(clave.upper())
+            if propuesta is not None and propuesta.estado == AMBIGUO:
+                otros = " | ".join(f"{c.sku} {c.descripcion}" for c in propuesta.candidatos[:4])
+                detalle += f"; ambiguo entre: {otros}"
+            reporte.sin_empate.append((clave, detalle))
 
     if aplicar:
         db.commit()
@@ -464,7 +518,15 @@ def main(argv: list[str] | None = None) -> int:
         "--aplicar", action="store_true", help="Escribe en la BD (por defecto, dry-run)."
     )
     parser.add_argument(
-        "--archivo", type=Path, help="Libro de ventas diarias (por defecto data/raw)."
+        "--archivo",
+        type=Path,
+        nargs="+",
+        help="Uno o varios libros de ventas diarias, que se unen (por defecto data/raw).",
+    )
+    parser.add_argument(
+        "--auto-alias",
+        action="store_true",
+        help="Registra solo los alias que empatan con un único producto del catálogo.",
     )
     parser.add_argument(
         "--alias-csv",
@@ -475,10 +537,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--reportes", type=Path, default=datos / "reportes")
     args = parser.parse_args(argv)
 
-    archivo = args.archivo or _archivo_ventas(datos / "raw")
+    archivo = args.archivo or [_archivo_ventas(datos / "raw")]
     sesion = get_sessionmaker()()
     try:
-        reporte = ejecutar(sesion, archivo, args.alias_csv, aplicar=args.aplicar)
+        reporte = ejecutar(
+            sesion, archivo, args.alias_csv, aplicar=args.aplicar, alias_automatico=args.auto_alias
+        )
     except Exception:
         sesion.rollback()
         raise

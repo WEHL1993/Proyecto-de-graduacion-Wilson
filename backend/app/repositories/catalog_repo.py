@@ -8,7 +8,7 @@ from typing import NamedTuple
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from app.domain.models.catalog import Producto, Ruta
+from app.domain.models.catalog import Producto, ProductoAliasExcel, Ruta
 
 
 class RutaResuelta(NamedTuple):
@@ -17,12 +17,23 @@ class RutaResuelta(NamedTuple):
 
 
 def mapear_skus(db: Session, skus: Iterable[str]) -> dict[str, uuid.UUID]:
-    """`SKU en mayúsculas -> productos.id` (comparación insensible a mayúsculas)."""
+    """`SKU en mayúsculas -> productos.id` (comparación insensible a mayúsculas).
+
+    Si una clave no es un SKU, se busca en los alias del Excel (`producto_alias_excel`, ADR-18):
+    las hojas de venta identifican el producto por `<medida>-<SABOR>`, no por código.
+    """
     claves = {s.strip().upper() for s in skus}
     if not claves:
         return {}
     stmt = select(func.upper(Producto.sku), Producto.id).where(func.upper(Producto.sku).in_(claves))
-    return {sku: producto_id for sku, producto_id in db.execute(stmt)}
+    resueltos = {sku: producto_id for sku, producto_id in db.execute(stmt)}
+    pendientes = claves - resueltos.keys()
+    if pendientes:
+        por_alias = select(
+            func.upper(ProductoAliasExcel.alias), ProductoAliasExcel.producto_id
+        ).where(func.upper(ProductoAliasExcel.alias).in_(pendientes))
+        resueltos.update({alias: producto_id for alias, producto_id in db.execute(por_alias)})
+    return resueltos
 
 
 def mapear_rutas(db: Session, claves: Iterable[str]) -> dict[str, RutaResuelta]:
