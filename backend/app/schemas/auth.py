@@ -4,6 +4,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field
 
+from app.schemas.rbac import PantallaMenu
+
 
 class LoginRequest(BaseModel):
     email: EmailStr
@@ -15,6 +17,8 @@ class UsuarioToken(BaseModel):
     nombre_completo: str
     roles: list[str]
     permisos: list[str]
+    menu: list[PantallaMenu] = []
+    pantalla_inicio: str | None = None
 
 
 class TokenResponse(BaseModel):
@@ -25,7 +29,7 @@ class TokenResponse(BaseModel):
 
 
 class UsuarioAutenticado(BaseModel):
-    """Claims del JWT ya decodificado (ADR-05: sin consulta a BD en cada request)."""
+    """Usuario de la petición: identidad del JWT y roles/permisos vigentes (ADR-19)."""
 
     id: UUID
     roles: list[str]

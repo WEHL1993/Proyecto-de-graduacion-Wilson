@@ -4,7 +4,15 @@ Importar este paquete garantiza que `Base.metadata` contenga todas las tablas
 (requerido por Alembic autogenerate).
 """
 
-from app.domain.models.auth import Permiso, Rol, RolPermiso, Usuario, UsuarioRol
+from app.domain.models.auth import (
+    Pantalla,
+    PantallaPermiso,
+    Permiso,
+    Rol,
+    RolPermiso,
+    Usuario,
+    UsuarioRol,
+)
 from app.domain.models.base import Base
 from app.domain.models.bitacora import Bitacora
 from app.domain.models.catalog import (
@@ -43,6 +51,8 @@ __all__ = [
     "Permiso",
     "RolPermiso",
     "UsuarioRol",
+    "Pantalla",
+    "PantallaPermiso",
     # Catálogos y stock
     "Categoria",
     "Proveedor",

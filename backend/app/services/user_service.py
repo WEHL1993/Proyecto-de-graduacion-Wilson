@@ -20,7 +20,6 @@ from app.schemas.users import (
 )
 from app.services.bitacora_service import auditar
 
-ROL_PROVEEDOR = NombreRol.PROVEEDOR
 ROL_ADMIN = NombreRol.ADMINISTRADOR
 
 
@@ -42,11 +41,17 @@ def _dto(db: Session, usuario: Usuario) -> UsuarioOut:
     return _a_dto(usuario, user_repo.rutas_de(db, [usuario.id])[usuario.id])
 
 
-def _resolver_roles(db: Session, nombres: list[str]) -> list[Rol]:
+def _resolver_roles(
+    db: Session, nombres: list[str], conservados: frozenset[str] = frozenset()
+) -> list[Rol]:
+    """Un rol inactivo no se puede asignar; solo se tolera si el usuario ya lo tenía."""
     encontrados = user_repo.roles_por_nombre(db, nombres)
     faltantes = sorted(set(nombres) - encontrados.keys())
     if faltantes:
         raise AppError("ROL_INVALIDO", f"Rol(es) inexistente(s): {', '.join(faltantes)}.")
+    inactivos = sorted(n for n, r in encontrados.items() if not r.activo and n not in conservados)
+    if inactivos:
+        raise AppError("ROL_INVALIDO", f"Rol(es) inactivo(s): {', '.join(inactivos)}.")
     return [encontrados[n] for n in dict.fromkeys(nombres)]
 
 
@@ -57,7 +62,7 @@ def _validar_rutas(db: Session, ruta_ids: list[uuid.UUID]) -> None:
 
 
 def _validar_proveedor(roles: list[Rol], proveedor_id: uuid.UUID | None) -> uuid.UUID | None:
-    es_proveedor = any(r.nombre == ROL_PROVEEDOR for r in roles)
+    es_proveedor = any(r.requiere_proveedor for r in roles)
     if es_proveedor and proveedor_id is None:
         raise AppError(
             "PROVEEDOR_REQUERIDO", "El rol Proveedor exige asociar un proveedor_id (aislamiento)."
@@ -91,7 +96,14 @@ def _proteger_admin(db: Session, usuario: Usuario, actor_id: uuid.UUID, accion: 
 @auditar
 def listar_roles(db: Session) -> list[RolItem]:
     return [
-        RolItem(id=r.id, nombre=r.nombre, descripcion=r.descripcion)
+        RolItem(
+            id=r.id,
+            nombre=r.nombre,
+            descripcion=r.descripcion,
+            activo=r.activo,
+            requiere_proveedor=r.requiere_proveedor,
+            color=r.color,
+        )
         for r in user_repo.listar_roles(db)
     ]
 
@@ -139,7 +151,7 @@ def actualizar(
     campos = datos.model_fields_set
 
     if datos.roles is not None:
-        roles = _resolver_roles(db, datos.roles)
+        roles = _resolver_roles(db, datos.roles, frozenset(r.nombre for r in usuario.roles))
         era_admin = any(r.nombre == ROL_ADMIN for r in usuario.roles)
         if era_admin and ROL_ADMIN not in {r.nombre for r in roles}:
             _proteger_admin(db, usuario, actor_id, "quitar el rol Administrador")

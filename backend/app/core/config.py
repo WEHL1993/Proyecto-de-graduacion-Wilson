@@ -50,6 +50,11 @@ class Settings(BaseSettings):
     # Bitácora de auditoría (ADR-15). Solo se desactiva en pruebas unitarias sin BD.
     bitacora_habilitada: bool = True
 
+    # RBAC en vivo (ADR-19): roles y permisos se leen de la BD en cada petición, de modo que un
+    # cambio en la matriz surte efecto de inmediato. Solo se apaga en pruebas sin BD, donde el
+    # token se fabrica con los permisos que la prueba necesita.
+    rbac_permisos_en_vivo: bool = True
+
     # ML: familia lógica (`modelos_ml.nombre`) que atiende /predictions/demand
     ml_modelo_nombre: str = "demanda_diaria"
 

@@ -51,14 +51,14 @@ def _credenciales(token: str):
 
 def test_get_current_user_sin_token_lanza_401():
     with pytest.raises(AppError) as exc_info:
-        get_current_user(None)
+        get_current_user(None, None)
     assert exc_info.value.status_code == 401
     assert exc_info.value.codigo == "NO_AUTENTICADO"
 
 
 def test_get_current_user_token_invalido_lanza_401():
     with pytest.raises(AppError) as exc_info:
-        get_current_user(_credenciales("token-mal-formado"))
+        get_current_user(_credenciales("token-mal-formado"), None)
     assert exc_info.value.status_code == 401
     assert exc_info.value.codigo == "TOKEN_INVALIDO"
 
@@ -75,7 +75,7 @@ def test_get_current_user_token_vencido_lanza_401():
     token_vencido = jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 
     with pytest.raises(AppError) as exc_info:
-        get_current_user(_credenciales(token_vencido))
+        get_current_user(_credenciales(token_vencido), None)
     assert exc_info.value.status_code == 401
     assert exc_info.value.codigo == "TOKEN_EXPIRADO"
 
@@ -86,7 +86,7 @@ def test_get_current_user_token_valido_devuelve_usuario():
         roles=["Administrador"],
         perms=["usuarios:gestionar"],
     )
-    usuario = get_current_user(_credenciales(token))
+    usuario = get_current_user(_credenciales(token), None)
     assert isinstance(usuario, UsuarioAutenticado)
     assert usuario.roles == ["Administrador"]
     assert usuario.permisos == ["usuarios:gestionar"]

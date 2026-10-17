@@ -21,6 +21,9 @@ def entorno(db_tx, cliente):
     for nombre in ("Administrador", "EncargadoVentas", "Proveedor"):
         if db.scalar(select(Rol).where(Rol.nombre == nombre)) is None:
             db.add(Rol(nombre=nombre, descripcion=nombre))
+    # Los roles heredados nacen inactivos (ADR-19): aquí se activan, dentro de la transacción.
+    heredados = Rol.nombre.in_(("EncargadoVentas", "Proveedor"))
+    db.execute(update(Rol).where(heredados).values(activo=True))
     sufijo = uuid.uuid4().hex[:6]
     rutas = [
         Ruta(codigo=f"R1-{sufijo}", nombre="Ruta 1"),

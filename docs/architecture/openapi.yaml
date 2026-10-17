@@ -34,6 +34,23 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/auth/me:
+    get:
+      tags:
+      - Auth
+      summary: 'Sesión vigente: roles, permisos y menú'
+      description: Lee de la BD los roles y permisos actuales de quien consulta y el menú de pantallas
+        autorizadas (ADR-19). El frontend lo refresca para reflejar cambios de la matriz.
+      operationId: sesion_vigente_api_v1_auth_me_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccesoSesion'
+      security:
+      - HTTPBearer: []
   /api/v1/etl/upload-excel:
     post:
       tags:
@@ -1946,6 +1963,124 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/rbac/matrix:
+    get:
+      tags:
+      - RBAC
+      summary: Matriz de roles, permisos y pantallas
+      description: Requiere `roles:gestionar`. Todo proviene de las tablas RBAC.
+      operationId: matriz_api_v1_rbac_matrix_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MatrizAcceso'
+      security:
+      - HTTPBearer: []
+  /api/v1/rbac/roles/{rol_id}/permissions:
+    put:
+      tags:
+      - RBAC
+      summary: Reemplazar los permisos de un rol
+      description: Guarda el conjunto completo. 404 `ROL_NO_ENCONTRADO`; 400 `PERMISO_INVALIDO`; 409 `ROL_SISTEMA_PROTEGIDO`
+        (Administrador).
+      operationId: reemplazar_permisos_api_v1_rbac_roles__rol_id__permissions_put
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: rol_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Rol Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RolPermisosUpdate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RolMatriz'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/rbac/roles/{rol_id}:
+    patch:
+      tags:
+      - RBAC
+      summary: Activar/desactivar un rol y ajustar su presentación
+      description: 404 `ROL_NO_ENCONTRADO`; 400 `PANTALLA_INVALIDA`; 409 `ROL_SISTEMA_PROTEGIDO` o `ROL_CON_USUARIOS`
+        (usuarios activos que quedarían sin ningún rol activo).
+      operationId: actualizar_rol_api_v1_rbac_roles__rol_id__patch
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: rol_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Rol Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RolUpdate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RolMatriz'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/rbac/users/{usuario_id}/access:
+    get:
+      tags:
+      - RBAC
+      summary: Pantallas autorizadas de un usuario
+      description: 'Vista «ver como»: cada pantalla con el permiso que la habilita.'
+      operationId: acceso_de_usuario_api_v1_rbac_users__usuario_id__access_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: usuario_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Usuario Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccesoUsuario'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/reports/inventory-turnover:
     get:
       tags:
@@ -2672,6 +2807,81 @@ paths:
                 title: Response Health Health Get
 components:
   schemas:
+    AccesoSesion:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        nombre_completo:
+          type: string
+          title: Nombre Completo
+        roles:
+          items:
+            type: string
+          type: array
+          title: Roles
+        permisos:
+          items:
+            type: string
+          type: array
+          title: Permisos
+        menu:
+          items:
+            $ref: '#/components/schemas/PantallaMenu'
+          type: array
+          title: Menu
+        pantalla_inicio:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Pantalla Inicio
+          description: Ruta a la que se entra tras iniciar sesión.
+      type: object
+      required:
+      - id
+      - nombre_completo
+      - roles
+      - permisos
+      - menu
+      title: AccesoSesion
+      description: 'Lo que el frontend necesita para pintar la sesión: roles, permisos y menú vigentes.'
+    AccesoUsuario:
+      properties:
+        usuario_id:
+          type: string
+          format: uuid
+          title: Usuario Id
+        nombre_completo:
+          type: string
+          title: Nombre Completo
+        activo:
+          type: boolean
+          title: Activo
+        roles:
+          items:
+            type: string
+          type: array
+          title: Roles
+        permisos:
+          items:
+            type: string
+          type: array
+          title: Permisos
+        pantallas:
+          items:
+            $ref: '#/components/schemas/PantallaAcceso'
+          type: array
+          title: Pantallas
+      type: object
+      required:
+      - usuario_id
+      - nombre_completo
+      - activo
+      - roles
+      - permisos
+      - pantallas
+      title: AccesoUsuario
     AjusteCarga:
       properties:
         producto_id:
@@ -2961,6 +3171,16 @@ components:
       - TIPOS_INVALIDOS
       - DATOS_INVALIDOS
       title: CodigoErrorEtl
+    ColorRol:
+      type: string
+      enum:
+      - bad
+      - brand
+      - good
+      - warn
+      - neutral
+      title: ColorRol
+      description: Color de un rol en la interfaz (`roles.color`); el frontend lo traduce a estilos.
     ComisionReporte:
       properties:
         periodo_desde:
@@ -4410,6 +4630,29 @@ components:
       - total
       - lotes
       title: LotePage
+    MatrizAcceso:
+      properties:
+        roles:
+          items:
+            $ref: '#/components/schemas/RolMatriz'
+          type: array
+          title: Roles
+        permisos:
+          items:
+            $ref: '#/components/schemas/PermisoMatriz'
+          type: array
+          title: Permisos
+        pantallas:
+          items:
+            $ref: '#/components/schemas/PantallaMatriz'
+          type: array
+          title: Pantallas
+      type: object
+      required:
+      - roles
+      - permisos
+      - pantallas
+      title: MatrizAcceso
     MetricPoint:
       properties:
         periodo_desde:
@@ -4666,6 +4909,109 @@ components:
           default: '0'
       type: object
       title: PagosLiquidacion
+    PantallaAcceso:
+      properties:
+        clave:
+          type: string
+          title: Clave
+        etiqueta:
+          type: string
+          title: Etiqueta
+        ruta:
+          type: string
+          title: Ruta
+        grupo:
+          type: string
+          title: Grupo
+        autorizada:
+          type: boolean
+          title: Autorizada
+        via_permisos:
+          items:
+            type: string
+          type: array
+          title: Via Permisos
+          description: Permisos del usuario que la habilitan.
+      type: object
+      required:
+      - clave
+      - etiqueta
+      - ruta
+      - grupo
+      - autorizada
+      - via_permisos
+      title: PantallaAcceso
+    PantallaMatriz:
+      properties:
+        id:
+          type: integer
+          title: Id
+        clave:
+          type: string
+          title: Clave
+        etiqueta:
+          type: string
+          title: Etiqueta
+        ruta:
+          type: string
+          title: Ruta
+        grupo:
+          type: string
+          title: Grupo
+        orden:
+          type: integer
+          title: Orden
+        activo:
+          type: boolean
+          title: Activo
+        permisos:
+          items:
+            type: string
+          type: array
+          title: Permisos
+          description: La pantalla se habilita con CUALQUIERA de estos.
+      type: object
+      required:
+      - id
+      - clave
+      - etiqueta
+      - ruta
+      - grupo
+      - orden
+      - activo
+      - permisos
+      title: PantallaMatriz
+    PantallaMenu:
+      properties:
+        clave:
+          type: string
+          title: Clave
+        etiqueta:
+          type: string
+          title: Etiqueta
+        ruta:
+          type: string
+          title: Ruta
+        ruta_prefijo:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Ruta Prefijo
+        grupo:
+          type: string
+          title: Grupo
+        orden:
+          type: integer
+          title: Orden
+      type: object
+      required:
+      - clave
+      - etiqueta
+      - ruta
+      - grupo
+      - orden
+      title: PantallaMenu
+      description: Entrada del menú lateral autorizada para el usuario.
     PedidoConfirmacion:
       properties:
         fecha_esperada:
@@ -4887,6 +5233,32 @@ components:
       - mae
       - rmse
       title: PeorProducto
+    PermisoMatriz:
+      properties:
+        id:
+          type: integer
+          title: Id
+        codigo:
+          type: string
+          title: Codigo
+        descripcion:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Descripcion
+        modulo:
+          type: string
+          title: Modulo
+        activo:
+          type: boolean
+          title: Activo
+      type: object
+      required:
+      - id
+      - codigo
+      - modulo
+      - activo
+      title: PermisoMatriz
     PrecargaResponse:
       properties:
         fecha:
@@ -5334,11 +5706,110 @@ components:
           - type: string
           - type: 'null'
           title: Descripcion
+        activo:
+          type: boolean
+          title: Activo
+          default: true
+        requiere_proveedor:
+          type: boolean
+          title: Requiere Proveedor
+          default: false
+        color:
+          type: string
+          title: Color
+          default: neutral
       type: object
       required:
       - id
       - nombre
       title: RolItem
+    RolMatriz:
+      properties:
+        id:
+          type: integer
+          title: Id
+        nombre:
+          type: string
+          title: Nombre
+        descripcion:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Descripcion
+        activo:
+          type: boolean
+          title: Activo
+        es_sistema:
+          type: boolean
+          title: Es Sistema
+        requiere_proveedor:
+          type: boolean
+          title: Requiere Proveedor
+        color:
+          $ref: '#/components/schemas/ColorRol'
+        pantalla_inicio:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Pantalla Inicio
+          description: Clave de la pantalla.
+        total_usuarios:
+          type: integer
+          title: Total Usuarios
+        permisos:
+          items:
+            type: string
+          type: array
+          title: Permisos
+          description: Códigos de permiso asignados al rol.
+      type: object
+      required:
+      - id
+      - nombre
+      - activo
+      - es_sistema
+      - requiere_proveedor
+      - color
+      - total_usuarios
+      - permisos
+      title: RolMatriz
+    RolPermisosUpdate:
+      properties:
+        permisos:
+          items:
+            type: string
+          type: array
+          title: Permisos
+          description: Conjunto completo de códigos de permiso del rol.
+      type: object
+      required:
+      - permisos
+      title: RolPermisosUpdate
+    RolUpdate:
+      properties:
+        descripcion:
+          anyOf:
+          - type: string
+            maxLength: 255
+          - type: 'null'
+          title: Descripcion
+        activo:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Activo
+        color:
+          anyOf:
+          - $ref: '#/components/schemas/ColorRol'
+          - type: 'null'
+        pantalla_inicio:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Pantalla Inicio
+          description: Clave de pantalla; `null` explícito la quita.
+      type: object
+      title: RolUpdate
     RotacionReporte:
       properties:
         desde:
@@ -6038,6 +6509,17 @@ components:
             type: string
           type: array
           title: Permisos
+        menu:
+          items:
+            $ref: '#/components/schemas/PantallaMenu'
+          type: array
+          title: Menu
+          default: []
+        pantalla_inicio:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Pantalla Inicio
       type: object
       required:
       - id

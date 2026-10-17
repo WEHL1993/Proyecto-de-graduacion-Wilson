@@ -21,6 +21,16 @@ class NombreRol(StrEnum):
     LIQUIDADOR = "Liquidador"
 
 
+class ColorRol(StrEnum):
+    """Color de un rol en la interfaz (`roles.color`); el frontend lo traduce a estilos."""
+
+    ROJO = "bad"
+    AZUL = "brand"
+    VERDE = "good"
+    AMBAR = "warn"
+    NEUTRO = "neutral"
+
+
 class RolEnRuta(StrEnum):
     """Función de un empleado dentro del equipo de una ruta (M02, ADR-18)."""
 

@@ -1,7 +1,10 @@
 """Seeds iniciales: roles, permisos (matriz 1.4), usuario admin y `parametros_sistema`.
 
 Idempotente: puede ejecutarse varias veces sin duplicar filas ni pisar el hash de
-contraseña del admin si ya existe.
+contraseña del admin si ya existe. Tras la ADR-19 la BD es la fuente de verdad de la matriz:
+el seed solo CREA lo que falta (la matriz por defecto se aplica únicamente a roles y pantallas
+nuevos) y nunca revierte lo editado desde la pantalla de permisos. La excepción es el rol de
+sistema (Administrador), que siempre conserva todos los permisos.
 
 Uso (desde `backend/`, con el venv activo):
     python -m app.db.seeds.seed_rbac
@@ -12,8 +15,8 @@ from sqlalchemy.orm import Session
 from app.core import parametros
 from app.core.database import get_sessionmaker
 from app.core.security import hash_password
-from app.domain.enums import NombreRol
-from app.domain.models.auth import Permiso, Rol, Usuario
+from app.domain.enums import ColorRol, NombreRol
+from app.domain.models.auth import Pantalla, Permiso, Rol, Usuario
 from app.domain.models.ml import ParametroSistema
 
 ROLES: dict[str, str] = {
@@ -55,7 +58,103 @@ PERMISOS: dict[str, str] = {
     "bitacora:leer": "Consulta de la bitácora de auditoría del sistema (ADR-15).",
     "catalogos:leer": "Consulta de rutas, empleados y equipos de ruta (M02, ADR-18).",
     "catalogos:gestionar": "Alta y edición de rutas, empleados y equipos de ruta (M02, ADR-18).",
+    "roles:gestionar": "Alta de roles, activación y matriz de permisos por rol (ADR-19).",
 }
+
+# Atributos de presentación/estado de cada rol (ADR-19). Los roles heredados nacen inactivos:
+# se pueden reactivar desde la matriz.
+ROLES_ACTIVOS: frozenset[str] = frozenset(
+    {NombreRol.ADMINISTRADOR, NombreRol.GERENTE, NombreRol.LIQUIDADOR}
+)
+ROL_COLOR: dict[str, ColorRol] = {
+    NombreRol.ADMINISTRADOR: ColorRol.ROJO,
+    NombreRol.GERENTE: ColorRol.AZUL,
+    NombreRol.ENCARGADO_VENTAS: ColorRol.VERDE,
+    NombreRol.ENCARGADO_INVENTARIO: ColorRol.AMBAR,
+    NombreRol.ENCARGADO_BODEGA: ColorRol.AMBAR,
+    NombreRol.ENCARGADO_COMPRAS: ColorRol.AZUL,
+    NombreRol.LIQUIDADOR: ColorRol.VERDE,
+}
+
+# (clave, etiqueta, ruta, ruta_prefijo, grupo, orden, permisos que la habilitan: basta UNO)
+PANTALLAS: tuple[tuple[str, str, str, str | None, str, int, tuple[str, ...]], ...] = (
+    (
+        "dashboard",
+        "Dashboard de Ventas",
+        "/",
+        None,
+        "Ventas",
+        10,
+        ("carga_ruta:generar", "carga_ruta:aprobar"),
+    ),
+    (
+        "monitoreo",
+        "Monitoreo de Modelos",
+        "/monitoreo",
+        None,
+        "Analítica",
+        20,
+        ("ml:metricas:leer",),
+    ),
+    (
+        "compras",
+        "Abastecimiento",
+        "/compras",
+        None,
+        "Inventario",
+        30,
+        ("pedido_proveedor:gestionar", "pedido_proveedor:confirmar", "inventario:ajustar"),
+    ),
+    (
+        "inventario",
+        "Inventario y Kardex",
+        "/inventario",
+        None,
+        "Inventario",
+        40,
+        ("inventario:leer",),
+    ),
+    ("productos", "Productos", "/productos", None, "Inventario", 50, ("inventario:leer",)),
+    (
+        "liquidacion",
+        "Liquidación Diaria",
+        "/ventas/liquidacion",
+        None,
+        "Ventas",
+        60,
+        ("liquidaciones:registrar",),
+    ),
+    (
+        "liquidaciones",
+        "Historial de Liquidaciones",
+        "/ventas/liquidaciones",
+        None,
+        "Ventas",
+        70,
+        ("liquidaciones:leer",),
+    ),
+    ("catalogos", "Rutas", "/catalogos/rutas", "/catalogos", "Catálogos", 80, ("catalogos:leer",)),
+    ("etl", "Carga de Datos (ETL)", "/etl", None, "Datos", 90, ("etl:cargar",)),
+    (
+        "politica_datos",
+        "Política de Datos",
+        "/politica-datos",
+        None,
+        "Datos",
+        100,
+        ("etl:configurar",),
+    ),
+    ("reportes", "Reportes", "/reportes", None, "Analítica", 110, ("reportes:leer",)),
+    (
+        "usuarios",
+        "Usuarios y Roles",
+        "/usuarios",
+        None,
+        "Administración",
+        120,
+        ("usuarios:gestionar",),
+    ),
+)
 
 # Matriz 1.4 de la especificación (columna Worker se excluye: no es un rol de login).
 MATRIZ_ROL_PERMISO: dict[str, tuple[str, ...]] = {
@@ -127,22 +226,35 @@ PARAMETROS_POR_DEFECTO: dict[str, object] = {
 }
 
 
+def _modulo(codigo: str) -> str:
+    return codigo.split(":", 1)[0]
+
+
 def _get_or_create_permiso(session: Session, codigo: str, descripcion: str) -> Permiso:
     permiso = session.query(Permiso).filter_by(codigo=codigo).one_or_none()
     if permiso is None:
-        permiso = Permiso(codigo=codigo, descripcion=descripcion)
+        permiso = Permiso(codigo=codigo, descripcion=descripcion, modulo=_modulo(codigo))
         session.add(permiso)
         session.flush()
     return permiso
 
 
-def _get_or_create_rol(session: Session, nombre: str, descripcion: str) -> Rol:
+def _get_or_create_rol(session: Session, nombre: str, descripcion: str) -> tuple[Rol, bool]:
+    """Devuelve `(rol, creado)`; los atributos de ADR-19 solo se fijan al crear el rol."""
     rol = session.query(Rol).filter_by(nombre=nombre).one_or_none()
-    if rol is None:
-        rol = Rol(nombre=nombre, descripcion=descripcion)
-        session.add(rol)
-        session.flush()
-    return rol
+    if rol is not None:
+        return rol, False
+    rol = Rol(
+        nombre=nombre,
+        descripcion=descripcion,
+        activo=nombre in ROLES_ACTIVOS,
+        es_sistema=nombre == NombreRol.ADMINISTRADOR,
+        requiere_proveedor=nombre == NombreRol.PROVEEDOR,
+        color=ROL_COLOR.get(nombre, ColorRol.NEUTRO).value,
+    )
+    session.add(rol)
+    session.flush()
+    return rol, True
 
 
 def seed_roles_y_permisos(session: Session) -> dict[str, Rol]:
@@ -152,13 +264,35 @@ def seed_roles_y_permisos(session: Session) -> dict[str, Rol]:
     }
     roles_por_nombre: dict[str, Rol] = {}
     for nombre, descripcion in ROLES.items():
-        rol = _get_or_create_rol(session, nombre, descripcion)
-        permisos_asignados = {permiso.codigo for permiso in rol.permisos}
-        for codigo in MATRIZ_ROL_PERMISO[nombre]:
-            if codigo not in permisos_asignados:
-                rol.permisos.append(permisos_por_codigo[codigo])
+        rol, creado = _get_or_create_rol(session, nombre, descripcion)
+        asignados = {permiso.codigo for permiso in rol.permisos}
+        # Rol nuevo: matriz por defecto. Rol de sistema: siempre completo. El resto no se toca.
+        if creado or rol.es_sistema:
+            for codigo in MATRIZ_ROL_PERMISO[nombre]:
+                if codigo not in asignados:
+                    rol.permisos.append(permisos_por_codigo[codigo])
         roles_por_nombre[nombre] = rol
     return roles_por_nombre
+
+
+def seed_pantallas(session: Session) -> None:
+    """Crea las pantallas que falten con sus permisos; las existentes no se modifican."""
+    for clave, etiqueta, ruta, prefijo, grupo, orden, codigos in PANTALLAS:
+        if session.query(Pantalla).filter_by(clave=clave).one_or_none() is not None:
+            continue
+        pantalla = Pantalla(
+            clave=clave,
+            etiqueta=etiqueta,
+            ruta=ruta,
+            ruta_prefijo=prefijo,
+            grupo=grupo,
+            orden=orden,
+        )
+        pantalla.permisos = [
+            session.query(Permiso).filter_by(codigo=codigo).one() for codigo in codigos
+        ]
+        session.add(pantalla)
+    session.flush()
 
 
 def seed_admin(session: Session, roles_por_nombre: dict[str, Rol]) -> Usuario:
@@ -192,6 +326,7 @@ def run() -> None:
     session = get_sessionmaker()()
     try:
         roles_por_nombre = seed_roles_y_permisos(session)
+        seed_pantallas(session)
         seed_admin(session, roles_por_nombre)
         seed_parametros_sistema(session)
         session.commit()

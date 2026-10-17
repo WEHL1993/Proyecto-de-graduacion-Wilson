@@ -8,6 +8,7 @@ from app.core.errors import AppError
 from app.core.security import create_access_token, verify_password
 from app.repositories import user_repo
 from app.schemas.auth import LoginRequest, TokenResponse, UsuarioToken
+from app.services import rbac_service
 from app.services.bitacora_service import auditar
 
 # TC-AUTH-02: el mensaje debe ser idéntico para correo inexistente, contraseña incorrecta
@@ -30,14 +31,14 @@ def login(db: Session, datos: LoginRequest) -> TokenResponse:
     if not usuario.activo:
         raise _rechazar_credenciales()
 
-    roles = sorted({rol.nombre for rol in usuario.roles})
-    permisos = sorted({permiso.codigo for rol in usuario.roles for permiso in rol.permisos})
+    roles, permisos = rbac_service.resolver_acceso(db, usuario.id)  # solo roles/permisos activos
 
     access_token, expires_in = create_access_token(sub=str(usuario.id), roles=roles, perms=permisos)
 
     usuario.ultimo_login = datetime.now(UTC)
     db.commit()
 
+    sesion = rbac_service.construir_sesion(db, usuario.id, roles, permisos)
     return TokenResponse(
         access_token=access_token,
         expires_in=expires_in,
@@ -46,5 +47,7 @@ def login(db: Session, datos: LoginRequest) -> TokenResponse:
             nombre_completo=usuario.nombre_completo,
             roles=roles,
             permisos=permisos,
+            menu=sesion.menu,
+            pantalla_inicio=sesion.pantalla_inicio,
         ),
     )

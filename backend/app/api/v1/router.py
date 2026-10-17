@@ -16,6 +16,7 @@ from app.api.v1 import (
     predictions,
     products,
     purchasing,
+    rbac,
     reports,
     routes,
     users,
@@ -34,6 +35,7 @@ api_router.include_router(catalog.router)
 api_router.include_router(employees.router)
 api_router.include_router(purchasing.router)
 api_router.include_router(users.router)
+api_router.include_router(rbac.router)
 api_router.include_router(reports.router)
 api_router.include_router(liquidaciones.router)
 api_router.include_router(bitacora.router)

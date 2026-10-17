@@ -10,6 +10,9 @@ class RolItem(BaseModel):
     id: int
     nombre: str
     descripcion: str | None = None
+    activo: bool = True
+    requiere_proveedor: bool = False
+    color: str = "neutral"
 
 
 class RutaAsignada(BaseModel):
