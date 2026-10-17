@@ -108,3 +108,5 @@ CLAUDE.md
 *.sql
 !infra/postgres/init/*.sql
 respaldos/
+
+backend/importar_catalogos_*.csv
