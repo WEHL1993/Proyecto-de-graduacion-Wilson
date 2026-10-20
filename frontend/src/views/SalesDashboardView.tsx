@@ -15,7 +15,7 @@ import { useModelMetrics } from '../hooks/useModelMetrics'
 import { listarRutas } from '../services/catalogApi'
 import type { LoadPlanRequest, LoadPlanResponse } from '../types'
 import { apiError, mensajeError } from '../utils/errors'
-import { fmt, fmtFecha, hoyISO, sumarDias } from '../utils/format'
+import { fmt, fmtFecha, fmtInt, hoyISO, sumarDias } from '../utils/format'
 
 const HORIZONTES = [1, 7, 14] as const
 const ESTILO_ESTADO: Record<string, string> = {
@@ -126,6 +126,8 @@ function PlanPanel({
   const [observaciones, setObservaciones] = useState('')
   const [rechazando, setRechazando] = useState(false)
   const [motivo, setMotivo] = useState('')
+  const [revirtiendo, setRevirtiendo] = useState(false)
+  const [motivoReversion, setMotivoReversion] = useState('')
   const [aviso, setAviso] = useState<string | null>(null)
   const [productoGrafico, setProductoGrafico] = useState('')
 
@@ -136,9 +138,10 @@ function PlanPanel({
     const marcados = new Set<string>()
     const cants: Cantidades = {}
     for (const i of plan.items) {
-      const valor = i.cantidad_aprobada ?? i.cantidad_sugerida
-      cants[i.producto_id] = String(Number(valor))
-      if (Number(valor) > 0) marcados.add(i.producto_id)
+      // Cajas completas: planes viejos guardaron decimales; truncar nunca excede el stock.
+      const valor = Math.floor(Number(i.cantidad_aprobada ?? i.cantidad_sugerida))
+      cants[i.producto_id] = String(valor)
+      if (valor > 0) marcados.add(i.producto_id)
     }
     setSeleccion(marcados)
     setCantidades(cants)
@@ -154,10 +157,12 @@ function PlanPanel({
   const editable = plan?.estado === 'borrador' || plan?.estado === 'pendiente_aprobacion'
   const puedeAprobar = can('carga_ruta:aprobar')
   const puedeGenerar = can('carga_ruta:generar')
+  const puedeRevertir = can('carga_ruta:revertir')
 
   const kpis = useMemo(() => {
     const items = plan?.items ?? []
-    const demanda = items.reduce((s, i) => s + Number(i.cantidad_predicha), 0)
+    // Se suma lo redondeado para que coincida con la columna de demanda de la tabla.
+    const demanda = items.reduce((s, i) => s + Math.round(Number(i.cantidad_predicha)), 0)
     const sugerido = items.reduce((s, i) => s + Number(i.cantidad_sugerida), 0)
     return {
       demanda,
@@ -234,7 +239,7 @@ function PlanPanel({
       <div className="grid gap-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
         <Card titulo="KPIs">
           <dl className="grid grid-cols-3 gap-2 text-center">
-            <Kpi etiqueta="Demanda total" valor={`${fmt(kpis.demanda)} u`} />
+            <Kpi etiqueta="Demanda total" valor={`${fmtInt(kpis.demanda)} u`} />
             <Kpi etiqueta="Cobertura de stock" valor={`${fmt(kpis.cobertura)} %`} />
             <Kpi etiqueta="Ítems en riesgo" valor={String(kpis.riesgo)} alerta={kpis.riesgo > 0} />
           </dl>
@@ -260,6 +265,10 @@ function PlanPanel({
             <p className="py-6 text-center text-sm text-muted">Su rol no tiene permiso para consultar pronósticos.</p>
           ) : pronostico.isPending ? (
             <Cargando />
+          ) : pronostico.isError && apiError(pronostico.error)?.codigo === 'HISTORIAL_INSUFICIENTE' ? (
+            <p className="py-6 text-center text-sm text-muted">
+              Este producto no tiene historial de ventas en la ruta: se planifica con demanda 0.
+            </p>
           ) : pronostico.isError ? (
             <AlertBanner>{mensajeError(pronostico.error)}</AlertBanner>
           ) : (
@@ -332,8 +341,48 @@ function PlanPanel({
               )}
             </div>
           )}
+          {plan.estado === 'aprobada' && puedeRevertir && (
+            <div className="flex justify-end">
+              <Button variant="danger" disabled={ocupado} onClick={() => setRevirtiendo(true)}>
+                ↩ Revertir aprobación
+              </Button>
+            </div>
+          )}
         </div>
       </Card>
+
+      {revirtiendo && (
+        <Modal
+          titulo="Revertir carga aprobada"
+          onCerrar={() => setRevirtiendo(false)}
+          acciones={
+            <>
+              <Button onClick={() => setRevirtiendo(false)}>Cancelar</Button>
+              <Button
+                variant="danger"
+                disabled={!motivoReversion.trim() || ocupado}
+                onClick={() => {
+                  ejecutar(
+                    { accion: 'revertir', carga_id: plan.carga_id, motivo_reversion: motivoReversion.trim() },
+                    'Aprobación revertida: reservas liberadas y plan devuelto a borrador.',
+                  )
+                  setRevirtiendo(false)
+                  setMotivoReversion('')
+                }}
+              >
+                Revertir carga
+              </Button>
+            </>
+          }
+        >
+          <p className="mb-3 text-sm text-muted">
+            Se liberará el stock reservado y el plan volverá a borrador para editarlo y aprobarlo de nuevo.
+          </p>
+          <Campo etiqueta="Motivo de la reversión (obligatorio)">
+            <textarea className={CLASE_INPUT} rows={3} value={motivoReversion} onChange={(e) => setMotivoReversion(e.target.value)} />
+          </Campo>
+        </Modal>
+      )}
 
       {rechazando && (
         <Modal

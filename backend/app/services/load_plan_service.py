@@ -1,6 +1,7 @@
 """Caso de uso: planificación de carga de ruta (ADR-06, ADR-07; TC-LOAD-01..04).
 
-Estados: `borrador → pendiente_aprobacion → aprobada | rechazada → despachada`. No existe una
+Estados: `borrador → pendiente_aprobacion → aprobada | rechazada → despachada`. Un Administrador
+puede revertir una `aprobada` a `borrador` (libera reservas). No existe una
 acción API para «enviar» (borrador → pendiente_aprobacion), por lo que aprobar y rechazar se
 aceptan desde ambos estados. Rechazar también se acepta sobre una carga `aprobada` aún no
 despachada: libera sus reservas. Nada se despacha automáticamente.
@@ -8,7 +9,7 @@ despachada: libera sus reservas. Nada se despacha automáticamente.
 
 import uuid
 from datetime import UTC, date, datetime, timedelta
-from decimal import Decimal
+from decimal import ROUND_FLOOR, ROUND_HALF_UP, Decimal
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -22,7 +23,7 @@ from app.schemas.routes import LoadPlanItem, LoadPlanRequest, LoadPlanResponse
 from app.services import inventory_service, prediction_service
 from app.services.bitacora_service import auditar
 
-_CENTESIMA = Decimal("0.01")
+_UNIDAD = Decimal(1)
 _MAX_PRODUCTOS_POR_PREDICCION = 200
 _ESTADOS_DECIDIBLES = (EstadoCarga.BORRADOR, EstadoCarga.PENDIENTE_APROBACION)
 
@@ -35,7 +36,9 @@ def gestionar(db: Session, solicitud: LoadPlanRequest, usuario_id: uuid.UUID) ->
         return enviar(db, solicitud)
     if solicitud.accion == "aprobar":
         return aprobar(db, solicitud, usuario_id)
-    return rechazar(db, solicitud, usuario_id)
+    if solicitud.accion == "rechazar":
+        return rechazar(db, solicitud, usuario_id)
+    return revertir(db, solicitud, usuario_id)
 
 
 # ------------------------------------------------------------------ generar
@@ -48,23 +51,28 @@ def generar(db: Session, solicitud: LoadPlanRequest, usuario_id: uuid.UUID) -> L
         raise AppError("RUTA_NO_ENCONTRADA", "La ruta indicada no existe.")
     if carga_repo.vigente_de_ruta(db, ruta_id, fecha) is not None:
         raise _carga_vigente_existente()
-    producto_ids = sales_repo.productos_de_ruta(db, ruta_id)
-    if not producto_ids:
+    con_historial = sales_repo.productos_de_ruta(db, ruta_id)
+    if not con_historial:
         raise AppError("RUTA_SIN_PRODUCTOS", "La ruta no tiene productos con historial de ventas.")
+    # Todas las rutas distribuyen el catálogo completo: los productos sin ventas en la ruta
+    # entran al plan con demanda 0 (el modelo solo pronostica los que tienen historial).
+    producto_ids = catalog_repo.ids_productos_activos(db)
 
-    modelo_id, predicha = _predecir_demanda(db, producto_ids, ruta_id, fecha)
+    modelo_id, predicha = _predecir_demanda(db, con_historial, ruta_id, fecha)
     disponible = inventory_service.stock_disponible(db, producto_ids)
 
     detalles = []
     for pid in producto_ids:
-        demanda = predicha.get(pid, Decimal("0.00"))
+        demanda = predicha.get(pid, Decimal(0))
+        # Bodega despacha cajas completas: el stock cargable es la parte entera del disponible.
+        cargable = disponible[pid].to_integral_value(rounding=ROUND_FLOOR)
         # ADR-07: el stock disponible prevalece sobre la demanda predicha.
-        sugerida = min(demanda, disponible[pid])
+        sugerida = min(demanda, cargable)
         detalles.append(
             {
                 "producto_id": pid,
                 "cantidad_predicha": demanda,
-                "stock_disponible_al_generar": disponible[pid],
+                "stock_disponible_al_generar": cargable,
                 "cantidad_sugerida": sugerida,
                 "ajustado_por_stock": sugerida < demanda,
             }
@@ -89,7 +97,7 @@ def generar(db: Session, solicitud: LoadPlanRequest, usuario_id: uuid.UUID) -> L
 
     alertas = inventory_service.evaluar_cobertura(
         db,
-        {pid: (predicha.get(pid, Decimal("0.00")), disponible[pid]) for pid in producto_ids},
+        {pid: (predicha.get(pid, Decimal(0)), disponible[pid]) for pid in producto_ids},
         modelo_id=modelo_id,
         contexto=f"plan de carga del {fecha.isoformat()}",
     )
@@ -118,7 +126,7 @@ def _predecir_demanda(
         modelo_id = respuesta.modelo.id
         for pron in respuesta.pronosticos:
             valor = Decimal(str(pron.serie[0].demanda_predicha))
-            demanda[pron.producto_id] = max(Decimal(0), valor).quantize(_CENTESIMA)
+            demanda[pron.producto_id] = max(Decimal(0), valor).quantize(_UNIDAD, rounding=ROUND_HALF_UP)
     assert modelo_id is not None
     return modelo_id, demanda
 
@@ -214,6 +222,33 @@ def rechazar(db: Session, solicitud: LoadPlanRequest, usuario_id: uuid.UUID) -> 
     return _respuesta(db, carga)
 
 
+# ------------------------------------------------------------------ revertir
+@auditar
+def revertir(db: Session, solicitud: LoadPlanRequest, usuario_id: uuid.UUID) -> LoadPlanResponse:
+    """`aprobada → borrador` (solo Administrador): libera las reservas y borra la aprobación.
+
+    La carga conserva el cupo de la ruta y fecha, de modo que puede editarse y aprobarse de nuevo.
+    Una carga ya despachada no se revierte: su stock salió físicamente.
+    """
+    carga = _cargar_para_decidir(db, solicitud.carga_id, (EstadoCarga.APROBADA,), "revertir")
+    inventory_service.liberar(
+        db,
+        {d.producto_id: d.cantidad_aprobada or Decimal(0) for d in carga.detalles},
+        referencia_id=carga.id,
+        usuario_id=usuario_id,
+    )
+    for detalle in carga.detalles:
+        detalle.cantidad_aprobada = None
+    carga.estado = EstadoCarga.BORRADOR
+    carga.aprobado_por = None
+    carga.aprobada_en = None
+    notas = [carga.observaciones, solicitud.observaciones]
+    motivo = f"Aprobación revertida: {(solicitud.motivo_reversion or '').strip()}"
+    carga.observaciones = "\n".join(n for n in (*notas, motivo) if n)
+    db.commit()
+    return _respuesta(db, carga)
+
+
 # ------------------------------------------------------------------ despachar
 @auditar
 def despachar(db: Session, carga_id: uuid.UUID, usuario_id: uuid.UUID) -> LoadPlanResponse:
@@ -275,7 +310,8 @@ def _respuesta(
             cantidad_aprobada=d.cantidad_aprobada,
             ajustado_por_stock=d.ajustado_por_stock,
         )
-        for d in sorted(carga.detalles, key=lambda d: catalogo[d.producto_id][0])
+        # Mayor rotación (demanda predicha) primero; los productos sin movimiento quedan al final.
+        for d in sorted(carga.detalles, key=lambda d: (-d.cantidad_predicha, catalogo[d.producto_id][0]))
     ]
     return LoadPlanResponse(
         carga_id=carga.id,

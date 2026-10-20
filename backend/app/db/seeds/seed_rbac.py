@@ -38,6 +38,7 @@ PERMISOS: dict[str, str] = {
     "prediccion:consultar": "Consulta de pronósticos de demanda.",
     "carga_ruta:generar": "Generación de planes de carga de ruta.",
     "carga_ruta:aprobar": "Aprobación o rechazo de planes de carga.",
+    "carga_ruta:revertir": "Reversión de cargas aprobadas (solo Administrador).",
     "carga_ruta:despachar": "Confirmación de despacho (kardex de salida).",
     "inventario:leer": "Consulta de existencias.",
     "inventario:ajustar": "Ajustes manuales de existencias.",

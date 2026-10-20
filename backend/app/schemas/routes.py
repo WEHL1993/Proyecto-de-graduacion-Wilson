@@ -12,20 +12,23 @@ from app.domain.enums import EstadoCarga
 
 class AjusteCarga(BaseModel):
     producto_id: UUID
-    cantidad_aprobada: Decimal = Field(ge=0, max_digits=12, decimal_places=2)
+    cantidad_aprobada: Decimal = Field(
+        ge=0, max_digits=12, decimal_places=0, description="Cajas completas (entero)"
+    )
 
 
 class LoadPlanRequest(BaseModel):
-    accion: Literal["generar", "enviar", "aprobar", "rechazar"]
+    accion: Literal["generar", "enviar", "aprobar", "rechazar", "revertir"]
     ruta_id: UUID | None = Field(default=None, description="Obligatorio si accion=generar")
     fecha_operacion: date | None = Field(default=None, description="Obligatorio si accion=generar")
     carga_id: UUID | None = Field(
-        default=None, description="Obligatorio si accion=enviar|aprobar|rechazar"
+        default=None, description="Obligatorio si accion=enviar|aprobar|rechazar|revertir"
     )
     ajustes: list[AjusteCarga] | None = Field(
         default=None, description="Cantidades aprobadas editadas (solo accion=aprobar)"
     )
     motivo_rechazo: str | None = Field(default=None, description="Obligatorio si accion=rechazar")
+    motivo_reversion: str | None = Field(default=None, description="Obligatorio si accion=revertir")
     observaciones: str | None = None
 
     @model_validator(mode="after")
@@ -37,6 +40,8 @@ class LoadPlanRequest(BaseModel):
             raise ValueError(f"accion={self.accion} exige `carga_id`.")
         if self.accion == "rechazar" and not (self.motivo_rechazo or "").strip():
             raise ValueError("accion=rechazar exige `motivo_rechazo`.")
+        if self.accion == "revertir" and not (self.motivo_reversion or "").strip():
+            raise ValueError("accion=revertir exige `motivo_reversion`.")
         if self.accion != "aprobar" and self.ajustes:
             raise ValueError("`ajustes` solo aplica a accion=aprobar.")
         if self.ajustes and len({a.producto_id for a in self.ajustes}) != len(self.ajustes):

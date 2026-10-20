@@ -18,6 +18,7 @@ _PERMISO_POR_ACCION = {
     "enviar": "carga_ruta:generar",
     "aprobar": "carga_ruta:aprobar",
     "rechazar": "carga_ruta:aprobar",
+    "revertir": "carga_ruta:revertir",
 }
 
 
@@ -33,7 +34,10 @@ _PERMISO_POR_ACCION = {
         "`pendiente_aprobacion`. "
         "`accion=aprobar|rechazar` (permiso `carga_ruta:aprobar`) opera sobre `carga_id`: aprobar "
         "reserva stock y registra el kardex (400 `CANTIDAD_EXCEDE_STOCK` si una cantidad excede "
-        "el disponible); rechazar exige `motivo_rechazo` y libera las reservas existentes."
+        "el disponible); rechazar exige `motivo_rechazo` y libera las reservas existentes. "
+        "`accion=revertir` (permiso `carga_ruta:revertir`, solo Administrador) devuelve una carga "
+        "`aprobada` a `borrador`, libera sus reservas y exige `motivo_reversion`; 400 "
+        "`ESTADO_CARGA_INVALIDO` si no está aprobada (p. ej. ya despachada)."
     ),
 )
 def gestionar_carga(

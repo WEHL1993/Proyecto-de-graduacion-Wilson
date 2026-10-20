@@ -229,6 +229,31 @@ def test_tc_load_01_generar_aplica_min_demanda_stock(entorno):
     assert _movimientos(e) == []  # generar no toca inventario ni kardex
 
 
+def test_generar_incluye_todo_el_catalogo_activo_con_demanda_cero_sin_historial(entorno):
+    e = entorno
+    extra = Producto(
+        sku=f"SH-{uuid.uuid4().hex[:6]}",
+        nombre="Sin ventas en la ruta",
+        categoria_id=e.a.categoria_id,
+    )
+    e.db.add(extra)
+    e.db.commit()
+
+    items = _items(_generar(e).json())
+    assert {e.a.sku, e.b.sku, extra.sku} <= set(items)
+    sin_historial = items[extra.sku]
+    assert sin_historial["cantidad_predicha"] == sin_historial["cantidad_sugerida"] == "0.00"
+    assert sin_historial["ajustado_por_stock"] is False
+    (solicitud,) = e.solicitudes  # el modelo solo pronostica los productos con historial
+    assert extra.id not in solicitud.producto_ids
+
+
+def test_items_del_plan_van_de_mayor_a_menor_rotacion_y_sin_movimiento_al_final(entorno):
+    cuerpo = _generar(entorno).json()
+    demandas = [Decimal(i["cantidad_predicha"]) for i in cuerpo["items"]]
+    assert demandas == sorted(demandas, reverse=True)
+
+
 def test_generar_con_stock_suficiente_no_ajusta_ni_alerta(entorno):
     e = entorno
     inv = _inventario(e, e.a)
@@ -397,6 +422,41 @@ def test_rechazar_aprobada_libera_reservas_y_registra_kardex(entorno):
     assert _inventario(e, e.a).stock_reservado == 0
     (liberacion,) = _movimientos(e, TipoMovimiento.LIBERACION)
     assert (liberacion.producto_id, liberacion.cantidad) == (e.a.id, 150)
+
+
+def test_revertir_aprobada_libera_reservas_y_vuelve_a_borrador(entorno):
+    e = entorno
+    carga_id = _carga_pendiente(e)
+    assert _decidir(e, "aprobar", carga_id).status_code == 200
+    admin = (*VENTAS, "carga_ruta:revertir")
+
+    r = _decidir(e, "revertir", carga_id, permisos=admin, motivo_reversion="Error de captura")
+    assert r.status_code == 200 and r.json()["estado"] == "borrador"
+    assert all(i["cantidad_aprobada"] is None for i in r.json()["items"])
+    assert _inventario(e, e.a).stock_reservado == 0
+    (liberacion,) = _movimientos(e, TipoMovimiento.LIBERACION)
+    assert (liberacion.producto_id, liberacion.cantidad) == (e.a.id, 150)
+    carga = e.db.get(CargaRuta, uuid.UUID(carga_id))
+    assert carga.aprobado_por is None and carga.aprobada_en is None
+    assert "Error de captura" in carga.observaciones
+    # Se puede volver a aprobar.
+    assert _decidir(e, "aprobar", carga_id).status_code == 200
+
+
+def test_revertir_exige_permiso_motivo_y_estado_aprobada(entorno):
+    e = entorno
+    carga_id = _carga_pendiente(e)
+    assert _decidir(e, "aprobar", carga_id).status_code == 200
+    # Aprobar no basta: solo quien tiene `carga_ruta:revertir`.
+    r = _decidir(e, "revertir", carga_id, motivo_reversion="x")
+    assert r.status_code == 403
+    admin = (*VENTAS, "carga_ruta:revertir")
+    assert _decidir(e, "revertir", carga_id, permisos=admin).status_code == 422
+    assert e.db.get(CargaRuta, uuid.UUID(carga_id)).estado == EstadoCarga.APROBADA
+    # Ya revertida (borrador) no se revierte otra vez.
+    assert _decidir(e, "revertir", carga_id, permisos=admin, motivo_reversion="x").status_code == 200
+    r = _decidir(e, "revertir", carga_id, permisos=admin, motivo_reversion="x")
+    assert (r.status_code, r.json()["codigo"]) == (400, "ESTADO_CARGA_INVALIDO")
 
 
 def test_no_se_decide_una_carga_rechazada_ni_despachada(entorno):

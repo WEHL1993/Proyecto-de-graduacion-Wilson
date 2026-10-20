@@ -110,6 +110,11 @@ def productos_para_liquidacion(
     return {fila[0]: ProductoLiquidable(*fila) for fila in db.execute(stmt)}
 
 
+def ids_productos_activos(db: Session) -> list[uuid.UUID]:
+    """Todo el catálogo que distribuye la empresa (productos activos)."""
+    return list(db.scalars(select(Producto.id).where(Producto.activo.is_(True))))
+
+
 def obtener_ruta(db: Session, ruta_id: uuid.UUID) -> Ruta | None:
     return db.get(Ruta, ruta_id)
 
