@@ -30,6 +30,8 @@ class Usuario(UUIDPkMixin, AuditoriaMixin, Base):
         ForeignKey("proveedores.id", ondelete="SET NULL"), index=True
     )
     activo: Mapped[bool] = mapped_column(Boolean, server_default=true())
+    # Contraseña temporal: la fijó un administrador y el usuario debe cambiarla al ingresar.
+    debe_cambiar_password: Mapped[bool] = mapped_column(Boolean, server_default="false")
     ultimo_login: Mapped[datetime | None]
 
     roles: Mapped[list["Rol"]] = relationship(secondary="usuarios_roles", back_populates="usuarios")

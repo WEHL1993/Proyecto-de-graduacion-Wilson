@@ -1,5 +1,6 @@
-import { ChevronDown, LogOut, Menu } from 'lucide-react'
+import { ChevronDown, KeyRound, LogOut, Menu } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../../app/providers/AuthProvider'
 import { AlertBanner } from '../alerts/AlertBanner'
 
@@ -67,6 +68,15 @@ function MenuUsuario() {
             <p className="truncate text-sm font-semibold text-ink">{nombre}</p>
             <p className="truncate text-xs text-muted">{roles}</p>
           </div>
+          <Link
+            to="/cambiar-password"
+            role="menuitem"
+            onClick={() => setAbierto(false)}
+            className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-ink hover:bg-surface"
+          >
+            <KeyRound aria-hidden className="h-4 w-4" />
+            Cambiar contraseña
+          </Link>
           <button
             type="button"
             role="menuitem"

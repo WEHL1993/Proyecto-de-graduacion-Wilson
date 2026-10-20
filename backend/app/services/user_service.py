@@ -29,6 +29,7 @@ def _a_dto(usuario: Usuario, rutas: list[Ruta]) -> UsuarioOut:
         email=usuario.email,
         nombre_completo=usuario.nombre_completo,
         activo=usuario.activo,
+        debe_cambiar_password=usuario.debe_cambiar_password,
         roles=sorted(r.nombre for r in usuario.roles),
         rutas=[RutaAsignada(id=r.id, codigo=r.codigo, nombre=r.nombre) for r in rutas],
         proveedor_id=usuario.proveedor_id,
@@ -134,6 +135,7 @@ def crear(db: Session, datos: UsuarioCreate) -> UsuarioOut:
             nombre_completo=datos.nombre_completo.strip(),
             proveedor_id=proveedor_id,
             activo=datos.activo,
+            debe_cambiar_password=True,
             roles=roles,
         ),
     )
@@ -163,6 +165,8 @@ def actualizar(
         usuario.nombre_completo = datos.nombre_completo.strip()
     if datos.password is not None:
         usuario.password_hash = hash_password(datos.password)
+        # Un administrador que fija la contraseña de otro la deja como temporal; la suya propia no.
+        usuario.debe_cambiar_password = usuario.id != actor_id
     if datos.ruta_ids is not None:
         _validar_rutas(db, datos.ruta_ids)
         user_repo.asignar_rutas(db, usuario.id, datos.ruta_ids)

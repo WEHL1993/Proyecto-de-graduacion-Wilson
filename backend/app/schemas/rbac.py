@@ -29,6 +29,9 @@ class AccesoSesion(BaseModel):
     pantalla_inicio: str | None = Field(
         default=None, description="Ruta a la que se entra tras iniciar sesión."
     )
+    debe_cambiar_password: bool = Field(
+        default=False, description="La contraseña es temporal: debe cambiarse antes de operar."
+    )
 
 
 class RolMatriz(BaseModel):

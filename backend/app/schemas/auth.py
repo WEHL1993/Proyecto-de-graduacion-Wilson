@@ -12,6 +12,11 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=8)
 
 
+class CambiarPasswordRequest(BaseModel):
+    password_actual: str = Field(min_length=8, max_length=128)
+    password_nueva: str = Field(min_length=8, max_length=128)
+
+
 class UsuarioToken(BaseModel):
     id: UUID
     nombre_completo: str
@@ -19,6 +24,7 @@ class UsuarioToken(BaseModel):
     permisos: list[str]
     menu: list[PantallaMenu] = []
     pantalla_inicio: str | None = None
+    debe_cambiar_password: bool = False
 
 
 class TokenResponse(BaseModel):

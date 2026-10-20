@@ -16,6 +16,8 @@ interface AuthContexto {
   puedeVer: (clave: string) => boolean
   /** Relee roles, permisos y menú de la BD (cambios de la matriz sin volver a iniciar sesión). */
   refrescar: () => Promise<void>
+  /** Cambia la contraseña propia; al lograrlo se levanta la obligación de cambiar la temporal. */
+  cambiarPassword: (actual: string, nueva: string) => Promise<void>
 }
 
 /** Cada cuánto se revalida el acceso mientras la pestaña está abierta. */
@@ -68,6 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             permisos: vigente.permisos,
             menu: vigente.menu,
             pantalla_inicio: vigente.pantalla_inicio ?? null,
+            debe_cambiar_password: vigente.debe_cambiar_password ?? false,
           },
         }
         guardarSesion(nueva)
@@ -97,11 +100,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const nueva: Sesion = {
       token: r.access_token,
       expiraEn: Date.now() + r.expires_in * 1000,
-      usuario: { ...r.usuario, pantalla_inicio: r.usuario.pantalla_inicio ?? null },
+      usuario: {
+        ...r.usuario,
+        pantalla_inicio: r.usuario.pantalla_inicio ?? null,
+        debe_cambiar_password: r.usuario.debe_cambiar_password ?? false,
+      },
     }
     guardarSesion(nueva)
     setSesionExpirada(false)
     setSesion(nueva)
+  }, [])
+
+  const cambiarPassword = useCallback(async (actual: string, nueva: string) => {
+    await authApi.cambiarPassword(actual, nueva)
+    setSesion((s) => {
+      if (!s) return s
+      const nueva_ = { ...s, usuario: { ...s.usuario, debe_cambiar_password: false } }
+      guardarSesion(nueva_)
+      return nueva_
+    })
   }, [])
 
   const valor = useMemo<AuthContexto>(() => {
@@ -116,8 +133,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       canAny: (ps) => ps.some((p) => permisos.has(p)),
       puedeVer: (clave) => pantallas.has(clave),
       refrescar,
+      cambiarPassword,
     }
-  }, [sesion, sesionExpirada, login, logout, refrescar])
+  }, [sesion, sesionExpirada, login, logout, refrescar, cambiarPassword])
 
   return <Contexto.Provider value={valor}>{children}</Contexto.Provider>
 }

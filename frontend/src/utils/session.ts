@@ -13,6 +13,8 @@ export interface Sesion {
     permisos: string[]
     menu: PantallaMenu[]
     pantalla_inicio: string | null
+    /** Contraseña temporal fijada por un administrador: obliga a cambiarla antes de operar. */
+    debe_cambiar_password?: boolean
   }
 }
 

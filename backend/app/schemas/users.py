@@ -26,6 +26,7 @@ class UsuarioOut(BaseModel):
     email: EmailStr
     nombre_completo: str
     activo: bool
+    debe_cambiar_password: bool = False
     roles: list[str]
     rutas: list[RutaAsignada]
     proveedor_id: UUID | None = None

@@ -154,6 +154,9 @@ function ModalUsuario({ usuario, onCerrar }: { usuario: UsuarioOut | null; onCer
             placeholder={edicion ? 'Dejar en blanco para conservarla' : 'Mínimo 8 caracteres'}
           />
           {mostrar('password')}
+          <span className="text-xs font-normal text-muted">
+            Será una contraseña temporal: el usuario deberá cambiarla al ingresar.
+          </span>
         </Campo>
 
         <fieldset className="flex flex-col gap-1">
@@ -296,6 +299,11 @@ function PanelUsuarios() {
                           <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all ${u.activo ? 'left-4' : 'left-0.5'}`} />
                         </button>
                         <span className="ml-2 text-xs text-muted">{u.activo ? 'Activo' : 'Inactivo'}</span>
+                        {u.debe_cambiar_password && (
+                          <div className="mt-1 text-xs text-warn" title="Debe cambiarla al ingresar">
+                            Contraseña temporal
+                          </div>
+                        )}
                       </td>
                       <td className="py-2 text-right">
                         <Button onClick={() => setModal({ usuario: u })} aria-label={`Editar a ${u.nombre_completo}`}>

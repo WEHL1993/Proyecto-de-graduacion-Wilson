@@ -3,7 +3,7 @@
 from fastapi import APIRouter
 
 from app.api.deps import CurrentUser, DBSession
-from app.schemas.auth import LoginRequest, TokenResponse
+from app.schemas.auth import CambiarPasswordRequest, LoginRequest, TokenResponse
 from app.schemas.rbac import AccesoSesion
 from app.services import auth_service, rbac_service
 
@@ -13,6 +13,19 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
 @router.post("/login", response_model=TokenResponse, summary="Autenticación y emisión de JWT")
 def login(datos: LoginRequest, db: DBSession) -> TokenResponse:
     return auth_service.login(db, datos)
+
+
+@router.post(
+    "/cambiar-password",
+    status_code=204,
+    summary="Cambio de contraseña propia",
+    description=(
+        "Cualquier usuario autenticado cambia su contraseña indicando la actual. Es el paso "
+        "obligatorio cuando un administrador fijó una contraseña temporal."
+    ),
+)
+def cambiar_password(datos: CambiarPasswordRequest, usuario: CurrentUser, db: DBSession) -> None:
+    auth_service.cambiar_password(db, usuario.id, datos)
 
 
 @router.get(

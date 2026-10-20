@@ -23,6 +23,9 @@ export function PermissionGate({ anyOf = [], pantalla, children, fallback = null
 
   if (guardRoute) {
     if (!usuario) return <Navigate to="/login" replace state={{ desde: location.pathname }} />
+    // Contraseña temporal: nada se opera hasta cambiarla.
+    if (usuario.debe_cambiar_password && location.pathname !== '/cambiar-password')
+      return <Navigate to="/cambiar-password" replace />
     if (!autorizado) return <Navigate to="/acceso-denegado" replace />
     return <>{children}</>
   }

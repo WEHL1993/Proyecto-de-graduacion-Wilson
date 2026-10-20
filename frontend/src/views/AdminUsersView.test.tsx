@@ -24,6 +24,7 @@ const usuario = (o: Partial<UsuarioOut>): UsuarioOut => ({
   email: 'ana@ds.gt',
   nombre_completo: 'Ana Ventas',
   activo: true,
+  debe_cambiar_password: false,
   roles: ['EncargadoVentas'],
   rutas: [{ id: 'r1', codigo: 'R-01', nombre: 'Ruta 1' }],
   creado_en: '2026-01-01T00:00:00Z',

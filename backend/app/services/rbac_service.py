@@ -99,6 +99,7 @@ def construir_sesion(
         permisos=permisos,
         menu=[_menu(p) for p in pantallas],
         pantalla_inicio=inicio.ruta if inicio else None,
+        debe_cambiar_password=usuario.debe_cambiar_password if usuario else False,
     )
 
 
