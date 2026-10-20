@@ -13,13 +13,15 @@ Estados: `borrador → enviado → confirmado → recibido` (más `cancelado` de
 import uuid
 from collections.abc import Sequence
 from datetime import UTC, date, datetime
-from decimal import Decimal
+from decimal import ROUND_CEILING, ROUND_HALF_UP, Decimal
 
+from sqlalchemy import or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
 from app.domain.enums import EstadoPedido, NombreRol, ReferenciaTipo
-from app.domain.models.operations import PedidoProveedor
+from app.domain.models.operations import PedidoProveedor, RecepcionMercaderia
 from app.repositories import catalog_repo, purchasing_repo, user_repo
 from app.schemas.auth import UsuarioAutenticado
 from app.schemas.predictions import DemandRequest
@@ -29,6 +31,8 @@ from app.schemas.purchasing import (
     PedidoItemOut,
     PedidoOut,
     PedidoPage,
+    RecepcionCreate,
+    RecepcionOut,
     SugerenciaCompra,
     SugerenciasResponse,
 )
@@ -44,7 +48,9 @@ _MAX_PRODUCTOS_POR_PREDICCION = 200
 def calcular_cantidad_a_pedir(
     demanda_proyectada: Decimal, stock_minimo: Decimal, stock_actual: Decimal
 ) -> Decimal:
-    return max(_CERO, (demanda_proyectada + stock_minimo) - stock_actual).quantize(_CENTESIMA)
+    """Paquetes enteros a pedir: una fracción de paquete no se puede comprar, se redondea hacia arriba."""
+    faltante = max(_CERO, (demanda_proyectada + stock_minimo) - stock_actual)
+    return faltante.to_integral_value(rounding=ROUND_CEILING).quantize(_CENTESIMA)
 
 
 @auditar
@@ -131,7 +137,7 @@ def _predecir_lote(
     return {
         pron.producto_id: sum(
             (max(Decimal(0), Decimal(str(p.demanda_predicha))) for p in pron.serie), Decimal(0)
-        ).quantize(_CENTESIMA)
+        ).to_integral_value(rounding=ROUND_HALF_UP).quantize(_CENTESIMA)
         for pron in respuesta.pronosticos
     }
 
@@ -347,3 +353,93 @@ def _salida(db: Session, pedidos: Sequence[PedidoProveedor]) -> list[PedidoOut]:
         )
         for p in pedidos
     ]
+
+
+@auditar
+def registrar_recepcion(
+    db: Session, solicitud: RecepcionCreate, usuario_id: uuid.UUID
+) -> RecepcionOut:
+    """Ingreso físico con documento: existencias, kardex y pedido se confirman juntos.
+
+    Una recepción cierra el pedido; cualquier diferencia (faltante o excedente) se conserva
+    como recibido_parcial. Los ceros se documentan, pero no generan movimientos vacíos.
+    """
+    # Serializa entregas del mismo pedido antes de comprobar factura y estado.
+    if solicitud.pedido_id:
+        purchasing_repo.obtener(db, solicitud.pedido_id, bloquear=True)
+    duplicada = db.scalar(
+        select(RecepcionMercaderia.id)
+        .where(
+            or_(
+                RecepcionMercaderia.numero_autorizacion == solicitud.numero_autorizacion,
+                (RecepcionMercaderia.serie == solicitud.serie)
+                & (RecepcionMercaderia.numero == solicitud.numero),
+            )
+        )
+        .limit(1)
+    )
+    if duplicada:
+        raise _factura_duplicada()
+    pedido = (
+        _bloquear(db, solicitud.pedido_id, (EstadoPedido.CONFIRMADO,), "recibir")
+        if solicitud.pedido_id
+        else None
+    )
+    ids = {i.producto_id for i in solicitud.items}
+    productos = purchasing_repo.productos_de(db, ids)
+    if ids != set(productos) or any(not p.activo for p in productos.values()):
+        raise AppError("PRODUCTO_INVALIDO", "Hay productos inexistentes o inactivos.")
+    if pedido and ids != {d.producto_id for d in pedido.detalles}:
+        raise AppError(
+            "DETALLE_RECEPCION_INVALIDO", "Incluya exactamente los productos del pedido."
+        )
+    cantidades = {i.producto_id: i.cantidad_recibida for i in solicitud.items}
+    recepcion = RecepcionMercaderia(
+        pedido_id=solicitud.pedido_id,
+        usuario_id=usuario_id,
+        **solicitud.model_dump(exclude={"pedido_id", "items"}),
+        items=[i.model_dump(mode="json") for i in solicitud.items],
+    )
+    try:
+        # UNIQUE es la garantía final ante solicitudes concurrentes. El savepoint deja
+        # la sesión utilizable al traducir el conflicto, sin entradas ni stock nuevos.
+        with db.begin_nested():
+            db.add(recepcion)
+            db.flush()
+    except IntegrityError as exc:
+        if getattr(exc.orig, "pgcode", None) == "23505" and getattr(
+            getattr(exc.orig, "diag", None), "constraint_name", None
+        ) in {"uq_recepciones_autorizacion", "uq_recepciones_serie_numero"}:
+            raise _factura_duplicada() from exc
+        raise
+    inventory_service.registrar_entrada(
+        db,
+        cantidades,
+        referencia_tipo=ReferenciaTipo.RECEPCION,
+        referencia_id=recepcion.id,
+        usuario_id=usuario_id,
+        motivo=f"FEL {recepcion.serie}-{recepcion.numero} / {recepcion.numero_autorizacion}",
+    )
+    if pedido:
+        pedido.estado = (
+            EstadoPedido.RECIBIDO
+            if all(cantidades[d.producto_id] == d.cantidad for d in pedido.detalles)
+            else EstadoPedido.RECIBIDO_PARCIAL
+        )
+    db.commit()
+    return RecepcionOut(
+        id=recepcion.id,
+        pedido_id=recepcion.pedido_id,
+        **solicitud.model_dump(exclude={"pedido_id", "items"}),
+        estado_pedido=pedido.estado if pedido else None,
+        items=solicitud.items,
+    )
+
+
+def _factura_duplicada() -> AppError:
+    return AppError(
+        "FACTURA_DUPLICADA",
+        "La factura ya fue registrada: el UUID de autorización "
+        "o la serie y número están duplicados.",
+        status_code=409,
+    )

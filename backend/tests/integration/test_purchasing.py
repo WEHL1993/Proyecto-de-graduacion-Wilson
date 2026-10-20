@@ -202,7 +202,7 @@ def test_sugerencias_cruzan_demanda_stock_y_punto_de_reorden(entorno):
     assert cuerpo["horizonte_dias"] == 5 and cuerpo["advertencias"] == []
 
     por_sku = {s["sku"]: s for s in cuerpo["sugerencias"]}
-    # A: (70 + 30) - 20 = 80 ; C: (12.5 + 5) - 0 = 17.5 ; B (500 ≥ 110) y D (sin proveedor) no.
+    # A: (70 + 30) - 20 = 80 ; C: (12.5 → 13 + 5) - 0 = 18 (paquetes enteros) ; B (500 ≥ 110) y D (sin proveedor) no.
     assert set(por_sku) == {e.a.sku, e.c.sku}
     sa = por_sku[e.a.sku]
     assert sa["cantidad_sugerida"] == "80.00" and sa["demanda_proyectada"] == "70.00"
@@ -210,7 +210,7 @@ def test_sugerencias_cruzan_demanda_stock_y_punto_de_reorden(entorno):
     assert sa["costo_unitario"] == "2.50" and sa["pronostico_disponible"] is True
     sc = por_sku[e.c.sku]  # producto sin fila de inventario: stock 0
     assert (sc["cantidad_sugerida"], sc["stock_actual"], sc["lead_time_dias"]) == (
-        "17.50",
+        "18.00",
         "0.00",
         7,
     )

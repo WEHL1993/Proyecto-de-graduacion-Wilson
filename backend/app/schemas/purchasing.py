@@ -2,10 +2,10 @@
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Self
+from typing import Literal, Self
 from uuid import UUID
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.domain.enums import EstadoPedido
 
@@ -92,3 +92,61 @@ class PedidoPage(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class RecepcionItemIn(BaseModel):
+    producto_id: UUID
+    cantidad_recibida: Decimal = Field(ge=0, max_digits=12, decimal_places=2)
+    observacion: str = Field(default="", max_length=300)
+
+
+class FacturaFEL(BaseModel):
+    """Encabezado de la factura de planta central; sin reglas fiscales adicionales."""
+
+    serie: str = Field(min_length=1, max_length=50, pattern=r"\S")
+    numero: str = Field(min_length=1, max_length=50, pattern=r"^[0-9]+$")
+    numero_autorizacion: UUID
+    fecha_emision: date
+    condicion_pago: str | None = Field(default=None, max_length=150)
+    serie_admin: str | None = Field(default=None, max_length=50)
+    numero_admin: str | None = Field(default=None, max_length=50)
+
+    @field_validator(
+        "serie", "numero", "condicion_pago", "serie_admin", "numero_admin", mode="before"
+    )
+    @classmethod
+    def _normalizar_texto(cls, valor: object, info):
+        if isinstance(valor, str):
+            valor = valor.strip()
+            if info.field_name == "serie":
+                return valor.upper()
+            if info.field_name in {"condicion_pago", "serie_admin", "numero_admin"}:
+                return valor or None
+        return valor
+
+
+class RecepcionCreate(FacturaFEL):
+    pedido_id: UUID | None = None
+    items: list[RecepcionItemIn] = Field(min_length=1, max_length=200)
+
+    @model_validator(mode="after")
+    def _validar_items(self) -> Self:
+        if len({i.producto_id for i in self.items}) != len(self.items):
+            raise ValueError("`items` no puede repetir productos.")
+        if not any(i.cantidad_recibida > 0 for i in self.items):
+            raise ValueError("Debe recibir al menos un producto.")
+        if self.pedido_id is None and any(i.cantidad_recibida == 0 for i in self.items):
+            raise ValueError("Sin pedido, todas las cantidades deben ser positivas.")
+        return self
+
+
+class RecepcionOut(FacturaFEL):
+    id: UUID
+    pedido_id: UUID | None
+    estado_pedido: EstadoPedido | None
+    items: list[RecepcionItemIn]
+
+
+class FacturaDuplicadaError(BaseModel):
+    codigo: Literal["FACTURA_DUPLICADA"] = "FACTURA_DUPLICADA"
+    mensaje: str

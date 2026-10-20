@@ -66,6 +66,7 @@ class TipoMovimiento(StrEnum):
 class ReferenciaTipo(StrEnum):
     CARGA_RUTA = "carga_ruta"
     PEDIDO = "pedido"
+    RECEPCION = "recepcion"
     AJUSTE = "ajuste"
     ETL = "etl"
 
@@ -83,6 +84,7 @@ class EstadoPedido(StrEnum):
     ENVIADO = "enviado"
     CONFIRMADO = "confirmado"
     RECIBIDO = "recibido"
+    RECIBIDO_PARCIAL = "recibido_parcial"
     CANCELADO = "cancelado"
 
 

@@ -10,14 +10,18 @@ from app.api.deps import CurrentUser, DBSession, require_permission
 from app.core.rbac import verificar_permiso
 from app.domain.enums import EstadoPedido
 from app.schemas.auth import UsuarioAutenticado
+from app.schemas.products import ProductoPage
 from app.schemas.purchasing import (
+    FacturaDuplicadaError,
     PedidoConfirmacion,
     PedidoCreate,
     PedidoOut,
     PedidoPage,
+    RecepcionCreate,
+    RecepcionOut,
     SugerenciasResponse,
 )
-from app.services import purchasing_service
+from app.services import product_service, purchasing_service
 
 router = APIRouter(prefix="/purchasing", tags=["Purchasing"])
 
@@ -144,3 +148,39 @@ def recibir_orden(db: DBSession, usuario: Recibe, pedido_id: UUID) -> PedidoOut:
 def _verificar_lectura(usuario: UsuarioAutenticado) -> None:
     if not _LECTORES & set(usuario.permisos):
         verificar_permiso(usuario, "pedido_proveedor:gestionar")
+
+
+@router.post(
+    "/receipts",
+    response_model=RecepcionOut,
+    status_code=201,
+    summary="Recepción de mercadería de planta central",
+    description="Requiere `inventario:ajustar`. Encabezado FEL obligatorio, con o sin pedido. "
+    "Un pedido confirmado se cierra como recibido o recibido_parcial. "
+    "Existencias, kardex y documento se guardan en una sola transacción.",
+    responses={
+        409: {
+            "model": FacturaDuplicadaError,
+            "description": "FACTURA_DUPLICADA: UUID o serie y número ya registrados.",
+        }
+    },
+)
+def registrar_recepcion(db: DBSession, usuario: Recibe, solicitud: RecepcionCreate) -> RecepcionOut:
+    return purchasing_service.registrar_recepcion(db, solicitud, usuario.id)
+
+
+@router.get(
+    "/receipt-products",
+    response_model=ProductoPage,
+    summary="Productos activos para recibir",
+    description="Requiere `inventario:ajustar`.",
+)
+def productos_recepcion(
+    db: DBSession,
+    _usuario: Recibe,
+    limit: Annotated[int, Query(ge=1, le=200)] = 200,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> ProductoPage:
+    return product_service.listar(
+        db, activo=True, categoria_id=None, q=None, limit=limit, offset=offset
+    )

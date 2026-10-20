@@ -1,4 +1,5 @@
-import { BarChart3, X } from 'lucide-react'
+import { PermissionGate } from '../common/PermissionGate'
+import { BarChart3, PackageCheck, X } from 'lucide-react'
 import { NavLink, useLocation } from 'react-router-dom'
 import type { PantallaMenu as MenuItem } from '../../types'
 import { iconoDePantalla } from './iconos'
@@ -96,6 +97,13 @@ export function Sidebar({ menu, colapsado, alExpandir, abierto, alCerrar }: Prop
               </ul>
             </div>
           ))}
+          <PermissionGate anyOf={['inventario:ajustar']}>
+            <NavLink to="/recepcion" onClick={alCerrar} title="Recepción de mercadería"
+              className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm hover:bg-white/10 ${compacto ? 'md:justify-center' : ''}`}>
+              <PackageCheck aria-hidden className="h-[18px] w-[18px] shrink-0" />
+              <span className={compacto ? 'md:sr-only' : ''}>Recepción de mercadería</span>
+            </NavLink>
+          </PermissionGate>
         </nav>
 
       </aside>

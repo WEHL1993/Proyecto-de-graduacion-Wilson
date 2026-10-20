@@ -29,7 +29,7 @@ export function AppShell() {
         alCerrar={() => setMenuAbierto(false)}
       />
       <div className="flex min-w-0 flex-1 flex-col" onClick={() => !colapsado && setColapsado(true)}>
-        <Navbar titulo={actual?.etiqueta ?? 'DS Predictive'} grupo={actual?.grupo} alAbrirMenu={() => setMenuAbierto(true)} />
+        <Navbar titulo={pathname === '/recepcion' ? 'Recepción de mercadería' : actual?.etiqueta ?? 'DS Predictive'} grupo={actual?.grupo} alAbrirMenu={() => setMenuAbierto(true)} />
         <FranjaAlertasCriticas />
         <main className="min-w-0 flex-1 p-4 md:p-8">
           <div className="mx-auto w-full max-w-[1600px]">

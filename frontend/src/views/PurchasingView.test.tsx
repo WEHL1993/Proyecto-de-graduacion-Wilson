@@ -67,6 +67,7 @@ describe('alertasStockBajo', () => {
     stock_disponible: disp,
     stock_minimo: min,
     bajo_minimo: bajo,
+    sin_stock: Number(disp) <= 0,
   })
   it('solo los bajo mínimo, el mayor déficit primero', () => {
     const r = alertasStockBajo([item('ok', '50', '10', false), item('leve', '8', '10', true), item('grave', '0', '40', true)])

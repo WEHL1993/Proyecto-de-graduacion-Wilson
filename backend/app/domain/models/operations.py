@@ -16,6 +16,7 @@ from sqlalchemy import (
     func,
     text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.domain.enums import ESTADOS_CARGA_VIGENTE, EstadoCarga, EstadoPedido, sql_in
@@ -120,7 +121,7 @@ class PedidoProveedor(UUIDPkMixin, AuditoriaMixin, Base):
         ForeignKey("usuarios.id", ondelete="RESTRICT"), index=True
     )
     estado: Mapped[str] = mapped_column(
-        String(12), server_default=text(f"'{EstadoPedido.BORRADOR}'")
+        String(20), server_default=text(f"'{EstadoPedido.BORRADOR}'")
     )
     fecha_pedido: Mapped[date] = mapped_column(Date, server_default=func.current_date())
     fecha_esperada: Mapped[date | None] = mapped_column(Date)
@@ -151,3 +152,28 @@ class DetallePedido(UUIDPkMixin, Base):
     costo_unitario: Mapped[Monto]
 
     pedido: Mapped[PedidoProveedor] = relationship(back_populates="detalles")
+
+
+class RecepcionMercaderia(UUIDPkMixin, AuditoriaMixin, Base):
+    """Documento de planta central y detalle físico, incluidos los productos no entregados."""
+
+    __tablename__ = "recepciones_mercaderia"
+    __table_args__ = (
+        UniqueConstraint("numero_autorizacion", name="uq_recepciones_autorizacion"),
+        UniqueConstraint("serie", "numero", name="uq_recepciones_serie_numero"),
+    )
+
+    pedido_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("pedidos_proveedor.id", ondelete="RESTRICT"), unique=True
+    )
+    usuario_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("usuarios.id", ondelete="RESTRICT"))
+    # Solo las recepciones anteriores a FEL conservan esta referencia histórica.
+    documento_referencia: Mapped[str | None] = mapped_column(String(150))
+    serie: Mapped[str | None] = mapped_column(String(50))
+    numero: Mapped[str | None] = mapped_column(String(50))
+    numero_autorizacion: Mapped[uuid.UUID | None] = mapped_column()
+    fecha_emision: Mapped[date | None] = mapped_column(Date)
+    condicion_pago: Mapped[str | None] = mapped_column(String(150))
+    serie_admin: Mapped[str | None] = mapped_column(String(50))
+    numero_admin: Mapped[str | None] = mapped_column(String(50))
+    items: Mapped[list[dict]] = mapped_column(JSONB)

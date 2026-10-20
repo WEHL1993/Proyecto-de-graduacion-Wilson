@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { useMemo, useState } from 'react'
 import { Button } from '../components/common/Button'
 import { CLASE_INPUT, Campo, Card } from '../components/common/Card'
@@ -5,12 +6,12 @@ import { AlertBanner, Cargando, EmptyState } from '../components/feedback/feedba
 import { usePedidoActions, usePedidos, useSugerencias } from '../hooks/usePurchasing'
 import { usePermissions } from '../hooks/usePermissions'
 import type { EstadoPedido, PedidoOut, SugerenciaCompra } from '../types'
-import { fmt, fmtFecha, hoyISO, sumarDias } from '../utils/format'
+import { fmt, fmtFecha, fmtInt, hoyISO, sumarDias } from '../utils/format'
 import { mensajeError } from '../utils/errors'
 
 const HORIZONTES = [7, 14, 30]
 const ETAPAS: EstadoPedido[] = ['borrador', 'enviado', 'confirmado', 'recibido']
-const ESTADOS_FILTRO: (EstadoPedido | '')[] = ['', 'borrador', 'enviado', 'confirmado', 'recibido', 'cancelado']
+const ESTADOS_FILTRO: (EstadoPedido | '')[] = ['', 'borrador', 'enviado', 'confirmado', 'recibido', 'recibido_parcial', 'cancelado']
 
 export interface GrupoProveedor {
   proveedorId: string
@@ -191,10 +192,10 @@ function GrupoOrden({ grupo, onCreado }: { grupo: GrupoProveedor; onCreado: (msg
                       </span>
                     )}
                   </td>
-                  <td className="num py-2 text-right">{fmt(f.stock_actual)}</td>
-                  <td className="num py-2 text-right">{fmt(f.stock_minimo)}</td>
-                  <td className="num py-2 text-right">{fmt(f.demanda_proyectada)}</td>
-                  <td className="num py-2 text-right font-medium">{fmt(f.cantidad_sugerida)}</td>
+                  <td className="num py-2 text-right">{fmtInt(f.stock_actual)}</td>
+                  <td className="num py-2 text-right">{fmtInt(f.stock_minimo)}</td>
+                  <td className="num py-2 text-right">{fmtInt(f.demanda_proyectada)}</td>
+                  <td className="num py-2 text-right font-medium">{fmtInt(f.cantidad_sugerida)}</td>
                   <td className="px-3 py-2 text-right">
                     <input
                       inputMode="decimal"
@@ -285,6 +286,7 @@ function Pedidos() {
 }
 
 export function Progreso({ estado }: { estado: EstadoPedido }) {
+  if (estado === 'recibido_parcial') return <span className="text-sm text-warn">Recibido parcialmente</span>
   if (estado === 'cancelado') return <span className="text-xs font-semibold text-bad">Cancelado</span>
   const actual = ETAPAS.indexOf(estado)
   return (
@@ -365,9 +367,9 @@ function FilaPedido({ pedido: p }: { pedido: PedidoOut }) {
           </>
         )}
         {can('inventario:ajustar') && p.estado === 'confirmado' && (
-          <Button variant="primary" disabled={ocupado} onClick={() => acciones.recibir.mutate(p.id)}>
+          <Link className="rounded-lg bg-navy px-3.5 py-2 text-sm text-white" to={`/recepcion?pedido=${p.id}`}>
             Registrar recepción física
-          </Button>
+          </Link>
         )}
       </div>
 
@@ -393,7 +395,7 @@ function FilaPedido({ pedido: p }: { pedido: PedidoOut }) {
                 <td className="py-1.5">
                   {i.producto_nombre} <span className="font-mono text-xs text-muted">{i.sku}</span>
                 </td>
-                <td className="num py-1.5 text-right">{fmt(i.cantidad)}</td>
+                <td className="num py-1.5 text-right">{fmtInt(i.cantidad)}</td>
                 <td className="num py-1.5 text-right">{fmt(i.costo_unitario)}</td>
                 <td className="num py-1.5 text-right">{fmt(i.subtotal)}</td>
               </tr>
