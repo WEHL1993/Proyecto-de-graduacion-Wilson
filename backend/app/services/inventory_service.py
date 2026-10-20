@@ -75,6 +75,7 @@ def _stock_item(producto: Producto, inv: Inventario | None) -> StockItem:
         stock_disponible=disponible,
         stock_minimo=producto.stock_minimo,
         bajo_minimo=disponible < producto.stock_minimo,
+        sin_stock=disponible <= CERO,
     )
 
 
@@ -178,6 +179,7 @@ def registrar_entrada(
     referencia_tipo: ReferenciaTipo,
     referencia_id: uuid.UUID,
     usuario_id: uuid.UUID,
+    motivo: str | None = None,
 ) -> None:
     """Ingreso físico (recepción de pedido): incrementa `stock_actual` y registra la entrada en
     el kardex. Crea la fila de `inventario` si el producto aún no tenía existencia."""
@@ -187,7 +189,14 @@ def registrar_entrada(
         inv = existencias.get(pid) or inventory_repo.crear_existencia(db, pid)
         inv.stock_actual += cantidad
         _mover(
-            db, inv, TipoMovimiento.ENTRADA, cantidad, referencia_id, usuario_id, referencia_tipo
+            db,
+            inv,
+            TipoMovimiento.ENTRADA,
+            cantidad,
+            referencia_id,
+            usuario_id,
+            referencia_tipo,
+            motivo=motivo,
         )
 
 

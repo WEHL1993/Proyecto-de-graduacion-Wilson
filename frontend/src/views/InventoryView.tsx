@@ -5,7 +5,7 @@ import { AlertBanner, Cargando, EmptyState } from '../components/feedback/feedba
 import { useExistencias, useKardex } from '../hooks/useInventory'
 import type { StockItem, TipoMovimiento } from '../types'
 import { mensajeError } from '../utils/errors'
-import { fmt } from '../utils/format'
+import { fmtInt } from '../utils/format'
 
 const TIPOS: TipoMovimiento[] = ['entrada', 'salida', 'ajuste', 'reserva', 'liberacion']
 const POR_PAGINA = 25
@@ -57,7 +57,7 @@ export function InventoryView() {
                         {i.nombre} <span className="font-mono text-xs text-muted">{i.sku}</span>
                       </p>
                       <p className="num text-xs text-muted">
-                        Disponible {fmt(i.stock_disponible)} · Mínimo {fmt(i.stock_minimo)}
+                        Disponible {fmtInt(i.stock_disponible)} · Mínimo {fmtInt(i.stock_minimo)}
                       </p>
                     </li>
                   )
@@ -66,7 +66,7 @@ export function InventoryView() {
             )}
           </Card>
 
-          <Card titulo="Existencias">
+          <Card titulo={`Existencias (${items.length} productos)`}>
             {items.length === 0 ? (
               <EmptyState titulo="Sin productos" detalle="No hay productos activos en el catálogo." />
             ) : (
@@ -88,12 +88,12 @@ export function InventoryView() {
                         <td className="py-2">
                           {i.nombre} <span className="font-mono text-xs text-muted">{i.sku}</span>
                         </td>
-                        <td className="num py-2 text-right">{fmt(i.stock_actual)}</td>
-                        <td className="num py-2 text-right">{fmt(i.stock_reservado)}</td>
-                        <td className="num py-2 text-right font-medium">{fmt(i.stock_disponible)}</td>
-                        <td className="num py-2 text-right">{fmt(i.stock_minimo)}</td>
-                        <td className={`py-2 pl-4 text-xs font-semibold ${i.bajo_minimo ? 'text-bad' : 'text-good'}`}>
-                          {i.bajo_minimo ? '⚠ Stock bajo' : '✔ Suficiente'}
+                        <td className="num py-2 text-right">{fmtInt(i.stock_actual)}</td>
+                        <td className="num py-2 text-right">{fmtInt(i.stock_reservado)}</td>
+                        <td className="num py-2 text-right font-medium">{fmtInt(i.stock_disponible)}</td>
+                        <td className="num py-2 text-right">{fmtInt(i.stock_minimo)}</td>
+                        <td className={`py-2 pl-4 text-xs font-semibold ${i.sin_stock || i.bajo_minimo ? 'text-bad' : 'text-good'}`}>
+                          {i.sin_stock ? '✖ Sin stock' : i.bajo_minimo ? '⚠ Stock bajo' : '✔ Suficiente'}
                         </td>
                       </tr>
                     ))}
@@ -220,8 +220,8 @@ function VisorKardex({ productos }: { productos: StockItem[] }) {
                         <span className="font-mono text-xs text-muted">{producto?.sku}</span>
                       </td>
                       <td className={`py-2 text-xs font-semibold ${etiqueta.clase}`}>{etiqueta.texto}</td>
-                      <td className="num py-2 text-right">{fmt(m.cantidad)}</td>
-                      <td className="num py-2 text-right">{fmt(m.saldo_resultante)}</td>
+                      <td className="num py-2 text-right">{fmtInt(m.cantidad)}</td>
+                      <td className="num py-2 text-right">{fmtInt(m.saldo_resultante)}</td>
                       <td className="py-2 pl-4 text-xs text-muted">
                         {m.referencia_tipo ?? '—'}
                         {m.referencia_id && <span className="font-mono"> {m.referencia_id.slice(0, 8)}</span>}

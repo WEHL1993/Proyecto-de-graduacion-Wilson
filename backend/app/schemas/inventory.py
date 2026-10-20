@@ -18,6 +18,7 @@ class StockItem(BaseModel):
     stock_disponible: Decimal
     stock_minimo: Decimal
     bajo_minimo: bool
+    sin_stock: bool
 
 
 class StockPage(BaseModel):
