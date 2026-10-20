@@ -8,7 +8,7 @@ import { useCategorias, useProductoActions, useProductos, useProveedores } from 
 import { usePermissions } from '../hooks/usePermissions'
 import type { ProductoCreate, ProductoOut, ProductoUpdate, TipoAjuste } from '../types'
 import { apiError, mensajeError } from '../utils/errors'
-import { fmt } from '../utils/format'
+import { fmt, fmtInt } from '../utils/format'
 
 const POR_PAGINA = 25
 
@@ -137,7 +137,7 @@ export function validarAjuste(
   else if (q < 0) e.cantidad = 'La cantidad no puede ser negativa.'
   else if (f.tipo !== 'fijar' && q === 0) e.cantidad = 'La cantidad debe ser mayor que 0.'
   else if (resultante < reservado)
-    e.cantidad = `El stock no puede quedar por debajo de lo reservado (${fmt(reservado)}).`
+    e.cantidad = `El stock no puede quedar por debajo de lo reservado (${fmtInt(reservado)}).`
   else if (resultante === actual) e.cantidad = 'El ajuste no modifica el stock actual.'
   if (f.motivo.trim().length < 5) e.motivo = 'Describa el motivo (mínimo 5 caracteres).'
   else if (f.motivo.trim().length > 300) e.motivo = 'Máximo 300 caracteres.'
@@ -152,10 +152,10 @@ export function textoError(e: unknown): string {
   if (!api || !d) return base
   if (api.codigo === 'PRODUCTO_EN_USO') {
     const cargas = Array.isArray(d.cargas_vigentes) ? d.cargas_vigentes.length : 0
-    return `${base} (reservado: ${fmt(String(d.stock_reservado ?? 0))}; cargas vigentes: ${cargas}).`
+    return `${base} (reservado: ${fmtInt(String(d.stock_reservado ?? 0))}; cargas vigentes: ${cargas}).`
   }
   if (api.codigo === 'STOCK_INSUFICIENTE' && d.stock_actual !== undefined)
-    return `${base} (actual: ${fmt(String(d.stock_actual))}; reservado: ${fmt(String(d.stock_reservado))}).`
+    return `${base} (actual: ${fmtInt(String(d.stock_actual))}; reservado: ${fmtInt(String(d.stock_reservado))}).`
   return base
 }
 
@@ -317,8 +317,8 @@ function ModalAjuste({ producto, onCerrar }: { producto: ProductoOut; onCerrar: 
         <p>
           <span className="font-medium">{producto.nombre}</span>
           <span className="num block text-xs text-muted">
-            Actual {fmt(producto.stock_actual)} · Reservado {fmt(producto.stock_reservado)} · Disponible{' '}
-            {fmt(producto.stock_disponible)}
+            Actual {fmtInt(producto.stock_actual)} · Reservado {fmtInt(producto.stock_reservado)} · Disponible{' '}
+            {fmtInt(producto.stock_disponible)}
           </span>
         </p>
         <Campo etiqueta="Tipo de ajuste">
@@ -346,7 +346,7 @@ function ModalAjuste({ producto, onCerrar }: { producto: ProductoOut; onCerrar: 
           {mostrar('motivo')}
         </Campo>
         <p className="num text-sm" aria-live="polite">
-          Stock resultante: <strong>{resultante === null ? '—' : fmt(resultante)}</strong>
+          Stock resultante: <strong>{resultante === null ? '—' : fmtInt(resultante)}</strong>
         </p>
       </form>
     </Modal>
@@ -505,11 +505,11 @@ export function ProductsView() {
                         <td className="py-2 pr-3 text-xs">{p.categoria}</td>
                         <td className="num py-2 pr-3 text-xs">{presentacion(p)}</td>
                         <td className="num py-2 pr-3 text-right">{fmt(p.precio_venta)}</td>
-                        <td className="num py-2 pr-3 text-right">{fmt(p.stock_actual)}</td>
+                        <td className="num py-2 pr-3 text-right">{fmtInt(p.stock_actual)}</td>
                         <td className={`num py-2 pr-3 text-right font-medium ${p.activo && bajo ? 'text-bad' : ''}`}>
-                          {fmt(p.stock_disponible)}
+                          {fmtInt(p.stock_disponible)}
                         </td>
-                        <td className="num py-2 pr-3 text-right">{fmt(p.stock_minimo)}</td>
+                        <td className="num py-2 pr-3 text-right">{fmtInt(p.stock_minimo)}</td>
                         <td className="py-2 text-right">
                           <div className="flex flex-wrap justify-end gap-1.5">
                             {puedeEditar && (

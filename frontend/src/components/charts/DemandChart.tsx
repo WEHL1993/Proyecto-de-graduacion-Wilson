@@ -8,7 +8,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { fmt } from '../../utils/format'
+import { fmtInt } from '../../utils/format'
 
 export interface PuntoDemanda {
   fecha: string
@@ -28,8 +28,8 @@ export function DemandChart({ puntos }: { puntos: PuntoDemanda[] }) {
   }
   const datos = puntos.map((p) => ({
     fecha: p.fecha.slice(5),
-    predicha: p.predicha,
-    banda: p.inferior != null && p.superior != null ? [p.inferior, p.superior] : null,
+    predicha: Math.round(p.predicha),
+    banda: p.inferior != null && p.superior != null ? [Math.floor(p.inferior), Math.ceil(p.superior)] : null,
   }))
   return (
     <div role="img" aria-label={`Demanda predicha para ${puntos.length} día(s)`}>
@@ -37,10 +37,10 @@ export function DemandChart({ puntos }: { puntos: PuntoDemanda[] }) {
         <ComposedChart data={datos} margin={{ top: 8, right: 16, bottom: 4, left: 0 }}>
           <CartesianGrid stroke={GRID} strokeDasharray="3 3" vertical={false} />
           <XAxis dataKey="fecha" tick={{ fill: MUTED, fontSize: 11 }} tickLine={false} axisLine={{ stroke: GRID }} />
-          <YAxis tick={{ fill: MUTED, fontSize: 11 }} tickLine={false} axisLine={false} width={40} />
+          <YAxis allowDecimals={false} tick={{ fill: MUTED, fontSize: 11 }} tickLine={false} axisLine={false} width={40} />
           <Tooltip
             formatter={(v, nombre) => [
-              Array.isArray(v) ? `${fmt(v[0])} – ${fmt(v[1])}` : fmt(v as number, ' u'),
+              Array.isArray(v) ? `${fmtInt(v[0])} – ${fmtInt(v[1])}` : `${fmtInt(v as number)} u`,
               nombre === 'banda' ? 'Banda 95 %' : 'Predicha',
             ]}
             contentStyle={{ background: 'rgb(var(--panel))', border: `1px solid ${GRID}`, borderRadius: 6, fontSize: 12 }}

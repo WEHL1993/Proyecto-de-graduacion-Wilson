@@ -3,7 +3,8 @@ const int = new Intl.NumberFormat('es-GT', { maximumFractionDigits: 0 })
 
 export const fmt = (v: number | string | null | undefined, unidad = ''): string =>
   v === null || v === undefined || v === '' ? 's/d' : `${num.format(Number(v))}${unidad}`
-export const fmtInt = (v: number | string): string => int.format(Number(v))
+export const fmtInt = (v: number | string | null | undefined): string =>
+  v === null || v === undefined || v === '' ? 's/d' : int.format(Number(v))
 export const fmtFecha = (iso: string | null | undefined): string => (iso ? iso.slice(0, 10) : '—')
 
 export const hoyISO = (): string => new Date().toISOString().slice(0, 10)

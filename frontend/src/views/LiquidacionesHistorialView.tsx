@@ -167,10 +167,10 @@ function Detalle({ id, onCerrar }: { id: string; onCerrar: () => void }) {
                     {l.sku}
                     {l.agotado && <span title="Se agotó: demanda censurada"> ⚠</span>}
                   </td>
-                  <td className="num text-right">{fmt(l.cantidad_cargada)}</td>
-                  <td className="num text-right">{fmt(l.cantidad_vendida)}</td>
-                  <td className="num text-right">{fmt(l.cantidad_devuelta)}</td>
-                  <td className="num text-right">{fmt(l.cantidad_merma)}</td>
+                  <td className="num text-right">{fmtInt(l.cantidad_cargada)}</td>
+                  <td className="num text-right">{fmtInt(l.cantidad_vendida)}</td>
+                  <td className="num text-right">{fmtInt(l.cantidad_devuelta)}</td>
+                  <td className="num text-right">{fmtInt(l.cantidad_merma)}</td>
                   <td className="num text-right">{Q(l.monto_total)}</td>
                 </tr>
               ))}
@@ -186,7 +186,7 @@ function Detalle({ id, onCerrar }: { id: string; onCerrar: () => void }) {
             <dt className="text-muted">Diferencia de caja</dt>
             <dd className={`num text-right font-semibold ${data.cuadre_dinero.supera_umbral ? 'text-bad' : ''}`}>{Q(data.cuadre_dinero.diferencia_caja)}</dd>
             <dt className="text-muted">Devolución esperada</dt>
-            <dd className="num text-right">{fmt(data.devolucion_esperada)} u</dd>
+            <dd className="num text-right">{fmtInt(data.devolucion_esperada)} u</dd>
           </dl>
           {data.anulado_motivo && <AlertBanner tipo="info" fijo>Anulada: {data.anulado_motivo}</AlertBanner>}
         </div>

@@ -1,5 +1,5 @@
 import type { LoadPlanItem } from '../../types'
-import { fmt } from '../../utils/format'
+import { fmtInt } from '../../utils/format'
 
 export type Cantidades = Record<string, string>
 
@@ -16,7 +16,8 @@ export function errorCantidad(texto: string, stockDisponible: number | string): 
   if (texto.trim() === '') return 'Ingrese una cantidad.'
   const n = Number(texto)
   if (!Number.isFinite(n) || n < 0) return 'Debe ser un número mayor o igual a 0.'
-  if (n > Number(stockDisponible)) return `No puede exceder el stock disponible (${fmt(stockDisponible)}).`
+  if (!Number.isInteger(n)) return 'Debe ser un número entero de cajas.'
+  if (n > Number(stockDisponible)) return `No puede exceder el stock disponible (${fmtInt(stockDisponible)}).`
   return null
 }
 
@@ -68,7 +69,7 @@ export function LoadPlanTable({
             const estado = estadoStock(item)
             const texto = cantidades[id] ?? ''
             const error = editable && seleccion.has(id) ? errorCantidad(texto, item.stock_disponible) : null
-            const tooltip = `Demanda original: ${fmt(item.cantidad_predicha)} · Cantidad ajustada: ${fmt(item.cantidad_sugerida)}`
+            const tooltip = `Demanda original: ${fmtInt(item.cantidad_predicha)} · Cantidad ajustada: ${fmtInt(item.cantidad_sugerida)}`
             return (
               <tr key={id} className="border-b border-line last:border-0">
                 <td className="py-2">
@@ -82,9 +83,9 @@ export function LoadPlanTable({
                 </td>
                 <td className="py-2 font-mono text-xs">{item.sku}</td>
                 <td className="py-2">{item.producto_nombre ?? '—'}</td>
-                <td className="num py-2 text-right">{fmt(item.cantidad_predicha)}</td>
+                <td className="num py-2 text-right">{fmtInt(item.cantidad_predicha)}</td>
                 <td className="num py-2 text-right">
-                  {fmt(item.stock_disponible)}
+                  {fmtInt(item.stock_disponible)}
                   {estado === 'sin_existencia' && (
                     <span title="Sin existencia (ver alerta de compras)" aria-label="Sin existencia" className="ml-1">
                       ⛔
@@ -92,7 +93,7 @@ export function LoadPlanTable({
                   )}
                 </td>
                 <td className="num py-2 text-right">
-                  {fmt(item.cantidad_sugerida)}
+                  {fmtInt(item.cantidad_sugerida)}
                   {estado === 'limitado' && (
                     <span title={tooltip} aria-label={`Limitado por stock. ${tooltip}`} className="ml-1 text-warn">
                       ⚠
@@ -109,10 +110,10 @@ export function LoadPlanTable({
                     <>
                       <input
                         type="number"
-                        inputMode="decimal"
+                        inputMode="numeric"
                         min={0}
                         max={Number(item.stock_disponible)}
-                        step="0.01"
+                        step="1"
                         aria-label={`Cantidad aprobada de ${item.sku}`}
                         aria-invalid={error !== null}
                         value={texto}
@@ -122,7 +123,7 @@ export function LoadPlanTable({
                       {error && <p className="mt-0.5 max-w-[14rem] text-xs text-bad">{error}</p>}
                     </>
                   ) : (
-                    <span className="num">{item.cantidad_aprobada != null ? fmt(item.cantidad_aprobada) : '—'}</span>
+                    <span className="num">{item.cantidad_aprobada != null ? fmtInt(item.cantidad_aprobada) : '—'}</span>
                   )}
                 </td>
               </tr>

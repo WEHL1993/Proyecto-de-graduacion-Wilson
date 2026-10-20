@@ -21,7 +21,7 @@ import { descargarConsolidado } from '../services/reportsApi'
 import type { FiltroReportes, FormatoExport } from '../services/reportsApi'
 import type { ComisionVendedor } from '../types'
 import { mensajeError } from '../utils/errors'
-import { fmt } from '../utils/format'
+import { fmt, fmtInt } from '../utils/format'
 
 const BRAND = 'rgb(var(--brand))'
 const PROYECTADO = 'rgb(var(--warn))'
@@ -150,8 +150,8 @@ export function ReportsView() {
       </Card>
 
       <section aria-label="Indicadores" className="grid grid-cols-2 gap-3 md:grid-cols-5">
-        <Kpi etiqueta="Venta real (uds)" valor={fmt(ventas.data?.total_real)} />
-        <Kpi etiqueta="Proyectada (uds)" valor={fmt(ventas.data?.total_proyectado)} detalle={desv == null ? undefined : `Desviación ${fmt(desv, ' %')}`} />
+        <Kpi etiqueta="Venta real (uds)" valor={fmtInt(ventas.data?.total_real)} />
+        <Kpi etiqueta="Proyectada (uds)" valor={fmtInt(ventas.data?.total_proyectado)} detalle={desv == null ? undefined : `Desviación ${fmt(desv, ' %')}`} />
         <Kpi etiqueta="Rotación de inventario" valor={fmt(rotacion.data?.rotacion_global, '×')} detalle={rotacion.data?.dias_inventario ? `${fmt(rotacion.data.dias_inventario)} días de inventario` : undefined} />
         <Kpi etiqueta="Índice de quiebre" valor={fmt(rotacion.data?.indice_quiebre_global, ' %')} detalle="Líneas de carga limitadas por stock" />
         <Kpi etiqueta="Comisiones" valor={moneda(comisiones.data?.total_comisiones)} detalle={comisiones.data ? `${comisiones.data.periodo_desde} → ${comisiones.data.periodo_hasta}` : undefined} />
@@ -264,14 +264,14 @@ export function ReportsView() {
                     <td className="py-1.5 pr-3">
                       <span className="font-medium">{r.ruta_codigo}</span> <span className="text-muted">{r.ruta_nombre}</span>
                     </td>
-                    <td className="num py-1.5 pr-3 text-right">{fmt(r.unidades_vendidas)}</td>
+                    <td className="num py-1.5 pr-3 text-right">{fmtInt(r.unidades_vendidas)}</td>
                     <td className="num py-1.5 pr-3 text-right">{moneda(r.costo_ventas)}</td>
                     <td className="num py-1.5 pr-3 text-right">{fmt(r.rotacion, '×')}</td>
                     <td className="num py-1.5 pr-3 text-right">
                       {r.lineas_ajustadas} / {r.lineas_carga}
                     </td>
                     <td className={`num py-1.5 pr-3 text-right ${Number(r.indice_quiebre) >= 30 ? 'font-semibold text-bad' : ''}`}>{fmt(r.indice_quiebre, ' %')}</td>
-                    <td className="num py-1.5 text-right">{fmt(r.unidades_no_cubiertas)}</td>
+                    <td className="num py-1.5 text-right">{fmtInt(r.unidades_no_cubiertas)}</td>
                   </tr>
                 ))}
               </tbody>

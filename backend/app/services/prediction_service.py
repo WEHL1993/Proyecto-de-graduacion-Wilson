@@ -161,7 +161,9 @@ def _historial_insuficiente(productos: list[str], dias_minimos: int | None = Non
 def _agregar_por_producto(
     puntos: list[contracts.PuntoPronostico],
 ) -> dict[str, list[contracts.PuntoPronostico]]:
-    """Suma las rutas por (producto, fecha) y redondea a 2 decimales (numeric(12,2))."""
+    """Suma las rutas por (producto, fecha) y entrega paquetes enteros: la demanda se redondea al
+    entero más cercano (mitad hacia arriba), el límite inferior hacia abajo y el superior hacia
+    arriba, de modo que el intervalo siempre contiene al punto."""
     grupos: dict[tuple[str, date], list[contracts.PuntoPronostico]] = defaultdict(list)
     for p in puntos:
         grupos[(p.producto_id, p.fecha_objetivo)].append(p)
@@ -171,15 +173,16 @@ def _agregar_por_producto(
         demanda = sum(p.demanda for p in grupo)
         mitad_inf = math.sqrt(sum((p.demanda - p.inferior) ** 2 for p in grupo))
         mitad_sup = math.sqrt(sum((p.superior - p.demanda) ** 2 for p in grupo))
+        entera = math.floor(max(0.0, demanda) + 0.5)
         salida[producto_id].append(
             contracts.PuntoPronostico(
                 producto_id=producto_id,
                 ruta_id="*",
                 fecha_objetivo=fecha,
                 horizonte_dias=grupo[0].horizonte_dias,
-                demanda=round(demanda, 2),
-                inferior=round(max(0.0, demanda - mitad_inf), 2),
-                superior=round(demanda + mitad_sup, 2),
+                demanda=float(entera),
+                inferior=float(min(entera, math.floor(max(0.0, demanda - mitad_inf)))),
+                superior=float(max(entera, math.ceil(demanda + mitad_sup))),
             )
         )
     return salida
