@@ -16,6 +16,8 @@ Dinero = Annotated[Decimal, Field(ge=0, max_digits=14, decimal_places=2)]
 
 class LineaLiquidacion(BaseModel):
     producto_id: UUID
+    # Solo lo respeta el servidor si el usuario es Administrador; si no, se toma del último cierre.
+    saldo_anterior: Cant = Decimal(0)
     cantidad_cargada: Cant
     cantidad_vendida: Cant
     cantidad_devuelta: Cant = Decimal(0)
@@ -24,7 +26,7 @@ class LineaLiquidacion(BaseModel):
     precio_unitario: Dinero | None = None
     # Se quedó sin producto antes de terminar la ruta: la venta es un piso de la demanda.
     agotado: bool = False
-    # Obligatoria si `cantidad_cargada` difiere de la carga despachada de la ruta/fecha.
+    # Obligatoria si `cantidad_cargada` difiere de la carga aprobada de la ruta/fecha.
     justificacion_carga: str | None = Field(default=None, max_length=500)
 
 
@@ -66,6 +68,7 @@ class LineaRespuesta(BaseModel):
     producto_id: UUID
     sku: str
     producto_nombre: str
+    saldo_anterior: Decimal
     cantidad_cargada: Decimal
     cantidad_vendida: Decimal
     cantidad_devuelta: Decimal
@@ -74,7 +77,7 @@ class LineaRespuesta(BaseModel):
     monto_total: Decimal
     agotado: bool
     justificacion_carga: str | None = None
-    # cargada − vendida − devuelta − merma (0 = la fila cuadra).
+    # saldo anterior + cargada − vendida − devuelta − merma (0 = la fila cuadra).
     diferencia_unidades: Decimal
     cuadra: bool
 
@@ -149,6 +152,8 @@ class LineaPrecarga(BaseModel):
     producto_id: UUID
     sku: str
     producto_nombre: str
+    # Lo devuelto en el último cierre de la ruta.
+    saldo_anterior: Decimal = Decimal(0)
     cantidad_cargada: Decimal
     precio_unitario: Decimal
 
@@ -157,7 +162,7 @@ class PrecargaResponse(BaseModel):
     fecha: date
     ruta_id: UUID
     vendedor_id: UUID | None = None
-    # `None` si no hay una carga despachada para esa ruta y fecha (se permite igualmente).
+    # `None` si no hay una carga aprobada o despachada para esa ruta y fecha (se permite igualmente).
     carga_id: UUID | None = None
     lineas: list[LineaPrecarga]
     # Liquidación vigente (borrador o cerrada) de la ruta/fecha, si existe.

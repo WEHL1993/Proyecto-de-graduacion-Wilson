@@ -47,6 +47,32 @@ def vigente(
     return db.execute(stmt.limit(1)).scalar_one_or_none()
 
 
+def saldo_anterior_de_ruta(
+    db: Session, ruta_id: uuid.UUID, fecha: date
+) -> dict[uuid.UUID, Decimal]:
+    """Lo devuelto por producto en el último cierre de la ruta anterior a `fecha`."""
+    ultima = (
+        select(func.max(LiquidacionDiaria.fecha))
+        .where(
+            LiquidacionDiaria.ruta_id == ruta_id,
+            LiquidacionDiaria.fecha < fecha,
+            LiquidacionDiaria.estado == EstadoLiquidacion.CERRADA,
+        )
+        .scalar_subquery()
+    )
+    filas = db.execute(
+        select(LiquidacionDetalle.producto_id, func.sum(LiquidacionDetalle.cantidad_devuelta))
+        .join(LiquidacionDiaria, LiquidacionDiaria.id == LiquidacionDetalle.liquidacion_id)
+        .where(
+            LiquidacionDiaria.ruta_id == ruta_id,
+            LiquidacionDiaria.fecha == ultima,
+            LiquidacionDiaria.estado == EstadoLiquidacion.CERRADA,
+        )
+        .group_by(LiquidacionDetalle.producto_id)
+    ).all()
+    return {pid: total for pid, total in filas if total}
+
+
 def crear(
     db: Session, *, cabecera: dict[str, Any], detalles: Sequence[dict[str, Any]]
 ) -> LiquidacionDiaria:

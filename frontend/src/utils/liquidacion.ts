@@ -6,6 +6,8 @@ export interface FilaForm {
   producto_id: string
   sku: string
   nombre: string
+  /** Devuelto en el último cierre de la ruta; suma al total cargado. Solo el Administrador lo edita. */
+  saldo_anterior: string
   cargada: string
   vendida: string
   devuelta: string
@@ -44,8 +46,11 @@ export const esMontoValido = (v: string): boolean => {
   return Number.isFinite(n) && n >= 0
 }
 
+/** Total cargado = saldo anterior + cargado. */
+export const totalCargadoFila = (f: FilaForm): number => redondear(num(f.saldo_anterior) + num(f.cargada))
+
 export const diferenciaFila = (f: FilaForm): number =>
-  redondear(num(f.cargada) - num(f.vendida) - num(f.devuelta) - num(f.merma))
+  redondear(totalCargadoFila(f) - num(f.vendida) - num(f.devuelta) - num(f.merma))
 export const montoFila = (f: FilaForm): number => redondear(num(f.vendida) * num(f.precio))
 
 export type EstadoFila = 'cuadra' | 'falta' | 'excede'
@@ -57,8 +62,12 @@ export function estadoFila(f: FilaForm): EstadoFila {
 export function totalesUnidades(filas: FilaForm[]) {
   const suma = (k: 'cargada' | 'vendida' | 'devuelta' | 'merma') =>
     redondear(filas.reduce((a, f) => a + (Number.isFinite(num(f[k])) ? num(f[k]) : 0), 0))
+  const saldo = redondear(filas.reduce((a, f) => a + (Number.isFinite(num(f.saldo_anterior)) ? num(f.saldo_anterior) : 0), 0))
+  const cargadas = suma('cargada')
   return {
-    cargadas: suma('cargada'),
+    saldo,
+    cargadas,
+    totalCargadas: redondear(saldo + cargadas),
     vendidas: suma('vendida'),
     devueltas: suma('devuelta'),
     merma: suma('merma'),
@@ -98,10 +107,10 @@ export function validar(filas: FilaForm[], pagos: PagosForm): Validacion {
   const errores: string[] = []
   const pendientes: string[] = []
   for (const f of filas) {
-    for (const [k, v] of [['cargada', f.cargada], ['vendida', f.vendida], ['devuelta', f.devuelta], ['merma', f.merma], ['precio', f.precio]] as const) {
+    for (const [k, v] of [['saldo anterior', f.saldo_anterior], ['cargada', f.cargada], ['vendida', f.vendida], ['devuelta', f.devuelta], ['merma', f.merma], ['precio', f.precio]] as const) {
       if (!esMontoValido(v)) errores.push(`${f.sku}: «${k}» debe ser un número mayor o igual a 0.`)
     }
-    if (estadoFila(f) === 'excede') errores.push(`${f.sku}: vendido + devuelto + merma excede lo cargado.`)
+    if (estadoFila(f) === 'excede') errores.push(`${f.sku}: vendido + devuelto + merma excede el total cargado.`)
     if (estadoFila(f) === 'falta') pendientes.push(`${f.sku}: faltan ${diferenciaFila(f)} unidades por justificar.`)
     if (f.despachada !== null && num(f.cargada) !== f.despachada && !f.justificacion.trim()) {
       errores.push(`${f.sku}: lo cargado difiere de lo despachado (${f.despachada}); indique la justificación.`)
@@ -110,7 +119,7 @@ export function validar(filas: FilaForm[], pagos: PagosForm): Validacion {
   for (const [k, v] of Object.entries(pagos)) {
     if (!esMontoValido(v)) errores.push(`«${k.replace('_', ' ')}» debe ser un monto mayor o igual a 0.`)
   }
-  if (!filas.some((f) => num(f.vendida) > 0 || num(f.cargada) > 0)) {
+  if (!filas.some((f) => num(f.vendida) > 0 || totalCargadoFila(f) > 0)) {
     errores.push('Ingrese al menos una presentación con unidades cargadas o vendidas.')
   }
   if (ventaTotal(filas) !== totalPagos(pagos)) {
@@ -133,9 +142,10 @@ export function aSolicitud(
     fecha,
     ruta_id: rutaId,
     lineas: filas
-      .filter((f) => num(f.cargada) > 0 || num(f.vendida) > 0 || num(f.devuelta) > 0 || num(f.merma) > 0)
+      .filter((f) => totalCargadoFila(f) > 0 || num(f.vendida) > 0 || num(f.devuelta) > 0 || num(f.merma) > 0)
       .map((f) => ({
         producto_id: f.producto_id,
+        saldo_anterior: dec(f.saldo_anterior),
         cantidad_cargada: dec(f.cargada),
         cantidad_vendida: dec(f.vendida),
         cantidad_devuelta: dec(f.devuelta),
@@ -163,6 +173,7 @@ export function filasDePrecarga(lineas: LineaPrecarga[], conCarga: boolean): Fil
     producto_id: l.producto_id,
     sku: l.sku,
     nombre: l.producto_nombre,
+    saldo_anterior: sinCeros(l.saldo_anterior ?? 0),
     cargada: sinCeros(l.cantidad_cargada),
     vendida: '',
     devuelta: '',
@@ -179,6 +190,7 @@ export function filasDeLiquidacion(l: LiquidacionResponse, despachado: Map<strin
     producto_id: x.producto_id,
     sku: x.sku,
     nombre: x.producto_nombre,
+    saldo_anterior: sinCeros(x.saldo_anterior),
     cargada: sinCeros(x.cantidad_cargada),
     vendida: sinCeros(x.cantidad_vendida),
     devuelta: sinCeros(x.cantidad_devuelta),

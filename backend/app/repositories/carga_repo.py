@@ -35,13 +35,16 @@ def vigente_de_ruta(db: Session, ruta_id: uuid.UUID, fecha_operacion: date) -> C
 def despachadas_de_ruta(
     db: Session, ruta_id: uuid.UUID, fecha_operacion: date
 ) -> Sequence[CargaRuta]:
-    """Cargas `despachadas` de la ruta y fecha, con sus líneas (la liquidación parte de ellas)."""
+    """Cargas `aprobadas` o `despachadas` de la ruta y fecha, con sus líneas.
+
+    Lo aprobado en el plan de carga es lo que la liquidación precarga como «cargado».
+    """
     return db.scalars(
         select(CargaRuta)
         .where(
             CargaRuta.ruta_id == ruta_id,
             CargaRuta.fecha_operacion == fecha_operacion,
-            CargaRuta.estado == EstadoCarga.DESPACHADA,
+            CargaRuta.estado.in_((EstadoCarga.APROBADA, EstadoCarga.DESPACHADA)),
         )
         .options(selectinload(CargaRuta.detalles))
         .order_by(CargaRuta.generada_en)

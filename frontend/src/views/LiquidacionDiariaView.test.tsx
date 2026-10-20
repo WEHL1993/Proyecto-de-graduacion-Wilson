@@ -9,6 +9,7 @@ import {
   efectivoEsperado,
   estadoFila,
   semaforoCaja,
+  totalCargadoFila,
   totalesUnidades,
   validar,
   ventaTotal,
@@ -41,6 +42,7 @@ const fila = (o: Partial<FilaForm> = {}): FilaForm => ({
   producto_id: 'p1',
   sku: '3030-PINA',
   nombre: 'Piña',
+  saldo_anterior: '',
   cargada: '20',
   vendida: '15',
   devuelta: '3',
@@ -61,8 +63,15 @@ describe('cálculos de la liquidación', () => {
 
   it('totales y venta calculada (cantidad × precio)', () => {
     const filas = [fila(), fila({ producto_id: 'p2', cargada: '10', vendida: '10', devuelta: '', merma: '', precio: '30' })]
-    expect(totalesUnidades(filas)).toEqual({ cargadas: 30, vendidas: 25, devueltas: 3, merma: 2 })
+    expect(totalesUnidades(filas)).toEqual({ saldo: 0, cargadas: 30, totalCargadas: 30, vendidas: 25, devueltas: 3, merma: 2 })
     expect(ventaTotal(filas)).toBe(1050)
+  })
+
+  it('total cargado = saldo anterior + cargado y entra en el cuadre', () => {
+    const f = fila({ saldo_anterior: '5', vendida: '20' })
+    expect(totalCargadoFila(f)).toBe(25)
+    expect(estadoFila(f)).toBe('cuadra')
+    expect(totalesUnidades([f]).totalCargadas).toBe(25)
   })
 
   it('efectivo esperado = efectivo + cobro − gastos; diferencia = entregado − esperado', () => {
@@ -116,10 +125,10 @@ const precarga: PrecargaResponse = {
   ruta_id: 'r1',
   carga_id: null,
   liquidacion: null,
-  advertencias: ['No hay una carga despachada para la ruta y fecha: ingrese lo cargado manualmente.'],
+  advertencias: ['No hay una carga aprobada para la ruta y fecha: ingrese lo cargado manualmente.'],
   lineas: [
-    { producto_id: 'p1', sku: '3030-PINA', producto_nombre: 'Piña', cantidad_cargada: '20', precio_unitario: '50' },
-    { producto_id: 'p2', sku: '2250-COLA', producto_nombre: 'Cola', cantidad_cargada: '10', precio_unitario: '30' },
+    { producto_id: 'p1', sku: '3030-PINA', producto_nombre: 'Piña', saldo_anterior: '0', cantidad_cargada: '20', precio_unitario: '50' },
+    { producto_id: 'p2', sku: '2250-COLA', producto_nombre: 'Cola', saldo_anterior: '0', cantidad_cargada: '10', precio_unitario: '30' },
   ],
 }
 
@@ -151,7 +160,7 @@ beforeEach(() => {
 describe('<LiquidacionDiariaView />', () => {
   it('precarga lo cargado, avisa que no hay carga y no deja cerrar con datos vacíos', async () => {
     await elegirRuta()
-    expect(screen.getByText(/No hay una carga despachada/)).toBeInTheDocument()
+    expect(screen.getByText(/No hay una carga aprobada/)).toBeInTheDocument()
     expect(screen.getByLabelText('Cargado 3030-PINA')).toHaveValue('20')
     expect(screen.getByRole('button', { name: 'Cerrar liquidación' })).toBeDisabled()
     expect(screen.getByTestId('total-cargadas')).toHaveTextContent('30')
@@ -237,8 +246,8 @@ describe('<LiquidacionDiariaView />', () => {
         version: 2,
         pagos: { efectivo: '1050', transferencia: '0', credito: '0', cobro_saldos: '0', gastos: '0', efectivo_entregado: '1050' },
         lineas: [
-          { producto_id: 'p1', sku: '3030-PINA', producto_nombre: 'Piña', cantidad_cargada: '20', cantidad_vendida: '15', cantidad_devuelta: '5', cantidad_merma: '0', precio_unitario: '50', monto_total: '750', agotado: false },
-          { producto_id: 'p2', sku: '2250-COLA', producto_nombre: 'Cola', cantidad_cargada: '10', cantidad_vendida: '10', cantidad_devuelta: '0', cantidad_merma: '0', precio_unitario: '30', monto_total: '300', agotado: false },
+          { producto_id: 'p1', sku: '3030-PINA', producto_nombre: 'Piña', saldo_anterior: '0', cantidad_cargada: '20', cantidad_vendida: '15', cantidad_devuelta: '5', cantidad_merma: '0', precio_unitario: '50', monto_total: '750', agotado: false },
+          { producto_id: 'p2', sku: '2250-COLA', producto_nombre: 'Cola', saldo_anterior: '0', cantidad_cargada: '10', cantidad_vendida: '10', cantidad_devuelta: '0', cantidad_merma: '0', precio_unitario: '30', monto_total: '300', agotado: false },
         ],
       }),
     })
@@ -261,5 +270,22 @@ describe('<LiquidacionDiariaView />', () => {
     expect(screen.getByRole('button', { name: 'Guardar borrador' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Cerrar liquidación' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Anular' })).not.toBeInTheDocument()
+  })
+
+  it('el saldo anterior viene del cierre previo y suma al total cargado', async () => {
+    api.precargar.mockResolvedValue({ ...precarga, lineas: [{ ...precarga.lineas[0], saldo_anterior: '4' }, precarga.lineas[1]] })
+    await elegirRuta()
+    expect(screen.getByLabelText('Saldo anterior 3030-PINA')).toHaveValue('4')
+    expect(screen.getByTestId('total-cargado-3030-PINA')).toHaveTextContent('24')
+    expect(screen.getByTestId('total-cargado-final')).toHaveTextContent('34')
+  })
+
+  it('solo quien puede corregir (Administrador) edita el saldo anterior; el liquidador lo ve de solo lectura', async () => {
+    permisos.lista = ['liquidaciones:registrar']
+    api.precargar.mockResolvedValue({ ...precarga, lineas: [{ ...precarga.lineas[0], saldo_anterior: '4' }, precarga.lineas[1]] })
+    await elegirRuta()
+    expect(screen.queryByLabelText('Saldo anterior 3030-PINA')).not.toBeInTheDocument()
+    expect(screen.getByTestId('saldo-anterior-3030-PINA')).toHaveTextContent('4')
+    expect(screen.getByLabelText('Cargado 3030-PINA')).toBeInTheDocument()
   })
 })

@@ -27,8 +27,10 @@ import {
   estadoFila,
   filasDeLiquidacion,
   filasDePrecarga,
+  num,
   pagosDeLiquidacion,
   semaforoCaja,
+  totalCargadoFila,
   totalPagos,
   totalesUnidades,
   validar,
@@ -42,6 +44,13 @@ const Q = (n: number) => `Q ${fmt(n)}`
 type Accion = 'cerrar' | 'corregir' | 'anular' | null
 type Aviso = { tipo: 'exito' | 'info'; texto: string; detalles?: string[] } | null
 
+const ETIQUETA_UNIDAD = {
+  saldo_anterior: 'Saldo anterior',
+  cargada: 'Cargado',
+  vendida: 'Vendido',
+  devuelta: 'Devuelto',
+  merma: 'Merma',
+} as const
 const FILA_ESTILO = { cuadra: 'text-good', falta: 'text-warn', excede: 'text-bad' } as const
 const FILA_ICONO = { cuadra: '🟢 Cuadra', falta: '🟡 Faltan', excede: '🔴 Excede' } as const
 const CAJA_ESTILO = { verde: 'text-good', ambar: 'text-warn', rojo: 'text-bad' } as const
@@ -71,6 +80,7 @@ export function LiquidacionDiariaView() {
 
   const umbral = Number(config.data?.umbral_diferencia_caja ?? UMBRAL_POR_DEFECTO)
   const cerrada = existente?.estado === 'cerrada'
+  const puedeEditarSaldo = can('liquidaciones:corregir')
 
   // Al cambiar fecha/ruta se (re)carga el formulario: lo despachado o la liquidación vigente.
   useEffect(() => {
@@ -79,7 +89,14 @@ export function LiquidacionDiariaView() {
     const despachado = d.carga_id ? new Map(d.lineas.map((l) => [l.producto_id, Number(l.cantidad_cargada)])) : null
     if (d.liquidacion) {
       setExistente(d.liquidacion)
-      setFilas(filasDeLiquidacion(d.liquidacion, despachado))
+      // La liquidación solo trae lo movido: se completa con el resto del catálogo (en cero).
+      const guardadas = filasDeLiquidacion(d.liquidacion, despachado)
+      const presentes = new Set(guardadas.map((f) => f.producto_id))
+      const faltantes = filasDePrecarga(
+        d.lineas.filter((l) => !presentes.has(l.producto_id)),
+        Boolean(d.carga_id),
+      )
+      setFilas([...guardadas, ...faltantes].sort((a, b) => a.sku.localeCompare(b.sku)))
       setPagos(pagosDeLiquidacion(d.liquidacion))
       setObservaciones(d.liquidacion.observaciones ?? '')
     } else {
@@ -196,7 +213,7 @@ export function LiquidacionDiariaView() {
       )}
       {error && <AlertBanner>{mensajeError(error.error)}</AlertBanner>}
 
-      {precarga.data && !filas.length && <EmptyState titulo="Sin presentaciones" detalle="La ruta no tiene carga despachada ni historial de ventas para precargar." />}
+      {precarga.data && !filas.length && <EmptyState titulo="Sin presentaciones" detalle="La ruta no tiene carga aprobada ni historial de ventas para precargar." />}
 
       {!!filas.length && (
         <>
@@ -217,10 +234,12 @@ export function LiquidacionDiariaView() {
                   <thead>
                     <tr className="border-b border-line text-left text-xs text-muted">
                       <th className="py-2 pr-2">Presentación</th>
-                      <th className="px-1 text-right">Cargado</th>
-                      <th className="px-1 text-right">Vendido</th>
-                      <th className="px-1 text-right">Devuelto</th>
-                      <th className="px-1 text-right">Merma</th>
+                      <th className="px-1 text-center">Saldo anterior</th>
+                      <th className="px-1 text-center">Cargado</th>
+                      <th className="px-1 text-center">Total cargado</th>
+                      <th className="px-1 text-center">Vendido</th>
+                      <th className="px-1 text-center">Devuelto</th>
+                      <th className="px-1 text-center">Merma</th>
                       <th className="px-1 text-center">Agotado</th>
                       <th className="px-1">Cuadre</th>
                     </tr>
@@ -244,18 +263,28 @@ export function LiquidacionDiariaView() {
                               />
                             )}
                           </td>
-                          {(['cargada', 'vendida', 'devuelta', 'merma'] as const).map((k) => (
-                            <td key={k} className="px-1 py-1.5">
-                              <input
-                                inputMode="decimal"
-                                aria-label={`${k === 'cargada' ? 'Cargado' : k === 'vendida' ? 'Vendido' : k === 'devuelta' ? 'Devuelto' : 'Merma'} ${f.sku}`}
-                                aria-invalid={!esMontoValido(f[k])}
-                                value={f[k]}
-                                onChange={(e) => cambiarFila(i, { [k]: e.target.value })}
-                                className={`${CLASE_INPUT} num w-20 text-right ${esMontoValido(f[k]) ? '' : 'border-bad'}`}
-                              />
-                            </td>
-                          ))}
+                          {(['saldo_anterior', 'cargada', 'total', 'vendida', 'devuelta', 'merma'] as const).map((k) =>
+                            k === 'total' ? (
+                              <td key={k} className="num px-1 py-1.5 text-center font-medium" data-testid={`total-cargado-${f.sku}`}>
+                                {totalCargadoFila(f)}
+                              </td>
+                            ) : k === 'saldo_anterior' && !puedeEditarSaldo ? (
+                              <td key={k} className="num px-1 py-1.5 text-center" data-testid={`saldo-anterior-${f.sku}`}>
+                                {num(f.saldo_anterior)}
+                              </td>
+                            ) : (
+                              <td key={k} className="px-1 py-1.5">
+                                <input
+                                  inputMode="decimal"
+                                  aria-label={`${ETIQUETA_UNIDAD[k]} ${f.sku}`}
+                                  aria-invalid={!esMontoValido(f[k])}
+                                  value={f[k]}
+                                  onChange={(e) => cambiarFila(i, { [k]: e.target.value })}
+                                  className={`${CLASE_INPUT} num mx-auto block w-20 text-center ${esMontoValido(f[k]) ? '' : 'border-bad'}`}
+                                />
+                              </td>
+                            ),
+                          )}
                           <td className="px-1 py-1.5 text-center">
                             <input
                               type="checkbox"
@@ -275,10 +304,12 @@ export function LiquidacionDiariaView() {
                   <tfoot>
                     <tr className="num font-semibold">
                       <td className="py-2">Totales</td>
-                      <td className="px-1 text-right" data-testid="total-cargadas">{unidades.cargadas}</td>
-                      <td className="px-1 text-right" data-testid="total-vendidas">{unidades.vendidas}</td>
-                      <td className="px-1 text-right" data-testid="total-devueltas">{unidades.devueltas}</td>
-                      <td className="px-1 text-right">{unidades.merma}</td>
+                      <td className="px-1 text-center" data-testid="total-saldo-anterior">{unidades.saldo}</td>
+                      <td className="px-1 text-center" data-testid="total-cargadas">{unidades.cargadas}</td>
+                      <td className="px-1 text-center" data-testid="total-cargado-final">{unidades.totalCargadas}</td>
+                      <td className="px-1 text-center" data-testid="total-vendidas">{unidades.vendidas}</td>
+                      <td className="px-1 text-center" data-testid="total-devueltas">{unidades.devueltas}</td>
+                      <td className="px-1 text-center">{unidades.merma}</td>
                       <td colSpan={2} className="px-1 text-xs font-normal text-muted">
                         Devolución esperada: {unidades.devueltas} u (la procesa Inventario)
                       </td>

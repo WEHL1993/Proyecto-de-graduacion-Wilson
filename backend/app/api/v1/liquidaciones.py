@@ -51,17 +51,23 @@ _ERRORES_ESTADO = {
 def guardar_borrador(
     db: DBSession, usuario: PuedeRegistrar, solicitud: LiquidacionRequest
 ) -> LiquidacionResponse:
-    return liquidacion_service.guardar_borrador(db, solicitud, usuario.id)
+    return liquidacion_service.guardar_borrador(
+        db,
+        solicitud,
+        usuario.id,
+        puede_editar_saldo="liquidaciones:corregir" in usuario.permisos,
+    )
 
 
 @router.get(
     "/precarga",
     response_model=PrecargaResponse,
-    summary="Precarga de la pantalla: carga despachada y liquidación vigente",
+    summary="Precarga de la pantalla: carga aprobada y liquidación vigente",
     description=(
         "Requiere `liquidaciones:registrar`. Devuelve las presentaciones con la cantidad "
-        "despachada a la ruta ese día (editable, con justificación) y la liquidación vigente de "
-        "la fecha/ruta si existe. Sin carga despachada devuelve una advertencia, no un error."
+        "aprobada (o despachada) a la ruta ese día (editable, con justificación) y la "
+        "liquidación vigente de la fecha/ruta si existe. Sin carga aprobada devuelve una "
+        "advertencia, no un error."
     ),
 )
 def precargar(

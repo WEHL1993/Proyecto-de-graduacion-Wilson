@@ -75,6 +75,8 @@ class LineaCalculada:
     precio: Decimal
     agotado: bool = False
     justificacion: str | None = None
+    # Devuelto del último cierre de la ruta (lo edita solo el Administrador); suma a lo cargado.
+    saldo_anterior: Decimal = _CERO
 
     @property
     def monto(self) -> Decimal:
@@ -82,8 +84,8 @@ class LineaCalculada:
 
     @property
     def diferencia(self) -> Decimal:
-        """Unidades sin justificar: cargada − vendida − devuelta − merma (0 = cuadra)."""
-        return self.cargada - self.vendida - self.devuelta - self.merma
+        """Sin justificar: saldo anterior + cargada − vendida − devuelta − merma (0 = cuadra)."""
+        return self.saldo_anterior + self.cargada - self.vendida - self.devuelta - self.merma
 
 
 def calcular_monto(vendida: Decimal, precio: Decimal) -> Decimal:
@@ -120,6 +122,7 @@ def _detalle_unidades(
 ) -> dict[str, dict[str, str]]:
     return {
         (etiquetas or {}).get(ln.producto_id, str(ln.producto_id)): {
+            "saldo_anterior": str(ln.saldo_anterior),
             "cargada": str(ln.cargada),
             "vendida": str(ln.vendida),
             "devuelta": str(ln.devuelta),
@@ -204,6 +207,7 @@ def calcular_checksum(
         "lineas": [
             [
                 str(ln.producto_id),
+                str(ln.saldo_anterior.quantize(_CENTAVOS)),
                 str(ln.cargada.quantize(_CENTAVOS)),
                 str(ln.vendida.quantize(_CENTAVOS)),
                 str(ln.devuelta.quantize(_CENTAVOS)),
@@ -232,7 +236,13 @@ class _Preparada:
     advertencias: list[str]
 
 
-def _preparar(db: Session, solicitud: LiquidacionRequest, *, hoy: date | None = None) -> _Preparada:
+def _preparar(
+    db: Session,
+    solicitud: LiquidacionRequest,
+    *,
+    hoy: date | None = None,
+    puede_editar_saldo: bool = False,
+) -> _Preparada:
     """Valida la solicitud contra reglas de negocio y catálogo; devuelve las líneas calculadas."""
     validar_fecha(solicitud.fecha, hoy)
     ruta = catalog_repo.obtener_ruta(db, solicitud.ruta_id)
@@ -270,9 +280,13 @@ def _preparar(db: Session, solicitud: LiquidacionRequest, *, hoy: date | None = 
             detalle={"skus": inactivos},
         )
 
+    saldos = _saldos_vigentes(db, solicitud.ruta_id, solicitud.fecha)
     lineas = [
         LineaCalculada(
             producto_id=ln.producto_id,
+            saldo_anterior=(
+                ln.saldo_anterior if puede_editar_saldo else saldos.get(ln.producto_id, _CERO)
+            ),
             cargada=ln.cantidad_cargada,
             vendida=ln.cantidad_vendida,
             devuelta=ln.cantidad_devuelta,
@@ -293,6 +307,15 @@ def _preparar(db: Session, solicitud: LiquidacionRequest, *, hoy: date | None = 
 
     advertencias = _validar_contra_carga(db, solicitud, lineas, etiquetas)
     return _Preparada(ruta, vendedor_id, lineas, catalogo, advertencias)
+
+
+def _saldos_vigentes(db: Session, ruta_id: uuid.UUID, fecha: date) -> dict[uuid.UUID, Decimal]:
+    """Saldo anterior por producto: el guardado en la liquidación vigente de la fecha/ruta (si un
+    Administrador lo ajustó) o, si no, lo devuelto en el último cierre previo de la ruta."""
+    vigente = liquidacion_repo.vigente(db, fecha, ruta_id)
+    if vigente is not None:
+        return {d.producto_id: d.saldo_anterior for d in vigente.detalles}
+    return liquidacion_repo.saldo_anterior_de_ruta(db, ruta_id, fecha)
 
 
 def _cargado_despachado(
@@ -317,11 +340,11 @@ def _validar_contra_carga(
     lineas: Sequence[LineaCalculada],
     etiquetas: Mapping[uuid.UUID, str],
 ) -> list[str]:
-    """Con carga despachada, editar `cantidad_cargada` exige justificación; sin carga solo avisa."""
+    """Con carga aprobada, editar `cantidad_cargada` exige justificación; sin carga solo avisa."""
     carga_id, despachado = _cargado_despachado(db, solicitud.ruta_id, solicitud.fecha)
     if carga_id is None:
         return [
-            "No hay una carga despachada para la ruta y fecha: se tomó lo cargado tal como se "
+            "No hay una carga aprobada para la ruta y fecha: se tomó lo cargado tal como se "
             "ingresó."
         ]
     sin_justificar = {
@@ -335,13 +358,13 @@ def _validar_contra_carga(
     if sin_justificar:
         raise AppError(
             "CARGA_REQUIERE_JUSTIFICACION",
-            "La cantidad cargada difiere de la carga despachada: indique la justificación.",
+            "La cantidad cargada difiere de la carga aprobada: indique la justificación.",
             detalle={"productos": sin_justificar},
         )
     ausentes = sorted(str(p) for p, q in despachado.items() if q > 0 and p not in etiquetas)
     return (
         [
-            f"La carga despachada incluía {len(ausentes)} presentaciones que no están en la "
+            f"La carga aprobada incluía {len(ausentes)} presentaciones que no están en la "
             "liquidación."
         ]
         if ausentes
@@ -352,10 +375,17 @@ def _validar_contra_carga(
 # ====================================================================== guardar borrador
 @auditar
 def guardar_borrador(
-    db: Session, solicitud: LiquidacionRequest, usuario_id: uuid.UUID
+    db: Session,
+    solicitud: LiquidacionRequest,
+    usuario_id: uuid.UUID,
+    *,
+    puede_editar_saldo: bool = False,
 ) -> LiquidacionResponse:
-    """Crea o actualiza el borrador de la fecha/ruta/vendedor. No toca `ventas_historicas`."""
-    prep = _preparar(db, solicitud)
+    """Crea o actualiza el borrador de la fecha/ruta/vendedor. No toca `ventas_historicas`.
+
+    El saldo anterior solo lo fija quien `puede_editar_saldo`; para el resto se ignora lo enviado.
+    """
+    prep = _preparar(db, solicitud, puede_editar_saldo=puede_editar_saldo)
     existente = liquidacion_repo.vigente(db, solicitud.fecha, solicitud.ruta_id, prep.vendedor_id)
     if existente is not None and existente.estado == EstadoLiquidacion.CERRADA:
         raise AppError(
@@ -445,6 +475,7 @@ def _filas_detalle(lineas: Sequence[LineaCalculada]) -> list[dict[str, Any]]:
     return [
         {
             "producto_id": ln.producto_id,
+            "saldo_anterior": ln.saldo_anterior,
             "cantidad_cargada": ln.cargada,
             "cantidad_vendida": ln.vendida,
             "cantidad_devuelta": ln.devuelta,
@@ -462,6 +493,7 @@ def _lineas_de(liquidacion: LiquidacionDiaria) -> list[LineaCalculada]:
     return [
         LineaCalculada(
             producto_id=d.producto_id,
+            saldo_anterior=d.saldo_anterior,
             cargada=d.cantidad_cargada,
             vendida=d.cantidad_vendida,
             devuelta=d.cantidad_devuelta,
@@ -537,7 +569,8 @@ def corregir(
             "Una corrección no puede cambiar la fecha, la ruta ni el vendedor: anule y cree otra.",
         )
 
-    prep = _preparar(db, solicitud)
+    # Corregir es solo del Administrador, que puede ajustar el saldo anterior.
+    prep = _preparar(db, solicitud, puede_editar_saldo=True)
     etiquetas = {pid: c.sku for pid, c in prep.catalogo.items()}
     exigir_unidades_cuadran(prep.lineas, etiquetas)
     exigir_montos_cuadran(total_venta(prep.lineas), solicitud.pagos)
@@ -759,6 +792,7 @@ def _instantanea(liquidacion: LiquidacionDiaria) -> dict[str, Any]:
         "lineas": [
             {
                 "producto_id": str(d.producto_id),
+                "saldo_anterior": str(d.saldo_anterior),
                 "cargada": str(d.cantidad_cargada),
                 "vendida": str(d.cantidad_vendida),
                 "devuelta": str(d.cantidad_devuelta),
@@ -865,7 +899,11 @@ def listar(
 def precargar(
     db: Session, fecha: date, ruta_id: uuid.UUID, vendedor_id: uuid.UUID | None = None
 ) -> PrecargaResponse:
-    """Datos para abrir la pantalla: lo despachado a la ruta (editable) y la liquidación vigente."""
+    """Datos para abrir la pantalla: lo aprobado en el plan de carga (editable) y lo ya liquidado.
+
+    Siempre se listan todos los productos activos del catálogo (lo que distribuye la empresa);
+    los no despachados parten en cero.
+    """
     validar_fecha(fecha)
     ruta = catalog_repo.obtener_ruta(db, ruta_id)
     if ruta is None:
@@ -876,14 +914,17 @@ def precargar(
     advertencias: list[str] = []
     if carga_id is None:
         advertencias.append(
-            "No hay una carga despachada para la ruta y fecha: ingrese lo cargado manualmente."
+            "No hay una carga aprobada para la ruta y fecha: ingrese lo cargado manualmente."
         )
-        productos = sales_repo.productos_de_ruta(db, ruta_id)
-        despachado = {pid: _CERO for pid in productos}
+        despachado = {}
+    for pid in catalog_repo.ids_productos_activos(db):
+        despachado.setdefault(pid, _CERO)
     catalogo = catalog_repo.productos_para_liquidacion(db, despachado)
+    saldos = liquidacion_repo.saldo_anterior_de_ruta(db, ruta_id, fecha)
     lineas = [
         LineaPrecarga(
             producto_id=pid,
+            saldo_anterior=saldos.get(pid, _CERO),
             sku=catalogo[pid].sku,
             producto_nombre=catalogo[pid].nombre,
             cantidad_cargada=cantidad,
@@ -921,6 +962,7 @@ def construir_respuesta(
             producto_id=d.producto_id,
             sku=catalogo[d.producto_id][0],
             producto_nombre=catalogo[d.producto_id][1],
+            saldo_anterior=d.saldo_anterior,
             cantidad_cargada=d.cantidad_cargada,
             cantidad_vendida=d.cantidad_vendida,
             cantidad_devuelta=d.cantidad_devuelta,
@@ -929,11 +971,16 @@ def construir_respuesta(
             monto_total=d.monto_total,
             agotado=d.agotado,
             justificacion_carga=d.justificacion_carga,
-            diferencia_unidades=d.cantidad_cargada
+            diferencia_unidades=d.saldo_anterior
+            + d.cantidad_cargada
             - d.cantidad_vendida
             - d.cantidad_devuelta
             - d.cantidad_merma,
-            cuadra=d.cantidad_cargada - d.cantidad_vendida - d.cantidad_devuelta - d.cantidad_merma
+            cuadra=d.saldo_anterior
+            + d.cantidad_cargada
+            - d.cantidad_vendida
+            - d.cantidad_devuelta
+            - d.cantidad_merma
             == 0,
         )
         for d in sorted(liquidacion.detalles, key=lambda x: catalogo[x.producto_id][0])

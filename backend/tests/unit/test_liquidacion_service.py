@@ -137,6 +137,13 @@ def test_para_cerrar_cargada_debe_igualar_vendida_devuelta_merma():
     assert exc.value.detalle["productos"]["2250-COLA"]["diferencia"] == "2"
 
 
+def test_saldo_anterior_suma_a_lo_cargado_en_el_cuadre():
+    ln = linea(saldo_anterior=D("5"), vendida="20")  # 5 + 20 = 20 + 3 + 2
+    assert ln.diferencia == 0
+    svc.exigir_unidades_cuadran([ln])
+    assert linea(saldo_anterior=D("5")).diferencia == D("5")
+
+
 def test_monto_es_cantidad_por_precio_con_redondeo_a_centavos():
     assert svc.calcular_monto(D("15"), D("50")) == D("750.00")
     assert svc.calcular_monto(D("2.5"), D("56.35")) == D("140.88")  # 140.875 -> half up
@@ -235,12 +242,14 @@ def _liquidacion(estado=EstadoLiquidacion.BORRADOR, **cab) -> LiquidacionDiaria:
     liq = LiquidacionDiaria(**valores)
     liq.detalles = [
         LiquidacionDetalle(
-            producto_id=P1, cantidad_cargada=D(20), cantidad_vendida=D(15), cantidad_devuelta=D(3),
-            cantidad_merma=D(2), precio_unitario=D(50), monto_total=D(750), agotado=True,
+            producto_id=P1, saldo_anterior=D(0), cantidad_cargada=D(20), cantidad_vendida=D(15),
+            cantidad_devuelta=D(3), cantidad_merma=D(2), precio_unitario=D(50),
+            monto_total=D(750), agotado=True,
         ),
         LiquidacionDetalle(
-            producto_id=P2, cantidad_cargada=D(10), cantidad_vendida=D(10), cantidad_devuelta=D(0),
-            cantidad_merma=D(0), precio_unitario=D(30), monto_total=D(300), agotado=False,
+            producto_id=P2, saldo_anterior=D(0), cantidad_cargada=D(10), cantidad_vendida=D(10),
+            cantidad_devuelta=D(0), cantidad_merma=D(0), precio_unitario=D(30),
+            monto_total=D(300), agotado=False,
         ),
     ]  # fmt: skip
     return liq

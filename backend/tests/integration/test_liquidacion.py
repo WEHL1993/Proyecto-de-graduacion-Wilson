@@ -504,11 +504,33 @@ def test_precarga_parte_de_la_carga_despachada(e):
         headers=e.h,
     ).json()
     assert r["carga_id"] == str(carga.id) and r["advertencias"] == []
-    assert {x["producto_id"]: Decimal(x["cantidad_cargada"]) for x in r["lineas"]} == {
-        str(e.pa.id): 20,
-        str(e.pb.id): 10,
-    }
+    cargado = {x["producto_id"]: Decimal(x["cantidad_cargada"]) for x in r["lineas"]}
+    assert cargado[str(e.pa.id)] == 20 and cargado[str(e.pb.id)] == 10
+    # el resto del catálogo activo aparece en cero
+    assert all(v == 0 for pid, v in cargado.items() if pid not in {str(e.pa.id), str(e.pb.id)})
     assert r["liquidacion"] is None
+
+
+def test_lo_aprobado_en_el_plan_de_carga_pasa_a_cargado_sin_esperar_el_despacho(e):
+    carga = _carga(e, estado=EstadoCarga.APROBADA)
+    r = e.c.get(
+        f"{URL}/precarga",
+        params={"fecha": FECHA.isoformat(), "ruta_id": str(e.ruta.id)},
+        headers=e.h,
+    ).json()
+    assert r["carga_id"] == str(carga.id) and r["advertencias"] == []
+    cargado = {x["producto_id"]: Decimal(x["cantidad_cargada"]) for x in r["lineas"]}
+    assert cargado[str(e.pa.id)] == 20 and cargado[str(e.pb.id)] == 10
+
+
+def test_un_plan_rechazado_o_sin_aprobar_no_alimenta_cargado(e):
+    _carga(e, estado=EstadoCarga.PENDIENTE_APROBACION)
+    r = e.c.get(
+        f"{URL}/precarga",
+        params={"fecha": FECHA.isoformat(), "ruta_id": str(e.ruta.id)},
+        headers=e.h,
+    ).json()
+    assert r["carga_id"] is None and r["advertencias"]
 
 
 def test_precarga_sin_carga_advierte_y_trae_la_liquidacion_vigente(e):
@@ -585,3 +607,45 @@ def test_el_historial_etl_no_lista_lotes_de_liquidacion(e):
     cerrar(e, guardar(e)["id"])
     h = encabezados(e.admin, "etl:cargar")
     assert e.c.get("/api/v1/etl/batches", headers=h).json()["total"] == 0
+
+
+# ------------------------------------------------------------------ saldo anterior
+def _precarga_saldos(e, fecha):
+    r = e.c.get(
+        f"{URL}/precarga",
+        params={"fecha": fecha.isoformat(), "ruta_id": str(e.ruta.id)},
+        headers=e.h,
+    ).json()
+    return {x["producto_id"]: Decimal(x["saldo_anterior"]) for x in r["lineas"]}
+
+
+def test_lo_devuelto_al_cerrar_pasa_como_saldo_anterior_al_dia_siguiente(e):
+    dia2 = FECHA + timedelta(days=1)
+    liq = guardar(e)
+    assert _precarga_saldos(e, dia2)[str(e.pa.id)] == 0  # un borrador no genera saldo
+    assert cerrar(e, liq["id"]).status_code == 200
+    saldos = _precarga_saldos(e, dia2)
+    assert saldos[str(e.pa.id)] == 3 and saldos[str(e.pb.id)] == 0
+    assert _precarga_saldos(e, FECHA)[str(e.pa.id)] == 0  # solo aplica a fechas posteriores
+
+
+def test_saldo_anterior_suma_al_cuadre_y_solo_el_administrador_lo_edita(e):
+    cerrar(e, guardar(e)["id"])
+    dia2 = FECHA + timedelta(days=1)
+    body = cuerpo(e, dia2)
+    body["lineas"][0]["saldo_anterior"] = "9"  # el liquidador intenta fijar otro valor
+    liquidador = encabezados(e.vendedor, "liquidaciones:registrar")
+    r = e.c.post(URL, json=body, headers=liquidador).json()
+    linea_a = next(x for x in r["lineas"] if x["producto_id"] == str(e.pa.id))
+    assert Decimal(linea_a["saldo_anterior"]) == 3  # se ignora lo enviado: manda el cierre previo
+    assert Decimal(linea_a["diferencia_unidades"]) == 3  # 3 + 20 − 15 − 3 − 2
+
+    body["lineas"][0]["saldo_anterior"] = "5"
+    r = e.c.post(URL, json=body, headers=e.h).json()  # Administrador
+    linea_a = next(x for x in r["lineas"] if x["producto_id"] == str(e.pa.id))
+    assert Decimal(linea_a["saldo_anterior"]) == 5
+
+    # El liquidador vuelve a guardar: conserva el saldo fijado por el Administrador.
+    r = e.c.post(URL, json=body, headers=liquidador).json()
+    linea_a = next(x for x in r["lineas"] if x["producto_id"] == str(e.pa.id))
+    assert Decimal(linea_a["saldo_anterior"]) == 5

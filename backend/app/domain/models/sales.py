@@ -210,12 +210,14 @@ class LiquidacionDetalle(UUIDPkMixin, Base):
     __table_args__ = (
         UniqueConstraint("liquidacion_id", "producto_id"),
         CheckConstraint(
-            "cantidad_cargada >= 0 AND cantidad_vendida >= 0 AND cantidad_devuelta >= 0 "
-            "AND cantidad_merma >= 0 AND precio_unitario >= 0 AND monto_total >= 0",
+            "saldo_anterior >= 0 AND cantidad_cargada >= 0 AND cantidad_vendida >= 0 "
+            "AND cantidad_devuelta >= 0 AND cantidad_merma >= 0 AND precio_unitario >= 0 "
+            "AND monto_total >= 0",
             name="valores_no_negativos",
         ),
         CheckConstraint(
-            "cantidad_vendida + cantidad_devuelta + cantidad_merma <= cantidad_cargada",
+            "cantidad_vendida + cantidad_devuelta + cantidad_merma "
+            "<= saldo_anterior + cantidad_cargada",
             name="unidades_no_exceden_cargada",
         ),
         CheckConstraint(
@@ -230,6 +232,8 @@ class LiquidacionDetalle(UUIDPkMixin, Base):
     producto_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("productos.id", ondelete="RESTRICT"), index=True
     )
+    # Devuelto en el último cierre de la ruta; suma a lo cargado del día.
+    saldo_anterior: Mapped[Cantidad] = mapped_column(server_default=text("0"))
     cantidad_cargada: Mapped[Cantidad]
     cantidad_vendida: Mapped[Cantidad]
     cantidad_devuelta: Mapped[Cantidad] = mapped_column(server_default=text("0"))
