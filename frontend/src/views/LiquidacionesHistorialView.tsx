@@ -4,9 +4,9 @@ import { Button } from '../components/common/Button'
 import { CLASE_INPUT, Campo, Card } from '../components/common/Card'
 import { Modal } from '../components/common/Modal'
 import { AlertBanner, Cargando, EmptyState } from '../components/feedback/feedback'
-import { useListadoLiquidaciones, useLiquidacionDetalle } from '../hooks/useLiquidaciones'
+import { useListadoLiquidaciones, useLiquidacionDetalle, usePrecarga } from '../hooks/useLiquidaciones'
 import { listarRutas } from '../services/catalogApi'
-import type { EstadoLiquidacion } from '../types'
+import type { EstadoLiquidacion, LineaPrecarga, LiquidacionResponse } from '../types'
 import { mensajeError } from '../utils/errors'
 import { fmt, fmtFecha, fmtInt } from '../utils/format'
 
@@ -138,8 +138,35 @@ export function LiquidacionesHistorialView() {
   )
 }
 
+type LineaGuardada = LiquidacionResponse['lineas'][number]
+
+/** Líneas guardadas completadas con el resto del catálogo activo (en cero), ordenadas por SKU. */
+function lineasConCatalogo(guardadas: LineaGuardada[], catalogo: LineaPrecarga[]): LineaGuardada[] {
+  const presentes = new Set(guardadas.map((l) => l.producto_id))
+  const vacias = catalogo
+    .filter((c) => !presentes.has(c.producto_id))
+    .map(
+      (c) =>
+        ({
+          producto_id: c.producto_id,
+          sku: c.sku,
+          producto_nombre: c.producto_nombre,
+          cantidad_cargada: '0',
+          cantidad_vendida: '0',
+          cantidad_devuelta: '0',
+          cantidad_merma: '0',
+          monto_total: '0',
+          agotado: false,
+        }) as LineaGuardada,
+    )
+  return [...guardadas, ...vacias].sort((a, b) => a.sku.localeCompare(b.sku))
+}
+
 function Detalle({ id, onCerrar }: { id: string; onCerrar: () => void }) {
   const { data, isLoading, isError, error } = useLiquidacionDetalle(id)
+  // Mismo catálogo que el plan de carga sugerido: todos los productos activos, en cero si no se movieron.
+  const catalogo = usePrecarga(data?.fecha ?? '', data?.ruta_id ?? '')
+  const lineas = data ? lineasConCatalogo(data.lineas, catalogo.data?.lineas ?? []) : []
   return (
     <Modal titulo="Detalle de la liquidación" onCerrar={onCerrar} acciones={<Button onClick={onCerrar}>Cerrar</Button>}>
       {isLoading && <Cargando />}
@@ -161,10 +188,11 @@ function Detalle({ id, onCerrar }: { id: string; onCerrar: () => void }) {
               </tr>
             </thead>
             <tbody>
-              {data.lineas.map((l) => (
+              {lineas.map((l) => (
                 <tr key={l.producto_id} className="border-t border-line">
                   <td>
                     {l.sku}
+                    {l.producto_nombre && <span className="text-muted"> · {l.producto_nombre}</span>}
                     {l.agotado && <span title="Se agotó: demanda censurada"> ⚠</span>}
                   </td>
                   <td className="num text-right">{fmtInt(l.cantidad_cargada)}</td>

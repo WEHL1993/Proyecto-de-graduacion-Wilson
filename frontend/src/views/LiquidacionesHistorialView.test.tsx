@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { LiquidacionesHistorialView } from './LiquidacionesHistorialView'
 
-const api = vi.hoisted(() => ({ listarRutas: vi.fn(), listarLiquidaciones: vi.fn(), obtenerLiquidacion: vi.fn() }))
+const api = vi.hoisted(() => ({ listarRutas: vi.fn(), listarLiquidaciones: vi.fn(), obtenerLiquidacion: vi.fn(), precargar: vi.fn() }))
 vi.mock('../services/catalogApi', () => ({ listarRutas: api.listarRutas }))
 vi.mock('../services/liquidacionesApi', () => api)
 
@@ -59,10 +59,18 @@ describe('<LiquidacionesHistorialView />', () => {
       cuadre_dinero: { venta_total: '1050', efectivo_esperado: '830', efectivo_entregado: '800', diferencia_caja: '-30', supera_umbral: true },
       devolucion_esperada: '3',
     })
+    api.precargar.mockResolvedValue({
+      lineas: [
+        { producto_id: 'p1', sku: '3030-PINA', producto_nombre: 'Piña' },
+        { producto_id: 'p2', sku: '3031-FRESA', producto_nombre: 'Fresa' },
+      ],
+    })
     montar()
     fireEvent.click(await screen.findByRole('button', { name: /Ver detalle/ }))
     expect(await screen.findByText('Efectivo esperado')).toBeInTheDocument()
     expect(screen.getByText('3030-PINA')).toBeInTheDocument()
+    // El resto del catálogo activo aparece en cero, igual que en el plan de carga sugerido.
+    expect(await screen.findByText('3031-FRESA')).toBeInTheDocument()
   })
 
   it('informa cuando no hay liquidaciones y muestra errores de la API', async () => {
