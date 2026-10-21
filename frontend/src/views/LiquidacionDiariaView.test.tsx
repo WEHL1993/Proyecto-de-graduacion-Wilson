@@ -15,6 +15,7 @@ import {
   ventaTotal,
 } from '../utils/liquidacion'
 import type { FilaForm } from '../utils/liquidacion'
+import { nombreConMlAlInicio } from '../utils/productos'
 import { LiquidacionDiariaView } from './LiquidacionDiariaView'
 
 const permisos = vi.hoisted(() => ({ lista: ['liquidaciones:registrar', 'liquidaciones:cerrar', 'liquidaciones:corregir', 'liquidaciones:leer'] }))
@@ -164,6 +165,46 @@ describe('<LiquidacionDiariaView />', () => {
     expect(screen.getByLabelText('Cargado 3030-PINA')).toHaveValue('20')
     expect(screen.getByRole('button', { name: 'Cerrar liquidación' })).toBeDisabled()
     expect(screen.getByTestId('total-cargadas')).toHaveTextContent('30')
+  })
+
+  it('el buscador filtra por SKU o nombre sin tildes, conserva lo editado y no altera los totales', async () => {
+    await elegirRuta()
+    expect(screen.getByText('Mostrando 2 de 2')).toBeInTheDocument()
+
+    escribir('Buscar producto', 'pina') // sin tilde encuentra «Piña»
+    expect(screen.getByText('Mostrando 1 de 2')).toBeInTheDocument()
+    expect(screen.queryByText('2250-COLA')).not.toBeInTheDocument()
+    escribir('Vendido 3030-PINA', '15')
+
+    escribir('Buscar producto', '2250') // por SKU
+    expect(screen.queryByText('3030-PINA')).not.toBeInTheDocument()
+    expect(screen.getByText('2250-COLA')).toBeInTheDocument()
+    expect(screen.getByTestId('total-vendidas')).toHaveTextContent('15') // lo oculto sigue contando
+
+    escribir('Buscar producto', 'zzz')
+    expect(screen.getByText('Ningún producto coincide con el filtro.')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Limpiar filtro' }))
+    expect(screen.getByLabelText('Vendido 3030-PINA')).toHaveValue('15')
+    expect(screen.getByText('Mostrando 2 de 2')).toBeInTheDocument()
+  })
+
+  it('muestra los ml al inicio del nombre y se pueden buscar así', () => {
+    expect(nombreConMlAlInicio('BIG COLA PET NO RETORNABLE 250 ML 24')).toBe('250 ML BIG COLA PET NO RETORNABLE 24')
+    expect(nombreConMlAlInicio('CIELO AGUA SPORT CAP 1000ML')).toBe('1000 ML CIELO AGUA SPORT CAP')
+    expect(nombreConMlAlInicio('VOLT GO PET NO RETORNABLE 360 ML 12 pack')).toBe('360 ML VOLT GO PET NO RETORNABLE 12 pack')
+    expect(nombreConMlAlInicio('CIFRUT FRESA DISPLAY 70 GRS 12 MC')).toBe('CIFRUT FRESA DISPLAY 70 GRS 12 MC')
+  })
+
+  it('«Solo con movimiento» oculta las presentaciones en cero', async () => {
+    api.precargar.mockResolvedValue({
+      ...precarga,
+      lineas: [precarga.lineas[0], { ...precarga.lineas[1], cantidad_cargada: '0' }],
+    })
+    await elegirRuta()
+    fireEvent.click(screen.getByLabelText('Solo con movimiento'))
+    expect(screen.getByText('Mostrando 1 de 2')).toBeInTheDocument()
+    expect(screen.queryByText('2250-COLA')).not.toBeInTheDocument()
   })
 
   it('muestra cuadres en vivo de unidades y de dinero', async () => {

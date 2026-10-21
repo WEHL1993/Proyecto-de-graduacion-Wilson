@@ -37,6 +37,7 @@ import {
   ventaTotal,
 } from '../utils/liquidacion'
 import type { FilaForm, PagosForm } from '../utils/liquidacion'
+import { coincideBusqueda, nombreConMlAlInicio } from '../utils/productos'
 
 const UMBRAL_POR_DEFECTO = 10
 const Q = (n: number) => `Q ${fmt(n)}`
@@ -69,6 +70,8 @@ export function LiquidacionDiariaView() {
   const [accion, setAccion] = useState<Accion>(null)
   const [motivo, setMotivo] = useState('')
   const [aviso, setAviso] = useState<Aviso>(null)
+  const [busqueda, setBusqueda] = useState('')
+  const [soloMovimiento, setSoloMovimiento] = useState(false)
 
   const rutas = useQuery({ queryKey: ['rutas'], queryFn: listarRutas })
   const precarga = usePrecarga(fecha, rutaId)
@@ -117,6 +120,14 @@ export function LiquidacionDiariaView() {
   const semaforo = semaforoCaja(dif, umbral)
   const puedeGuardar = validacion.errores.length === 0
   const puedeCerrar = puedeGuardar && validacion.pendientes.length === 0
+
+  // Solo oculta filas: el índice original se conserva para editar, y totales/validación usan todas.
+  const filasVisibles = useMemo(() => {
+    return filas
+      .map((f, i) => ({ f, i }))
+      .filter(({ f }) => coincideBusqueda(f.sku, f.nombre, busqueda))
+      .filter(({ f }) => !soloMovimiento || [f.saldo_anterior, f.cargada, f.vendida, f.devuelta, f.merma].some((v) => Number(v) > 0))
+  }, [filas, busqueda, soloMovimiento])
 
   const cambiarFila = (i: number, cambio: Partial<FilaForm>) =>
     setFilas((fs) => fs.map((f, j) => (j === i ? { ...f, ...cambio } : f)))
@@ -228,6 +239,33 @@ export function LiquidacionDiariaView() {
 
           {paso === 1 ? (
             <Card titulo="Unidades por presentación">
+              <div className="mb-3 flex flex-wrap items-center gap-3">
+                <input
+                  type="search"
+                  aria-label="Buscar producto"
+                  placeholder="Buscar por SKU o nombre…"
+                  value={busqueda}
+                  onChange={(e) => setBusqueda(e.target.value)}
+                  className={`${CLASE_INPUT} w-full sm:w-80`}
+                />
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={soloMovimiento} onChange={(e) => setSoloMovimiento(e.target.checked)} />
+                  Solo con movimiento
+                </label>
+                <span className="text-xs text-muted" aria-live="polite">
+                  Mostrando {filasVisibles.length} de {filas.length}
+                </span>
+                {(busqueda || soloMovimiento) && (
+                  <Button
+                    onClick={() => {
+                      setBusqueda('')
+                      setSoloMovimiento(false)
+                    }}
+                  >
+                    Limpiar filtro
+                  </Button>
+                )}
+              </div>
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[760px] text-sm">
                   <caption className="sr-only">Unidades por presentación</caption>
@@ -245,14 +283,21 @@ export function LiquidacionDiariaView() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filas.map((f, i) => {
+                    {!filasVisibles.length && (
+                      <tr>
+                        <td colSpan={9} className="py-6 text-center text-sm text-muted">
+                          Ningún producto coincide con el filtro.
+                        </td>
+                      </tr>
+                    )}
+                    {filasVisibles.map(({ f, i }) => {
                       const estado = estadoFila(f)
                       const pideJustificacion = f.despachada !== null && Number(f.cargada || 0) !== f.despachada
                       return (
                         <tr key={f.producto_id} className="border-b border-line align-top">
                           <td className="py-1.5 pr-2">
                             <p className="font-medium">{f.sku}</p>
-                            <p className="text-xs text-muted">{f.nombre}</p>
+                            <p className="text-xs text-muted">{nombreConMlAlInicio(f.nombre)}</p>
                             {pideJustificacion && (
                               <input
                                 aria-label={`Justificación de lo cargado ${f.sku}`}
