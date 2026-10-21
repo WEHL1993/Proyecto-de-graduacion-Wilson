@@ -1,5 +1,9 @@
+import { useMemo, useState } from 'react'
 import type { LoadPlanItem } from '../../types'
 import { fmtInt } from '../../utils/format'
+import { coincideBusqueda, nombreConMlAlInicio } from '../../utils/productos'
+import { Button } from '../common/Button'
+import { CLASE_INPUT } from '../common/Card'
 
 export type Cantidades = Record<string, string>
 
@@ -40,97 +44,149 @@ export function LoadPlanTable({
   onSeleccionTodos,
   onCantidad,
 }: Props) {
+  const [busqueda, setBusqueda] = useState('')
+  const [soloMovimiento, setSoloMovimiento] = useState(false)
   const todos = items.length > 0 && items.every((i) => seleccion.has(i.producto_id))
+
+  // Solo oculta filas: «seleccionar todas», la aprobación y los totales siguen usando todo el plan.
+  const visibles = useMemo(
+    () =>
+      items
+        .filter((i) => coincideBusqueda(i.sku, i.producto_nombre ?? '', busqueda))
+        .filter(
+          (i) =>
+            !soloMovimiento ||
+            [i.cantidad_predicha, i.cantidad_sugerida, i.cantidad_aprobada, cantidades[i.producto_id]].some((v) => Number(v ?? 0) > 0),
+        ),
+    [items, busqueda, soloMovimiento, cantidades],
+  )
+
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[640px] text-sm">
-        <thead>
-          <tr className="border-b border-line text-left text-xs text-muted">
-            <th className="w-8 py-2">
-              <input
-                type="checkbox"
-                aria-label="Seleccionar todas las filas"
-                checked={todos}
-                disabled={!editable}
-                onChange={(e) => onSeleccionTodos(e.target.checked)}
-              />
-            </th>
-            <th className="py-2">SKU</th>
-            <th className="py-2">Producto</th>
-            <th className="py-2 text-right">Demanda predicha</th>
-            <th className="py-2 text-right">Stock disponible</th>
-            <th className="py-2 text-right">Sugerido</th>
-            <th className="py-2 text-right">Aprobado {editable && '(edit)'}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((item) => {
-            const id = item.producto_id
-            const estado = estadoStock(item)
-            const texto = cantidades[id] ?? ''
-            const error = editable && seleccion.has(id) ? errorCantidad(texto, item.stock_disponible) : null
-            const tooltip = `Demanda original: ${fmtInt(item.cantidad_predicha)} · Cantidad ajustada: ${fmtInt(item.cantidad_sugerida)}`
-            return (
-              <tr key={id} className="border-b border-line last:border-0">
-                <td className="py-2">
-                  <input
-                    type="checkbox"
-                    aria-label={`Incluir ${item.sku}`}
-                    checked={seleccion.has(id)}
-                    disabled={!editable}
-                    onChange={(e) => onSeleccion(id, e.target.checked)}
-                  />
-                </td>
-                <td className="py-2 font-mono text-xs">{item.sku}</td>
-                <td className="py-2">{item.producto_nombre ?? '—'}</td>
-                <td className="num py-2 text-right">{fmtInt(item.cantidad_predicha)}</td>
-                <td className="num py-2 text-right">
-                  {fmtInt(item.stock_disponible)}
-                  {estado === 'sin_existencia' && (
-                    <span title="Sin existencia (ver alerta de compras)" aria-label="Sin existencia" className="ml-1">
-                      ⛔
-                    </span>
-                  )}
-                </td>
-                <td className="num py-2 text-right">
-                  {fmtInt(item.cantidad_sugerida)}
-                  {estado === 'limitado' && (
-                    <span title={tooltip} aria-label={`Limitado por stock. ${tooltip}`} className="ml-1 text-warn">
-                      ⚠
-                    </span>
-                  )}
-                  {estado === 'sin_existencia' && (
-                    <span title={tooltip} className="sr-only">
-                      {tooltip}
-                    </span>
-                  )}
-                </td>
-                <td className="py-2 text-right">
-                  {editable ? (
-                    <>
-                      <input
-                        type="number"
-                        inputMode="numeric"
-                        min={0}
-                        max={Number(item.stock_disponible)}
-                        step="1"
-                        aria-label={`Cantidad aprobada de ${item.sku}`}
-                        aria-invalid={error !== null}
-                        value={texto}
-                        onChange={(e) => onCantidad(id, e.target.value)}
-                        className={`num w-24 rounded-md border bg-panel px-2 py-1 text-right ${error ? 'border-bad' : 'border-line'}`}
-                      />
-                      {error && <p className="mt-0.5 max-w-[14rem] text-xs text-bad">{error}</p>}
-                    </>
-                  ) : (
-                    <span className="num">{item.cantidad_aprobada != null ? fmtInt(item.cantidad_aprobada) : '—'}</span>
-                  )}
+    <>
+      <div className="mb-3 flex flex-wrap items-center gap-3">
+        <input
+          type="search"
+          aria-label="Buscar producto"
+          placeholder="Buscar por SKU o nombre…"
+          value={busqueda}
+          onChange={(e) => setBusqueda(e.target.value)}
+          className={`${CLASE_INPUT} w-full sm:w-80`}
+        />
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={soloMovimiento} onChange={(e) => setSoloMovimiento(e.target.checked)} />
+          Solo con movimiento
+        </label>
+        <span className="text-xs text-muted" aria-live="polite">
+          Mostrando {visibles.length} de {items.length}
+        </span>
+        {(busqueda || soloMovimiento) && (
+          <Button
+            onClick={() => {
+              setBusqueda('')
+              setSoloMovimiento(false)
+            }}
+          >
+            Limpiar filtro
+          </Button>
+        )}
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[640px] text-sm">
+          <thead>
+            <tr className="border-b border-line text-left text-xs text-muted">
+              <th className="w-8 py-2">
+                <input
+                  type="checkbox"
+                  aria-label="Seleccionar todas las filas"
+                  checked={todos}
+                  disabled={!editable}
+                  onChange={(e) => onSeleccionTodos(e.target.checked)}
+                />
+              </th>
+              <th className="py-2">SKU</th>
+              <th className="py-2">Producto</th>
+              <th className="py-2 text-right">Demanda predicha</th>
+              <th className="py-2 text-right">Stock disponible</th>
+              <th className="py-2 text-right">Sugerido</th>
+              <th className="py-2 text-right">Aprobado {editable && '(edit)'}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {!visibles.length && (
+              <tr>
+                <td colSpan={7} className="py-6 text-center text-sm text-muted">
+                  Ningún producto coincide con el filtro.
                 </td>
               </tr>
-            )
-          })}
-        </tbody>
-      </table>
-    </div>
+            )}
+            {visibles.map((item) => {
+              const id = item.producto_id
+              const estado = estadoStock(item)
+              const texto = cantidades[id] ?? ''
+              const error = editable && seleccion.has(id) ? errorCantidad(texto, item.stock_disponible) : null
+              const tooltip = `Demanda original: ${fmtInt(item.cantidad_predicha)} · Cantidad ajustada: ${fmtInt(item.cantidad_sugerida)}`
+              return (
+                <tr key={id} className="border-b border-line last:border-0">
+                  <td className="py-2">
+                    <input
+                      type="checkbox"
+                      aria-label={`Incluir ${item.sku}`}
+                      checked={seleccion.has(id)}
+                      disabled={!editable}
+                      onChange={(e) => onSeleccion(id, e.target.checked)}
+                    />
+                  </td>
+                  <td className="py-2 font-mono text-xs">{item.sku}</td>
+                  <td className="py-2">{item.producto_nombre ? nombreConMlAlInicio(item.producto_nombre) : '—'}</td>
+                  <td className="num py-2 text-right">{fmtInt(item.cantidad_predicha)}</td>
+                  <td className="num py-2 text-right">
+                    {fmtInt(item.stock_disponible)}
+                    {estado === 'sin_existencia' && (
+                      <span title="Sin existencia (ver alerta de compras)" aria-label="Sin existencia" className="ml-1">
+                        ⛔
+                      </span>
+                    )}
+                  </td>
+                  <td className="num py-2 text-right">
+                    {fmtInt(item.cantidad_sugerida)}
+                    {estado === 'limitado' && (
+                      <span title={tooltip} aria-label={`Limitado por stock. ${tooltip}`} className="ml-1 text-warn">
+                        ⚠
+                      </span>
+                    )}
+                    {estado === 'sin_existencia' && (
+                      <span title={tooltip} className="sr-only">
+                        {tooltip}
+                      </span>
+                    )}
+                  </td>
+                  <td className="py-2 text-right">
+                    {editable ? (
+                      <>
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          min={0}
+                          max={Number(item.stock_disponible)}
+                          step="1"
+                          aria-label={`Cantidad aprobada de ${item.sku}`}
+                          aria-invalid={error !== null}
+                          value={texto}
+                          onChange={(e) => onCantidad(id, e.target.value)}
+                          className={`num w-24 rounded-md border bg-panel px-2 py-1 text-right ${error ? 'border-bad' : 'border-line'}`}
+                        />
+                        {error && <p className="mt-0.5 max-w-[14rem] text-xs text-bad">{error}</p>}
+                      </>
+                    ) : (
+                      <span className="num">{item.cantidad_aprobada != null ? fmtInt(item.cantidad_aprobada) : '—'}</span>
+                    )}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </>
   )
 }

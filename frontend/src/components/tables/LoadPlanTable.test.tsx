@@ -71,4 +71,45 @@ describe('<LoadPlanTable />', () => {
     render(<LoadPlanTable {...props} editable={false} />)
     expect(screen.queryByLabelText('Cantidad aprobada de BEB-0034')).not.toBeInTheDocument()
   })
+
+  describe('filtro de productos', () => {
+    const plan = {
+      ...props,
+      items: [
+        item({ producto_id: 'p1', sku: '500003', producto_nombre: 'BIG COLA PET NO RETORNABLE 250 ML 24' }),
+        item({ producto_id: 'p2', sku: '500147', producto_nombre: 'BIG COLA PET NO RETORNABLE 2250 ML 6 pack', cantidad_predicha: '0', cantidad_sugerida: '0' }),
+        item({ producto_id: 'p3', sku: '599031', producto_nombre: 'DEPORADE UVA PET NO RETORNABLE 625 ML 8', cantidad_predicha: '0', cantidad_sugerida: '0' }),
+      ],
+      cantidades: { p1: '10', p2: '0', p3: '0' },
+    }
+    const escribir = (v: string) => fireEvent.change(screen.getByLabelText('Buscar producto'), { target: { value: v } })
+
+    it('muestra los ml al inicio del nombre, igual que la liquidación', () => {
+      render(<LoadPlanTable {...plan} editable />)
+      expect(screen.getByText('250 ML BIG COLA PET NO RETORNABLE 24')).toBeInTheDocument()
+    })
+
+    it('busca por ml y nombre sin traer coincidencias a mitad de palabra', () => {
+      render(<LoadPlanTable {...plan} editable />)
+      escribir('250 ml big cola')
+      expect(screen.getByText('Mostrando 1 de 3')).toBeInTheDocument()
+      expect(screen.queryByText('500147')).not.toBeInTheDocument()
+    })
+
+    it('«Solo con movimiento» oculta los productos sin demanda ni cantidad, y se puede limpiar', () => {
+      render(<LoadPlanTable {...plan} editable />)
+      fireEvent.click(screen.getByLabelText('Solo con movimiento'))
+      expect(screen.getByText('Mostrando 1 de 3')).toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: 'Limpiar filtro' }))
+      expect(screen.getByText('Mostrando 3 de 3')).toBeInTheDocument()
+    })
+
+    it('sin coincidencias avisa; «seleccionar todas» sigue operando sobre todo el plan', () => {
+      render(<LoadPlanTable {...plan} editable />)
+      escribir('zzz')
+      expect(screen.getByText('Ningún producto coincide con el filtro.')).toBeInTheDocument()
+      fireEvent.click(screen.getByLabelText('Seleccionar todas las filas'))
+      expect(plan.onSeleccionTodos).toHaveBeenCalledWith(true)
+    })
+  })
 })
