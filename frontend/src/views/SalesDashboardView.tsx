@@ -299,7 +299,11 @@ function PlanPanel({
             })
           }
           onSeleccionTodos={(marcado) => setSeleccion(marcado ? new Set(plan.items.map((i) => i.producto_id)) : new Set())}
-          onCantidad={(id, valor) => setCantidades((prev) => ({ ...prev, [id]: valor }))}
+          onCantidad={(id, valor) => {
+            setCantidades((prev) => ({ ...prev, [id]: valor }))
+            // Escribir una cantidad > 0 equivale a querer cargarla: se marca la fila (nunca se desmarca sola).
+            if (Number(valor.replace(',', '.')) > 0) setSeleccion((prev) => (prev.has(id) ? prev : new Set(prev).add(id)))
+          }}
         />
         <p className="mt-2 text-xs text-muted">⚠ Limitado por stock · ⛔ Sin existencia (ver alerta de compras)</p>
 
