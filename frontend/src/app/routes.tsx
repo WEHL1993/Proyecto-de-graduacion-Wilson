@@ -1,8 +1,10 @@
+import { ReceptionView } from '../views/ReceptionView'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
 import { PermissionGate } from '../components/common/PermissionGate'
 import { AccessDeniedView } from '../views/AccessDeniedView'
 import { AdminUsersView } from '../views/AdminUsersView'
+import { CambiarPasswordView } from '../views/CambiarPasswordView'
 import { EmployeesView } from '../views/EmployeesView'
 import { EtlUploadView } from '../views/EtlUploadView'
 import { InventoryView } from '../views/InventoryView'
@@ -32,6 +34,14 @@ export function AppRoutes() {
     <Routes>
       <Route path="/login" element={<LoginView />} />
       <Route
+        path="/cambiar-password"
+        element={
+          <PermissionGate guardRoute anyOf={[]}>
+            <CambiarPasswordView />
+          </PermissionGate>
+        }
+      />
+      <Route
         element={
           <PermissionGate guardRoute anyOf={[]}>
             <AppShell />
@@ -55,6 +65,7 @@ export function AppRoutes() {
             </PermissionGate>
           }
         />
+        <Route path="recepcion" element={<PermissionGate guardRoute anyOf={['inventario:ajustar']}><ReceptionView /></PermissionGate>} />
         <Route
           path="inventario"
           element={

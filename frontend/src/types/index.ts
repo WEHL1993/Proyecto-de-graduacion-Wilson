@@ -101,3 +101,6 @@ export interface ApiError {
   mensaje: string
   detalle?: Record<string, unknown>
 }
+
+export type RecepcionCreate = S['RecepcionCreate']
+export type RecepcionOut = S['RecepcionOut']

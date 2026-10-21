@@ -34,6 +34,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/auth/cambiar-password:
+    post:
+      tags:
+      - Auth
+      summary: Cambio de contraseña propia
+      description: Cualquier usuario autenticado cambia su contraseña indicando la actual. Es el paso
+        obligatorio cuando un administrador fijó una contraseña temporal.
+      operationId: cambiar_password_api_v1_auth_cambiar_password_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CambiarPasswordRequest'
+        required: true
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
   /api/v1/auth/me:
     get:
       tags:
@@ -222,7 +247,10 @@ paths:
         vigente para la ruta y fecha. `accion=enviar` (permiso `carga_ruta:generar`) pasa un `borrador`
         a `pendiente_aprobacion`. `accion=aprobar|rechazar` (permiso `carga_ruta:aprobar`) opera sobre
         `carga_id`: aprobar reserva stock y registra el kardex (400 `CANTIDAD_EXCEDE_STOCK` si una cantidad
-        excede el disponible); rechazar exige `motivo_rechazo` y libera las reservas existentes.'
+        excede el disponible); rechazar exige `motivo_rechazo` y libera las reservas existentes. `accion=revertir`
+        (permiso `carga_ruta:revertir`, solo Administrador) devuelve una carga `aprobada` a `borrador`,
+        libera sus reservas y exige `motivo_reversion`; 400 `ESTADO_CARGA_INVALIDO` si no está aprobada
+        (p. ej. ya despachada).'
       operationId: gestionar_carga_api_v1_routes_load_plans_post
       security:
       - HTTPBearer: []
@@ -1781,6 +1809,82 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/purchasing/receipts:
+    post:
+      tags:
+      - Purchasing
+      summary: Recepción de mercadería de planta central
+      description: Requiere `inventario:ajustar`. Encabezado FEL obligatorio, con o sin pedido. Un pedido
+        confirmado se cierra como recibido o recibido_parcial. Existencias, kardex y documento se guardan
+        en una sola transacción.
+      operationId: registrar_recepcion_api_v1_purchasing_receipts_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecepcionCreate'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecepcionOut'
+        '409':
+          description: 'FACTURA_DUPLICADA: UUID o serie y número ya registrados.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FacturaDuplicadaError'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/v1/purchasing/receipt-products:
+    get:
+      tags:
+      - Purchasing
+      summary: Productos activos para recibir
+      description: Requiere `inventario:ajustar`.
+      operationId: productos_recepcion_api_v1_purchasing_receipt_products_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 200
+          minimum: 1
+          default: 200
+          title: Limit
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+          title: Offset
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductoPage'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/users/roles:
     get:
       tags:
@@ -2446,10 +2550,10 @@ paths:
     get:
       tags:
       - Liquidaciones
-      summary: 'Precarga de la pantalla: carga despachada y liquidación vigente'
-      description: Requiere `liquidaciones:registrar`. Devuelve las presentaciones con la cantidad despachada
-        a la ruta ese día (editable, con justificación) y la liquidación vigente de la fecha/ruta si existe.
-        Sin carga despachada devuelve una advertencia, no un error.
+      summary: 'Precarga de la pantalla: carga aprobada y liquidación vigente'
+      description: Requiere `liquidaciones:registrar`. Devuelve las presentaciones con la cantidad aprobada
+        (o despachada) a la ruta ese día (editable, con justificación) y la liquidación vigente de la
+        fecha/ruta si existe. Sin carga aprobada devuelve una advertencia, no un error.
       operationId: precargar_api_v1_liquidaciones_precarga_get
       security:
       - HTTPBearer: []
@@ -2837,6 +2941,11 @@ components:
           - type: 'null'
           title: Pantalla Inicio
           description: Ruta a la que se entra tras iniciar sesión.
+        debe_cambiar_password:
+          type: boolean
+          title: Debe Cambiar Password
+          description: 'La contraseña es temporal: debe cambiarse antes de operar.'
+          default: false
       type: object
       required:
       - id
@@ -2893,8 +3002,9 @@ components:
           - type: number
             minimum: 0.0
           - type: string
-            pattern: ^(?!^[-+.]*$)[+-]?0*(?:\d{0,10}|(?=[\d.]{1,13}0*$)\d{0,10}\.\d{0,2}0*$)
+            pattern: ^(?!^[-+.]*$)[+-]?0*(?:\d{0,12}|(?=[\d.]{1,13}0*$)\d{0,12}\.\d{0,0}0*$)
           title: Cantidad Aprobada
+          description: Cajas completas (entero)
       type: object
       required:
       - producto_id
@@ -3150,6 +3260,23 @@ components:
       required:
       - file
       title: Body_upload_excel_api_v1_etl_upload_excel_post
+    CambiarPasswordRequest:
+      properties:
+        password_actual:
+          type: string
+          maxLength: 128
+          minLength: 8
+          title: Password Actual
+        password_nueva:
+          type: string
+          maxLength: 128
+          minLength: 8
+          title: Password Nueva
+      type: object
+      required:
+      - password_actual
+      - password_nueva
+      title: CambiarPasswordRequest
     CategoriaItem:
       properties:
         id:
@@ -3748,6 +3875,7 @@ components:
       - enviado
       - confirmado
       - recibido
+      - recibido_parcial
       - cancelado
       title: EstadoPedido
     EtlConfig:
@@ -3824,6 +3952,20 @@ components:
       - errores
       - total_errores
       title: EtlValidationError
+    FacturaDuplicadaError:
+      properties:
+        codigo:
+          type: string
+          const: FACTURA_DUPLICADA
+          title: Codigo
+          default: FACTURA_DUPLICADA
+        mensaje:
+          type: string
+          title: Mensaje
+      type: object
+      required:
+      - mensaje
+      title: FacturaDuplicadaError
     FormatoReporte:
       type: string
       enum:
@@ -4033,6 +4175,14 @@ components:
           type: string
           format: uuid
           title: Producto Id
+        saldo_anterior:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*(?:\d{0,10}|(?=[\d.]{1,13}0*$)\d{0,10}\.\d{0,2}0*$)
+          title: Saldo Anterior
+          default: '0'
         cantidad_cargada:
           anyOf:
           - type: number
@@ -4099,6 +4249,11 @@ components:
         producto_nombre:
           type: string
           title: Producto Nombre
+        saldo_anterior:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Saldo Anterior
+          default: '0'
         cantidad_cargada:
           type: string
           pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
@@ -4127,6 +4282,10 @@ components:
         producto_nombre:
           type: string
           title: Producto Nombre
+        saldo_anterior:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Saldo Anterior
         cantidad_cargada:
           type: string
           pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
@@ -4171,6 +4330,7 @@ components:
       - producto_id
       - sku
       - producto_nombre
+      - saldo_anterior
       - cantidad_cargada
       - cantidad_vendida
       - cantidad_devuelta
@@ -4475,6 +4635,7 @@ components:
           - enviar
           - aprobar
           - rechazar
+          - revertir
           title: Accion
         ruta_id:
           anyOf:
@@ -4496,7 +4657,7 @@ components:
             format: uuid
           - type: 'null'
           title: Carga Id
-          description: Obligatorio si accion=enviar|aprobar|rechazar
+          description: Obligatorio si accion=enviar|aprobar|rechazar|revertir
         ajustes:
           anyOf:
           - items:
@@ -4511,6 +4672,12 @@ components:
           - type: 'null'
           title: Motivo Rechazo
           description: Obligatorio si accion=rechazar
+        motivo_reversion:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Motivo Reversion
+          description: Obligatorio si accion=revertir
         observaciones:
           anyOf:
           - type: string
@@ -5603,11 +5770,186 @@ components:
       - desde
       - hasta
       title: RangoFechas
+    RecepcionCreate:
+      properties:
+        serie:
+          type: string
+          maxLength: 50
+          minLength: 1
+          pattern: \S
+          title: Serie
+        numero:
+          type: string
+          maxLength: 50
+          minLength: 1
+          pattern: ^[0-9]+$
+          title: Numero
+        numero_autorizacion:
+          type: string
+          format: uuid
+          title: Numero Autorizacion
+        fecha_emision:
+          type: string
+          format: date
+          title: Fecha Emision
+        condicion_pago:
+          anyOf:
+          - type: string
+            maxLength: 150
+          - type: 'null'
+          title: Condicion Pago
+        serie_admin:
+          anyOf:
+          - type: string
+            maxLength: 50
+          - type: 'null'
+          title: Serie Admin
+        numero_admin:
+          anyOf:
+          - type: string
+            maxLength: 50
+          - type: 'null'
+          title: Numero Admin
+        pedido_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Pedido Id
+        items:
+          items:
+            $ref: '#/components/schemas/RecepcionItemIn-Input'
+          type: array
+          maxItems: 200
+          minItems: 1
+          title: Items
+      type: object
+      required:
+      - serie
+      - numero
+      - numero_autorizacion
+      - fecha_emision
+      - items
+      title: RecepcionCreate
+    RecepcionItemIn-Input:
+      properties:
+        producto_id:
+          type: string
+          format: uuid
+          title: Producto Id
+        cantidad_recibida:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*(?:\d{0,10}|(?=[\d.]{1,13}0*$)\d{0,10}\.\d{0,2}0*$)
+          title: Cantidad Recibida
+        observacion:
+          type: string
+          maxLength: 300
+          title: Observacion
+          default: ''
+      type: object
+      required:
+      - producto_id
+      - cantidad_recibida
+      title: RecepcionItemIn
+    RecepcionItemIn-Output:
+      properties:
+        producto_id:
+          type: string
+          format: uuid
+          title: Producto Id
+        cantidad_recibida:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*(?:\d{0,10}|(?=[\d.]{1,13}0*$)\d{0,10}\.\d{0,2}0*$)
+          title: Cantidad Recibida
+        observacion:
+          type: string
+          maxLength: 300
+          title: Observacion
+          default: ''
+      type: object
+      required:
+      - producto_id
+      - cantidad_recibida
+      title: RecepcionItemIn
+    RecepcionOut:
+      properties:
+        serie:
+          type: string
+          maxLength: 50
+          minLength: 1
+          pattern: \S
+          title: Serie
+        numero:
+          type: string
+          maxLength: 50
+          minLength: 1
+          pattern: ^[0-9]+$
+          title: Numero
+        numero_autorizacion:
+          type: string
+          format: uuid
+          title: Numero Autorizacion
+        fecha_emision:
+          type: string
+          format: date
+          title: Fecha Emision
+        condicion_pago:
+          anyOf:
+          - type: string
+            maxLength: 150
+          - type: 'null'
+          title: Condicion Pago
+        serie_admin:
+          anyOf:
+          - type: string
+            maxLength: 50
+          - type: 'null'
+          title: Serie Admin
+        numero_admin:
+          anyOf:
+          - type: string
+            maxLength: 50
+          - type: 'null'
+          title: Numero Admin
+        id:
+          type: string
+          format: uuid
+          title: Id
+        pedido_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Pedido Id
+        estado_pedido:
+          anyOf:
+          - $ref: '#/components/schemas/EstadoPedido'
+          - type: 'null'
+        items:
+          items:
+            $ref: '#/components/schemas/RecepcionItemIn-Output'
+          type: array
+          title: Items
+      type: object
+      required:
+      - serie
+      - numero
+      - numero_autorizacion
+      - fecha_emision
+      - id
+      - pedido_id
+      - estado_pedido
+      - items
+      title: RecepcionOut
     ReferenciaTipo:
       type: string
       enum:
       - carga_ruta
       - pedido
+      - recepcion
       - ajuste
       - etl
       title: ReferenciaTipo
@@ -6176,6 +6518,9 @@ components:
         bajo_minimo:
           type: boolean
           title: Bajo Minimo
+        sin_stock:
+          type: boolean
+          title: Sin Stock
       type: object
       required:
       - producto_id
@@ -6186,6 +6531,7 @@ components:
       - stock_disponible
       - stock_minimo
       - bajo_minimo
+      - sin_stock
       title: StockItem
     StockPage:
       properties:
@@ -6439,6 +6785,10 @@ components:
         activo:
           type: boolean
           title: Activo
+        debe_cambiar_password:
+          type: boolean
+          title: Debe Cambiar Password
+          default: false
         roles:
           items:
             type: string
@@ -6520,6 +6870,10 @@ components:
           - type: string
           - type: 'null'
           title: Pantalla Inicio
+        debe_cambiar_password:
+          type: boolean
+          title: Debe Cambiar Password
+          default: false
       type: object
       required:
       - id

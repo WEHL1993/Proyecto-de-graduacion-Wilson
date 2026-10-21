@@ -21,6 +21,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/cambiar-password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cambio de contraseña propia
+         * @description Cualquier usuario autenticado cambia su contraseña indicando la actual. Es el paso obligatorio cuando un administrador fijó una contraseña temporal.
+         */
+        post: operations["cambiar_password_api_v1_auth_cambiar_password_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/me": {
         parameters: {
             query?: never;
@@ -873,6 +893,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/purchasing/receipts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Recepción de mercadería de planta central
+         * @description Requiere `inventario:ajustar`. Encabezado FEL obligatorio, con o sin pedido. Un pedido confirmado se cierra como recibido o recibido_parcial. Existencias, kardex y documento se guardan en una sola transacción.
+         */
+        post: operations["registrar_recepcion_api_v1_purchasing_receipts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/purchasing/receipt-products": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Productos activos para recibir
+         * @description Requiere `inventario:ajustar`.
+         */
+        get: operations["productos_recepcion_api_v1_purchasing_receipt_products_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/users/roles": {
         parameters: {
             query?: never;
@@ -1146,8 +1206,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Precarga de la pantalla: carga despachada y liquidación vigente
-         * @description Requiere `liquidaciones:registrar`. Devuelve las presentaciones con la cantidad despachada a la ruta ese día (editable, con justificación) y la liquidación vigente de la fecha/ruta si existe. Sin carga despachada devuelve una advertencia, no un error.
+         * Precarga de la pantalla: carga aprobada y liquidación vigente
+         * @description Requiere `liquidaciones:registrar`. Devuelve las presentaciones con la cantidad aprobada (o despachada) a la ruta ese día (editable, con justificación) y la liquidación vigente de la fecha/ruta si existe. Sin carga aprobada devuelve una advertencia, no un error.
          */
         get: operations["precargar_api_v1_liquidaciones_precarga_get"];
         put?: never;
@@ -1329,6 +1389,12 @@ export interface components {
              * @description Ruta a la que se entra tras iniciar sesión.
              */
             pantalla_inicio?: string | null;
+            /**
+             * Debe Cambiar Password
+             * @description La contraseña es temporal: debe cambiarse antes de operar.
+             * @default false
+             */
+            debe_cambiar_password: boolean;
         };
         /** AccesoUsuario */
         AccesoUsuario: {
@@ -1355,7 +1421,10 @@ export interface components {
              * Format: uuid
              */
             producto_id: string;
-            /** Cantidad Aprobada */
+            /**
+             * Cantidad Aprobada
+             * @description Cajas completas (entero)
+             */
             cantidad_aprobada: number | string;
         };
         /**
@@ -1484,6 +1553,13 @@ export interface components {
              * @description YYYY-MM. Solo formato ancho; por defecto se infiere del nombre del archivo
              */
             periodo?: string | null;
+        };
+        /** CambiarPasswordRequest */
+        CambiarPasswordRequest: {
+            /** Password Actual */
+            password_actual: string;
+            /** Password Nueva */
+            password_nueva: string;
         };
         /** CategoriaItem */
         CategoriaItem: {
@@ -1812,7 +1888,7 @@ export interface components {
          * EstadoPedido
          * @enum {string}
          */
-        EstadoPedido: "borrador" | "enviado" | "confirmado" | "recibido" | "cancelado";
+        EstadoPedido: "borrador" | "enviado" | "confirmado" | "recibido" | "recibido_parcial" | "cancelado";
         /**
          * EtlConfig
          * @description Política de datos del modelo (ADR-14).
@@ -1856,6 +1932,17 @@ export interface components {
             errores: components["schemas"]["ErrorFila"][];
             /** Total Errores */
             total_errores: number;
+        };
+        /** FacturaDuplicadaError */
+        FacturaDuplicadaError: {
+            /**
+             * Codigo
+             * @default FACTURA_DUPLICADA
+             * @constant
+             */
+            codigo: "FACTURA_DUPLICADA";
+            /** Mensaje */
+            mensaje: string;
         };
         /**
          * FormatoReporte
@@ -1976,6 +2063,11 @@ export interface components {
              * Format: uuid
              */
             producto_id: string;
+            /**
+             * Saldo Anterior
+             * @default 0
+             */
+            saldo_anterior: number | string;
             /** Cantidad Cargada */
             cantidad_cargada: number | string;
             /** Cantidad Vendida */
@@ -2011,6 +2103,11 @@ export interface components {
             sku: string;
             /** Producto Nombre */
             producto_nombre: string;
+            /**
+             * Saldo Anterior
+             * @default 0
+             */
+            saldo_anterior: string;
             /** Cantidad Cargada */
             cantidad_cargada: string;
             /** Precio Unitario */
@@ -2027,6 +2124,8 @@ export interface components {
             sku: string;
             /** Producto Nombre */
             producto_nombre: string;
+            /** Saldo Anterior */
+            saldo_anterior: string;
             /** Cantidad Cargada */
             cantidad_cargada: string;
             /** Cantidad Vendida */
@@ -2213,7 +2312,7 @@ export interface components {
              * Accion
              * @enum {string}
              */
-            accion: "generar" | "enviar" | "aprobar" | "rechazar";
+            accion: "generar" | "enviar" | "aprobar" | "rechazar" | "revertir";
             /**
              * Ruta Id
              * @description Obligatorio si accion=generar
@@ -2239,6 +2338,11 @@ export interface components {
              * @description Obligatorio si accion=rechazar
              */
             motivo_rechazo?: string | null;
+            /**
+             * Motivo Reversion
+             * @description Obligatorio si accion=revertir
+             */
+            motivo_reversion?: string | null;
             /** Observaciones */
             observaciones?: string | null;
         };
@@ -2864,11 +2968,101 @@ export interface components {
              */
             hasta: string;
         };
+        /** RecepcionCreate */
+        RecepcionCreate: {
+            /** Serie */
+            serie: string;
+            /** Numero */
+            numero: string;
+            /**
+             * Numero Autorizacion
+             * Format: uuid
+             */
+            numero_autorizacion: string;
+            /**
+             * Fecha Emision
+             * Format: date
+             */
+            fecha_emision: string;
+            /** Condicion Pago */
+            condicion_pago?: string | null;
+            /** Serie Admin */
+            serie_admin?: string | null;
+            /** Numero Admin */
+            numero_admin?: string | null;
+            /** Pedido Id */
+            pedido_id?: string | null;
+            /** Items */
+            items: components["schemas"]["RecepcionItemIn-Input"][];
+        };
+        /** RecepcionItemIn */
+        "RecepcionItemIn-Input": {
+            /**
+             * Producto Id
+             * Format: uuid
+             */
+            producto_id: string;
+            /** Cantidad Recibida */
+            cantidad_recibida: number | string;
+            /**
+             * Observacion
+             * @default
+             */
+            observacion: string;
+        };
+        /** RecepcionItemIn */
+        "RecepcionItemIn-Output": {
+            /**
+             * Producto Id
+             * Format: uuid
+             */
+            producto_id: string;
+            /** Cantidad Recibida */
+            cantidad_recibida: string;
+            /**
+             * Observacion
+             * @default
+             */
+            observacion: string;
+        };
+        /** RecepcionOut */
+        RecepcionOut: {
+            /** Serie */
+            serie: string;
+            /** Numero */
+            numero: string;
+            /**
+             * Numero Autorizacion
+             * Format: uuid
+             */
+            numero_autorizacion: string;
+            /**
+             * Fecha Emision
+             * Format: date
+             */
+            fecha_emision: string;
+            /** Condicion Pago */
+            condicion_pago?: string | null;
+            /** Serie Admin */
+            serie_admin?: string | null;
+            /** Numero Admin */
+            numero_admin?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Pedido Id */
+            pedido_id: string | null;
+            estado_pedido: components["schemas"]["EstadoPedido"] | null;
+            /** Items */
+            items: components["schemas"]["RecepcionItemIn-Output"][];
+        };
         /**
          * ReferenciaTipo
          * @enum {string}
          */
-        ReferenciaTipo: "carga_ruta" | "pedido" | "ajuste" | "etl";
+        ReferenciaTipo: "carga_ruta" | "pedido" | "recepcion" | "ajuste" | "etl";
         /**
          * ResumenMetricas
          * @description Valores del periodo más reciente de la serie (KPI del panel).
@@ -3194,6 +3388,8 @@ export interface components {
             stock_minimo: string;
             /** Bajo Minimo */
             bajo_minimo: boolean;
+            /** Sin Stock */
+            sin_stock: boolean;
         };
         /** StockPage */
         StockPage: {
@@ -3359,6 +3555,11 @@ export interface components {
             nombre_completo: string;
             /** Activo */
             activo: boolean;
+            /**
+             * Debe Cambiar Password
+             * @default false
+             */
+            debe_cambiar_password: boolean;
             /** Roles */
             roles: string[];
             /** Rutas */
@@ -3400,6 +3601,11 @@ export interface components {
             menu: components["schemas"]["PantallaMenu"][];
             /** Pantalla Inicio */
             pantalla_inicio?: string | null;
+            /**
+             * Debe Cambiar Password
+             * @default false
+             */
+            debe_cambiar_password: boolean;
         };
         /**
          * UsuarioUpdate
@@ -3511,6 +3717,37 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["TokenResponse"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cambiar_password_api_v1_auth_cambiar_password_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CambiarPasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -5131,6 +5368,80 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PedidoOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    registrar_recepcion_api_v1_purchasing_receipts_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecepcionCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecepcionOut"];
+                };
+            };
+            /** @description FACTURA_DUPLICADA: UUID o serie y número ya registrados. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FacturaDuplicadaError"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    productos_recepcion_api_v1_purchasing_receipt_products_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductoPage"];
                 };
             };
             /** @description Validation Error */
