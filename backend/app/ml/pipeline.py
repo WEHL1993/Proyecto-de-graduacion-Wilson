@@ -132,6 +132,14 @@ def entrenar_y_evaluar(
     modelo_h, prep_h = _ajustar(algoritmo, hp, entrenamiento)
     prep_h.residuo_q_inferior, prep_h.residuo_q_superior = float(q_inf), float(q_sup)
     historial = ventas[ventas["fecha"] <= corte]
+    # Las series que nacen cerca del corte no tienen rezagos para predecir: se evalúan solo
+    # las que ya tienen la historia mínima (siguen entrenando con los días que sí tienen).
+    dias_serie = (corte - historial.groupby(COL_SERIE)["fecha"].transform("min")).dt.days + 1
+    cortas = historial.loc[dias_serie < HISTORIA_MINIMA_DIAS, COL_SERIE]
+    n_series_sin_historia = len(cortas.drop_duplicates())
+    historial = historial[dias_serie >= HISTORIA_MINIMA_DIAS]
+    if historial.empty:
+        raise DatosInsuficientes("Ninguna serie tiene historia suficiente para el holdout.")
     puntos = PredictorDemanda(modelo_h, prep_h).predecir(
         historial, corte.date(), cfg.horizonte_holdout, cobertura=cobertura
     )
@@ -146,6 +154,7 @@ def entrenar_y_evaluar(
         "ventana": {"desde": desde, "hasta": hasta},
         "n_filas_entrenamiento": len(dataset),
         "n_series": len(prep.codigos_serie),
+        "n_series_fuera_del_holdout": n_series_sin_historia,
         "con_cobertura": cobertura is not None,
         "n_observaciones_censuradas": n_censuradas,
         "peso_observacion_censurada": PESO_OBSERVACION_CENSURADA,
