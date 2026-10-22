@@ -370,6 +370,8 @@ def _leer_ancho(
                 cantidad = parsear_decimal(valor)
                 if valor is None or cantidad == 0 or (isinstance(valor, str) and not valor.strip()):
                     continue
+                if dia > dias_del_mes:  # plantilla con columnas de más (p. ej. día 31 en 30 días)
+                    continue
                 lectura.filas_totales += 1
                 columna = f"ventas {dia:02d}"
                 categoria, mensaje = None, None
@@ -377,9 +379,6 @@ def _leer_ancho(
                     categoria, mensaje = CodigoErrorEtl.TIPOS_INVALIDOS, "Cantidad no numérica."
                 elif cantidad < 0 or cantidad >= _LIMITE_CANTIDAD:
                     categoria, mensaje = CodigoErrorEtl.DATOS_INVALIDOS, "Cantidad fuera de rango."
-                elif dia > dias_del_mes:
-                    categoria = CodigoErrorEtl.DATOS_INVALIDOS
-                    mensaje = f"El día {dia:02d} no existe en {periodo}."
                 elif precio is None or precio < 0 or precio >= _LIMITE_MONTO:
                     categoria, mensaje = (
                         CodigoErrorEtl.DATOS_INVALIDOS,

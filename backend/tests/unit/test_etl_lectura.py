@@ -135,12 +135,12 @@ def test_ancho_genera_un_registro_por_dia_con_venta_y_omite_metadatos():
     assert any("clientes" in a for a in lectura.advertencias)
 
 
-def test_ancho_dia_inexistente_en_el_mes_es_error():
+def test_ancho_dia_inexistente_en_el_mes_se_ignora():
     contenido = _xlsx({"Cornelio": _hoja_ancha()})
     lectura = leer_excel(contenido, nombre_archivo="ventas.xlsx", periodo="2025-04")
-    (error,) = lectura.errores
-    assert (error.hoja, error.fila, error.columna) == ("Cornelio", 2, "ventas 31")
+    assert lectura.errores == []
     assert len(lectura.filas) == 2
+    assert lectura.filas_totales == 2
 
 
 def test_ancho_sin_periodo_deducible_pide_el_campo():
