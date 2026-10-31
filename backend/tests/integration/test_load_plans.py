@@ -248,6 +248,30 @@ def test_generar_incluye_todo_el_catalogo_activo_con_demanda_cero_sin_historial(
     assert extra.id not in solicitud.producto_ids
 
 
+def test_producto_con_historia_corta_entra_con_demanda_cero_sin_bloquear_el_plan(
+    entorno, monkeypatch
+):
+    e = entorno
+    pronosticar = load_plan_service.prediction_service.predecir_demanda
+
+    def con_serie_corta(db, solicitud):
+        if e.b.id in solicitud.producto_ids:
+            raise AppError(
+                "HISTORIAL_INSUFICIENTE",
+                "No hay historial de ventas suficiente para pronosticar los productos indicados.",
+                detalle={"producto_ids": [str(e.b.id)], "dias_minimos": 28},
+            )
+        return pronosticar(db, solicitud)
+
+    monkeypatch.setattr(load_plan_service.prediction_service, "predecir_demanda", con_serie_corta)
+    r = _generar(e)
+    assert r.status_code == 200, r.text
+    items = _items(r.json())
+    assert items[e.a.sku]["cantidad_predicha"] == "210.00"
+    assert items[e.b.sku]["cantidad_predicha"] == items[e.b.sku]["cantidad_sugerida"] == "0.00"
+    assert e.b.id not in e.solicitudes[-1].producto_ids  # se reintentó sin el producto corto
+
+
 def test_items_del_plan_van_de_mayor_a_menor_rotacion_y_sin_movimiento_al_final(entorno):
     cuerpo = _generar(entorno).json()
     demandas = [Decimal(i["cantidad_predicha"]) for i in cuerpo["items"]]

@@ -108,26 +108,44 @@ def generar(db: Session, solicitud: LoadPlanRequest, usuario_id: uuid.UUID) -> L
 def _predecir_demanda(
     db: Session, producto_ids: list[uuid.UUID], ruta_id: uuid.UUID, fecha_operacion: date
 ) -> tuple[uuid.UUID, dict[uuid.UUID, Decimal]]:
-    """Demanda de `fecha_operacion` por producto: horizonte 1 desde el día anterior."""
+    """Demanda de `fecha_operacion` por producto: horizonte 1 desde el día anterior.
+
+    Los productos con historia insuficiente en la ruta (series cortas, p. ej. recién vendidos)
+    no pronostican: quedan fuera de `demanda` y entran al plan con demanda 0, sin bloquearlo."""
     demanda: dict[uuid.UUID, Decimal] = {}
     modelo_id: uuid.UUID | None = None
     for i in range(0, len(producto_ids), _MAX_PRODUCTOS_POR_PREDICCION):
-        respuesta = prediction_service.predecir_demanda(
-            db,
-            DemandRequest(
-                producto_ids=producto_ids[i : i + _MAX_PRODUCTOS_POR_PREDICCION],
-                ruta_id=ruta_id,
-                fecha_base=fecha_operacion - timedelta(days=1),
-                horizonte_dias=1,
-                incluir_intervalo=False,
-                persistir=True,  # alimenta el monitoreo de degradación (evaluate_production)
-            ),
-        )
+        lote = producto_ids[i : i + _MAX_PRODUCTOS_POR_PREDICCION]
+        respuesta = None
+        while lote and respuesta is None:
+            try:
+                respuesta = prediction_service.predecir_demanda(
+                    db,
+                    DemandRequest(
+                        producto_ids=lote,
+                        ruta_id=ruta_id,
+                        fecha_base=fecha_operacion - timedelta(days=1),
+                        horizonte_dias=1,
+                        incluir_intervalo=False,
+                        persistir=True,  # alimenta el monitoreo de degradación
+                    ),
+                )
+            except AppError as exc:
+                cortos = {uuid.UUID(p) for p in (exc.detalle or {}).get("producto_ids", [])}
+                if exc.codigo != "HISTORIAL_INSUFICIENTE" or not (cortos & set(lote)):
+                    raise
+                lote = [p for p in lote if p not in cortos]
+        if respuesta is None:  # todo el lote era demasiado corto
+            continue
         modelo_id = respuesta.modelo.id
         for pron in respuesta.pronosticos:
             valor = Decimal(str(pron.serie[0].demanda_predicha))
             demanda[pron.producto_id] = max(Decimal(0), valor).quantize(_UNIDAD, rounding=ROUND_HALF_UP)
-    assert modelo_id is not None
+    if modelo_id is None:  # ningún producto de la ruta alcanza la historia mínima
+        raise AppError(
+            "HISTORIAL_INSUFICIENTE",
+            "No hay historial de ventas suficiente para pronosticar los productos indicados.",
+        )
     return modelo_id, demanda
 
 
