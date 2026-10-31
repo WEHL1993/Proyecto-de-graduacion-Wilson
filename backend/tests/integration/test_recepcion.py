@@ -43,7 +43,12 @@ def solicitud(e, pedido_id=None, cantidades=("80", "10.5")):
         "serie_admin": "FEL14",
         "numero_admin": "77058",
         "items": [
-            {"producto_id": str(p.id), "cantidad_recibida": q, "observacion": "Caja revisada"}
+            {
+                "producto_id": str(p.id),
+                "cantidad_recibida": q,
+                "precio_unitario": "30.0000",
+                "observacion": "Caja revisada",
+            }
             for p, q in zip((e.a, e.b), cantidades, strict=True)
         ],
     }
@@ -80,6 +85,7 @@ def test_recepcion_actualiza_stock_documento_y_estado(entorno, cantidades, estad
     assert len(_kardex(e, e.b)) == (1 if Decimal(cantidades[1]) > 0 else 0)
     doc = e.db.get(RecepcionMercaderia, uuid.UUID(r.json()["id"]))
     assert doc.items[1]["observacion"] == "Caja revisada"
+    assert Decimal(doc.items[1]["precio_unitario"]) == Decimal("30")
     assert doc.serie == "1FEF6CC7"
     assert doc.condicion_pago == "Crédito a 3 días"
     assert (doc.serie_admin, doc.numero_admin) == ("FEL14", "77058")
@@ -180,12 +186,24 @@ def test_factura_duplicada_es_409_y_no_duplica_stock(entorno, clave):
     assert e.db.scalar(select(func.count()).select_from(RecepcionMercaderia)) == 1
 
 
+def test_recepcion_sin_uuid_se_registra_y_se_deduplica_por_serie_y_numero(entorno):
+    e = entorno
+    body = solicitud(e)
+    body.pop("numero_autorizacion")
+    r1 = e.client.post(f"{BASE}/receipts", headers=e.bodega, json=body)
+    assert r1.status_code == 201, r1.text
+    assert r1.json()["numero_autorizacion"] is None
+    r2 = e.client.post(f"{BASE}/receipts", headers=e.bodega, json=body)
+    assert r2.status_code == 409 and r2.json()["codigo"] == "FACTURA_DUPLICADA"
+    otra = {**body, "numero": "999"}
+    assert e.client.post(f"{BASE}/receipts", headers=e.bodega, json=otra).status_code == 201
+
+
 @pytest.mark.parametrize(
     "campo,valor",
     [
         ("serie", None),
         ("numero", None),
-        ("numero_autorizacion", None),
         ("fecha_emision", None),
         ("numero", "ABC"),
         ("numero_autorizacion", "no-es-uuid"),

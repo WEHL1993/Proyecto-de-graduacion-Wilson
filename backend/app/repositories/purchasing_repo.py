@@ -77,13 +77,16 @@ def productos_de(db: Session, producto_ids: set[uuid.UUID]) -> dict[uuid.UUID, P
 
 def productos_reabastecibles(
     db: Session,
-) -> Sequence[tuple[Producto, Proveedor, Inventario | None]]:
-    """Productos activos con proveedor activo, con su existencia (sin fila = stock 0)."""
+) -> Sequence[tuple[Producto, Proveedor | None, Inventario | None]]:
+    """Productos activos con su proveedor (`None` si no tiene o está inactivo) y su existencia
+    (sin fila = stock 0)."""
     stmt = (
         select(Producto, Proveedor, Inventario)
-        .join(Proveedor, Producto.proveedor_id == Proveedor.id)
+        .outerjoin(
+            Proveedor, (Producto.proveedor_id == Proveedor.id) & Proveedor.activo.is_(True)
+        )
         .outerjoin(Inventario, Inventario.producto_id == Producto.id)
-        .where(Producto.activo.is_(True), Proveedor.activo.is_(True))
-        .order_by(Proveedor.nombre, Producto.sku)
+        .where(Producto.activo.is_(True))
+        .order_by(Proveedor.nombre.nulls_last(), Producto.sku)
     )
     return [(p, prov, inv) for p, prov, inv in db.execute(stmt).all()]

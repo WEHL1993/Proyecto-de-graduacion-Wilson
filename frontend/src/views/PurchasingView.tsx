@@ -14,9 +14,10 @@ const ETAPAS: EstadoPedido[] = ['borrador', 'enviado', 'confirmado', 'recibido']
 const ESTADOS_FILTRO: (EstadoPedido | '')[] = ['', 'borrador', 'enviado', 'confirmado', 'recibido', 'recibido_parcial', 'cancelado']
 
 export interface GrupoProveedor {
-  proveedorId: string
+  /** `null`: productos sin proveedor, que se muestran pero no se pueden pedir. */
+  proveedorId: string | null
   nombre: string
-  leadTimeDias: number
+  leadTimeDias: number | null
   filas: SugerenciaCompra[]
 }
 
@@ -24,16 +25,18 @@ export interface GrupoProveedor {
 export function agruparPorProveedor(sugerencias: SugerenciaCompra[]): GrupoProveedor[] {
   const grupos = new Map<string, GrupoProveedor>()
   for (const s of sugerencias) {
-    const g = grupos.get(s.proveedor_id) ?? {
-      proveedorId: s.proveedor_id,
-      nombre: s.proveedor_nombre,
-      leadTimeDias: s.lead_time_dias,
+    const clave = s.proveedor_id ?? ''
+    const g = grupos.get(clave) ?? {
+      proveedorId: s.proveedor_id ?? null,
+      nombre: s.proveedor_nombre ?? 'Sin proveedor asignado',
+      leadTimeDias: s.lead_time_dias ?? null,
       filas: [],
     }
     g.filas.push(s)
-    grupos.set(s.proveedor_id, g)
+    grupos.set(clave, g)
   }
-  return [...grupos.values()]
+  // Los productos sin proveedor van primero: son los que requieren acción antes de poder pedirse.
+  return [...grupos.values()].sort((a, b) => Number(b.proveedorId === null) - Number(a.proveedorId === null))
 }
 
 /** Cantidad de una línea de orden: número > 0 con hasta 2 decimales. */
@@ -91,7 +94,7 @@ function Sugerencias({
       }
     >
       <p className="mb-3 text-xs text-muted">
-        Cantidad a pedir = máx(0, (demanda proyectada + stock mínimo) − stock actual).
+        Cantidad a pedir = máx(0, (demanda proyectada + stock mínimo) − stock disponible).
       </p>
       {sugerencias.isPending && <Cargando texto="Calculando sugerencias…" />}
       {sugerencias.isError && <AlertBanner>{mensajeError(sugerencias.error)}</AlertBanner>}
@@ -108,10 +111,53 @@ function Sugerencias({
       )}
       <div className="space-y-4">
         {grupos.map((g) => (
-          <GrupoOrden key={`${g.proveedorId}-${horizonte}`} grupo={g} onCreado={onCreado} />
+          g.proveedorId === null ? (
+            <GrupoSinProveedor key="sin-proveedor" grupo={g} />
+          ) : (
+            <GrupoOrden key={`${g.proveedorId}-${horizonte}`} grupo={g} onCreado={onCreado} />
+          )
         ))}
       </div>
     </Card>
+  )
+}
+
+function GrupoSinProveedor({ grupo }: { grupo: GrupoProveedor }) {
+  return (
+    <section aria-label="Sugerencias sin proveedor" className="rounded-md border border-warn">
+      <header className="border-b border-line bg-surface px-3 py-2">
+        <h3 className="text-sm font-semibold">Sin proveedor asignado ({grupo.filas.length})</h3>
+        <p className="text-xs text-muted">
+          Tienen faltante, pero no se pueden pedir hasta asignarles un proveedor en el catálogo.
+        </p>
+      </header>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[520px] text-sm">
+          <thead>
+            <tr className="border-b border-line text-left text-xs text-muted">
+              <th className="px-3 py-2">Producto</th>
+              <th className="py-2 text-right">Stock disp.</th>
+              <th className="py-2 text-right">Mínimo</th>
+              <th className="py-2 text-right">Demanda proy.</th>
+              <th className="px-3 py-2 text-right">Faltante</th>
+            </tr>
+          </thead>
+          <tbody>
+            {grupo.filas.map((f) => (
+              <tr key={f.producto_id} className="border-b border-line last:border-0">
+                <td className="px-3 py-2">
+                  {f.nombre} <span className="font-mono text-xs text-muted">{f.sku}</span>
+                </td>
+                <td className="num py-2 text-right">{fmtInt(f.stock_actual)}</td>
+                <td className="num py-2 text-right">{fmtInt(f.stock_minimo)}</td>
+                <td className="num py-2 text-right">{fmtInt(f.demanda_proyectada)}</td>
+                <td className="num px-3 py-2 text-right font-medium">{fmtInt(f.cantidad_sugerida)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
   )
 }
 
@@ -121,7 +167,7 @@ function GrupoOrden({ grupo, onCreado }: { grupo: GrupoProveedor; onCreado: (msg
   const [cantidades, setCantidades] = useState<Record<string, string>>(
     Object.fromEntries(grupo.filas.map((f) => [f.producto_id, String(f.cantidad_sugerida)])),
   )
-  const [fechaEsperada, setFechaEsperada] = useState(sumarDias(hoyISO(), grupo.leadTimeDias))
+  const [fechaEsperada, setFechaEsperada] = useState(sumarDias(hoyISO(), grupo.leadTimeDias ?? 0))
 
   const elegidas = grupo.filas.filter((f) => seleccion.has(f.producto_id))
   const invalidas = elegidas.some((f) => !cantidadValida(cantidades[f.producto_id] ?? ''))
@@ -133,7 +179,7 @@ function GrupoOrden({ grupo, onCreado }: { grupo: GrupoProveedor; onCreado: (msg
   const generar = (enviar: boolean) =>
     crear.mutate(
       {
-        proveedor_id: grupo.proveedorId,
+        proveedor_id: grupo.proveedorId as string,
         fecha_esperada: fechaEsperada || null,
         enviar,
         items: elegidas.map((f) => ({ producto_id: f.producto_id, cantidad: cantidades[f.producto_id] })),
@@ -163,7 +209,7 @@ function GrupoOrden({ grupo, onCreado }: { grupo: GrupoProveedor; onCreado: (msg
             <tr className="border-b border-line text-left text-xs text-muted">
               <th className="w-8 px-3 py-2" />
               <th className="py-2">Producto</th>
-              <th className="py-2 text-right">Stock actual</th>
+              <th className="py-2 text-right">Stock disp.</th>
               <th className="py-2 text-right">Mínimo</th>
               <th className="py-2 text-right">Demanda proy.</th>
               <th className="py-2 text-right">Sugerida</th>

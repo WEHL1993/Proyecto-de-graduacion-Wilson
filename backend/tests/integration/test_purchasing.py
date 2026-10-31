@@ -199,11 +199,12 @@ def test_sugerencias_cruzan_demanda_stock_y_punto_de_reorden(entorno):
     r = e.client.get(f"{BASE}/suggestions", params={"horizonte_dias": 5}, headers=e.compras)
     assert r.status_code == 200, r.text
     cuerpo = r.json()
-    assert cuerpo["horizonte_dias"] == 5 and cuerpo["advertencias"] == []
+    assert cuerpo["horizonte_dias"] == 5
+    assert len(cuerpo["advertencias"]) == 2  # D: sin historial y sin proveedor
 
     por_sku = {s["sku"]: s for s in cuerpo["sugerencias"]}
-    # A: (70 + 30) - 20 = 80 ; C: (12.5 → 13 + 5) - 0 = 18 (paquetes enteros) ; B (500 ≥ 110) y D (sin proveedor) no.
-    assert set(por_sku) == {e.a.sku, e.c.sku}
+    # A: (70 + 30) - 20 = 80 ; C: (12.5 → 13 + 5) - 0 = 18 (paquetes enteros) ; D (sin pronóstico): 5 - 0 = 5 ; B (500 ≥ 110) no.
+    assert set(por_sku) == {e.a.sku, e.c.sku, e.d.sku}
     sa = por_sku[e.a.sku]
     assert sa["cantidad_sugerida"] == "80.00" and sa["demanda_proyectada"] == "70.00"
     assert (sa["proveedor_nombre"], sa["lead_time_dias"]) == ("Proveedor A", 3)
@@ -214,8 +215,21 @@ def test_sugerencias_cruzan_demanda_stock_y_punto_de_reorden(entorno):
         "0.00",
         7,
     )
+    sd = por_sku[e.d.sku]  # sin proveedor: se sugiere, pero no se puede pedir
+    assert (sd["proveedor_id"], sd["proveedor_nombre"], sd["lead_time_dias"]) == (None, None, None)
+    assert sd["cantidad_sugerida"] == "5.00"
+    assert any("sin proveedor" in a for a in cuerpo["advertencias"])
     assert all(s.horizonte_dias == 5 for s in e.solicitudes)
-    assert e.d.id not in {p for s in e.solicitudes for p in s.producto_ids}
+
+
+def test_sugerencias_descuentan_el_stock_reservado(entorno):
+    e = entorno
+    e.db.query(Inventario).filter_by(producto_id=e.a.id).update({"stock_reservado": Decimal("5")})
+    e.db.commit()
+    cuerpo = e.client.get(f"{BASE}/suggestions", headers=e.compras).json()
+    sa = {s["sku"]: s for s in cuerpo["sugerencias"]}[e.a.sku]
+    # (70 + 30) - (20 - 5) = 85
+    assert (sa["stock_actual"], sa["cantidad_sugerida"]) == ("15.00", "85.00")
 
 
 # TC-COMP-02
@@ -254,6 +268,34 @@ def test_sugerencias_omiten_productos_sin_historial(entorno, monkeypatch):
     assert por_sku[entorno.c.sku]["pronostico_disponible"] is False
     assert por_sku[entorno.c.sku]["cantidad_sugerida"] == "5.00"
     assert cuerpo["advertencias"]
+
+
+# TC-COMP-02
+def test_sugerencias_descartan_series_cortas_tras_los_sin_ventas(entorno, monkeypatch):
+    """El predictor reporta en etapas: primero los sin ventas (D), luego los de serie corta (C)."""
+    original = purchasing_service.prediction_service.predecir_demanda
+
+    def en_etapas(db, solicitud):
+        ids = set(solicitud.producto_ids)
+        if entorno.d.id in ids:
+            raise AppError(
+                "HISTORIAL_INSUFICIENTE", "sin ventas", detalle={"producto_ids": [str(entorno.d.id)]}
+            )
+        if entorno.c.id in ids:
+            raise AppError(
+                "HISTORIAL_INSUFICIENTE",
+                "serie corta",
+                detalle={"producto_ids": [str(entorno.c.id)], "dias_minimos": 14},
+            )
+        return original(db, solicitud)
+
+    monkeypatch.setattr(purchasing_service.prediction_service, "predecir_demanda", en_etapas)
+    r = entorno.client.get(f"{BASE}/suggestions", headers=entorno.compras)
+    assert r.status_code == 200, r.text
+    por_sku = {s["sku"]: s for s in r.json()["sugerencias"]}
+    assert por_sku[entorno.a.sku]["cantidad_sugerida"] == "80.00"
+    assert por_sku[entorno.c.sku]["pronostico_disponible"] is False
+    assert por_sku[entorno.d.sku]["pronostico_disponible"] is False
 
 
 # ------------------------------------------------------------------ ciclo completo

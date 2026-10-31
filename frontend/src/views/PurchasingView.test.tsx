@@ -34,6 +34,19 @@ describe('agruparPorProveedor', () => {
   })
 })
 
+describe('agruparPorProveedor sin proveedor', () => {
+  it('separa los productos sin proveedor del resto', () => {
+    const grupos = agruparPorProveedor([
+      sug({ producto_id: 'p9', sku: 'Z', proveedor_id: null, proveedor_nombre: null, lead_time_dias: null }),
+      sug({}),
+    ])
+    expect(grupos.map((g) => [g.proveedorId, g.nombre, g.filas.length])).toEqual([
+      [null, 'Sin proveedor asignado', 1],
+      ['v1', 'Proveedor 1', 1],
+    ])
+  })
+})
+
 describe('cantidadValida', () => {
   it('acepta positivos con hasta 2 decimales', () => {
     expect(cantidadValida('80')).toBe(true)

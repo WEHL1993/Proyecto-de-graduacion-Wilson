@@ -1,6 +1,6 @@
 """Caso de uso: abastecimiento y pedidos a proveedor.
 
-Sugerencia: `cantidad_a_pedir = max(0, (demanda_proyectada + stock_minimo) - stock_actual)`, con
+Sugerencia: `cantidad_a_pedir = max(0, (demanda_proyectada + stock_minimo) - stock_disponible)`, con
 la demanda agregada (todas las rutas) de los próximos N días del modelo en producción.
 
 Estados: `borrador → enviado → confirmado → recibido` (más `cancelado` desde borrador/enviado).
@@ -62,7 +62,7 @@ def sugerir(db: Session, horizonte_dias: int) -> SugerenciasResponse:
 
     sugerencias: list[SugerenciaCompra] = []
     for producto, proveedor, inv in candidatos:
-        actual = inv.stock_actual if inv else _CERO
+        actual = inv.stock_disponible if inv else _CERO
         proyectada = demanda.get(producto.id)
         cantidad = calcular_cantidad_a_pedir(proyectada or _CERO, producto.stock_minimo, actual)
         if cantidad <= 0:
@@ -72,9 +72,9 @@ def sugerir(db: Session, horizonte_dias: int) -> SugerenciasResponse:
                 producto_id=producto.id,
                 sku=producto.sku,
                 nombre=producto.nombre,
-                proveedor_id=proveedor.id,
-                proveedor_nombre=proveedor.nombre,
-                lead_time_dias=proveedor.lead_time_dias,
+                proveedor_id=proveedor.id if proveedor else None,
+                proveedor_nombre=proveedor.nombre if proveedor else None,
+                lead_time_dias=proveedor.lead_time_dias if proveedor else None,
                 stock_actual=actual,
                 stock_minimo=producto.stock_minimo,
                 demanda_proyectada=proyectada or _CERO,
@@ -82,6 +82,11 @@ def sugerir(db: Session, horizonte_dias: int) -> SugerenciasResponse:
                 costo_unitario=producto.costo_unitario,
                 pronostico_disponible=proyectada is not None,
             )
+        )
+    sin_proveedor = sum(1 for s in sugerencias if s.proveedor_id is None)
+    if sin_proveedor:
+        advertencias.append(
+            f"{sin_proveedor} producto(s) sin proveedor asignado: asígnelo para poder pedirlos."
         )
     return SugerenciasResponse(
         horizonte_dias=horizonte_dias,
@@ -99,19 +104,21 @@ def _demanda_proyectada(
     demanda: dict[uuid.UUID, Decimal] = {}
     for i in range(0, len(producto_ids), _MAX_PRODUCTOS_POR_PREDICCION):
         lote = producto_ids[i : i + _MAX_PRODUCTOS_POR_PREDICCION]
-        try:
-            demanda.update(_predecir_lote(db, lote, horizonte_dias))
-        except AppError as exc:
-            if exc.codigo == "SIN_MODELO_PRODUCTIVO":
-                return {}, [
-                    "No hay modelo en producción: las sugerencias usan solo el punto de reorden."
-                ]
-            if exc.codigo != "HISTORIAL_INSUFICIENTE":
-                raise
-            sin_historia = {uuid.UUID(p) for p in (exc.detalle or {}).get("producto_ids", [])}
-            con_historia = [p for p in lote if p not in sin_historia]
-            if con_historia:
-                demanda.update(_predecir_lote(db, con_historia, horizonte_dias))
+        # El predictor reporta primero los productos sin ventas y, ya sin ellos, los de serie
+        # demasiado corta: se descartan por etapas hasta que el lote restante pronostique.
+        while lote:
+            try:
+                demanda.update(_predecir_lote(db, lote, horizonte_dias))
+                break
+            except AppError as exc:
+                if exc.codigo == "SIN_MODELO_PRODUCTIVO":
+                    return {}, [
+                        "No hay modelo en producción: las sugerencias usan solo el punto de reorden."
+                    ]
+                cortos = {uuid.UUID(p) for p in (exc.detalle or {}).get("producto_ids", [])}
+                if exc.codigo != "HISTORIAL_INSUFICIENTE" or not (cortos & set(lote)):
+                    raise
+                lote = [p for p in lote if p not in cortos]
     advertencias: list[str] = []
     sin_pronostico = len(set(producto_ids) - set(demanda))
     if sin_pronostico:
@@ -367,17 +374,16 @@ def registrar_recepcion(
     # Serializa entregas del mismo pedido antes de comprobar factura y estado.
     if solicitud.pedido_id:
         purchasing_repo.obtener(db, solicitud.pedido_id, bloquear=True)
-    duplicada = db.scalar(
-        select(RecepcionMercaderia.id)
-        .where(
-            or_(
-                RecepcionMercaderia.numero_autorizacion == solicitud.numero_autorizacion,
-                (RecepcionMercaderia.serie == solicitud.serie)
-                & (RecepcionMercaderia.numero == solicitud.numero),
-            )
-        )
-        .limit(1)
+    # El UUID es opcional: sin él, la factura se identifica solo por serie y número.
+    misma_factura = (RecepcionMercaderia.serie == solicitud.serie) & (
+        RecepcionMercaderia.numero == solicitud.numero
     )
+    if solicitud.numero_autorizacion is not None:
+        misma_factura = or_(
+            RecepcionMercaderia.numero_autorizacion == solicitud.numero_autorizacion,
+            misma_factura,
+        )
+    duplicada = db.scalar(select(RecepcionMercaderia.id).where(misma_factura).limit(1))
     if duplicada:
         raise _factura_duplicada()
     pedido = (
@@ -418,7 +424,10 @@ def registrar_recepcion(
         referencia_tipo=ReferenciaTipo.RECEPCION,
         referencia_id=recepcion.id,
         usuario_id=usuario_id,
-        motivo=f"FEL {recepcion.serie}-{recepcion.numero} / {recepcion.numero_autorizacion}",
+        motivo=" / ".join(
+            [f"FEL {recepcion.serie}-{recepcion.numero}"]
+            + ([str(recepcion.numero_autorizacion)] if recepcion.numero_autorizacion else [])
+        ),
     )
     if pedido:
         pedido.estado = (

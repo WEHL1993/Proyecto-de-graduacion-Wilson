@@ -160,7 +160,7 @@ export interface paths {
         put?: never;
         /**
          * Generación y aprobación de carga de ruta
-         * @description `accion=generar` (permiso `carga_ruta:generar`) crea un plan en `borrador` con `cantidad_sugerida = min(demanda predicha, stock disponible)`; 400 `CARGA_VIGENTE_EXISTENTE` si ya hay una carga vigente para la ruta y fecha. `accion=enviar` (permiso `carga_ruta:generar`) pasa un `borrador` a `pendiente_aprobacion`. `accion=aprobar|rechazar` (permiso `carga_ruta:aprobar`) opera sobre `carga_id`: aprobar reserva stock y registra el kardex (400 `CANTIDAD_EXCEDE_STOCK` si una cantidad excede el disponible); rechazar exige `motivo_rechazo` y libera las reservas existentes.
+         * @description `accion=generar` (permiso `carga_ruta:generar`) crea un plan en `borrador` con `cantidad_sugerida = min(demanda predicha, stock disponible)`; 400 `CARGA_VIGENTE_EXISTENTE` si ya hay una carga vigente para la ruta y fecha. `accion=enviar` (permiso `carga_ruta:generar`) pasa un `borrador` a `pendiente_aprobacion`. `accion=aprobar|rechazar` (permiso `carga_ruta:aprobar`) opera sobre `carga_id`: aprobar reserva stock y registra el kardex (400 `CANTIDAD_EXCEDE_STOCK` si una cantidad excede el disponible); rechazar exige `motivo_rechazo` y libera las reservas existentes. `accion=revertir` (permiso `carga_ruta:revertir`, solo Administrador) devuelve una carga `aprobada` a `borrador`, libera sus reservas y exige `motivo_reversion`; 400 `ESTADO_CARGA_INVALIDO` si no está aprobada (p. ej. ya despachada).
          */
         post: operations["gestionar_carga_api_v1_routes_load_plans_post"];
         delete?: never;
@@ -2325,7 +2325,7 @@ export interface components {
             fecha_operacion?: string | null;
             /**
              * Carga Id
-             * @description Obligatorio si accion=enviar|aprobar|rechazar
+             * @description Obligatorio si accion=enviar|aprobar|rechazar|revertir
              */
             carga_id?: string | null;
             /**
@@ -2974,11 +2974,8 @@ export interface components {
             serie: string;
             /** Numero */
             numero: string;
-            /**
-             * Numero Autorizacion
-             * Format: uuid
-             */
-            numero_autorizacion: string;
+            /** Numero Autorizacion */
+            numero_autorizacion?: string | null;
             /**
              * Fecha Emision
              * Format: date
@@ -3004,6 +3001,8 @@ export interface components {
             producto_id: string;
             /** Cantidad Recibida */
             cantidad_recibida: number | string;
+            /** Precio Unitario */
+            precio_unitario?: number | string | null;
             /**
              * Observacion
              * @default
@@ -3019,6 +3018,8 @@ export interface components {
             producto_id: string;
             /** Cantidad Recibida */
             cantidad_recibida: string;
+            /** Precio Unitario */
+            precio_unitario?: string | null;
             /**
              * Observacion
              * @default
@@ -3031,11 +3032,8 @@ export interface components {
             serie: string;
             /** Numero */
             numero: string;
-            /**
-             * Numero Autorizacion
-             * Format: uuid
-             */
-            numero_autorizacion: string;
+            /** Numero Autorizacion */
+            numero_autorizacion?: string | null;
             /**
              * Fecha Emision
              * Format: date
@@ -3415,14 +3413,17 @@ export interface components {
             nombre: string;
             /**
              * Proveedor Id
-             * Format: uuid
+             * @description None si el producto no tiene proveedor activo: no se puede pedir
              */
-            proveedor_id: string;
+            proveedor_id: string | null;
             /** Proveedor Nombre */
-            proveedor_nombre: string;
+            proveedor_nombre: string | null;
             /** Lead Time Dias */
-            lead_time_dias: number;
-            /** Stock Actual */
+            lead_time_dias: number | null;
+            /**
+             * Stock Actual
+             * @description Stock disponible: actual menos reservado
+             */
             stock_actual: string;
             /** Stock Minimo */
             stock_minimo: string;
@@ -3433,7 +3434,7 @@ export interface components {
             demanda_proyectada: string;
             /**
              * Cantidad Sugerida
-             * @description max(0, (demanda_proyectada + stock_minimo) - stock_actual)
+             * @description max(0, (demanda_proyectada + stock_minimo) - stock_disponible)
              */
             cantidad_sugerida: string;
             /** Costo Unitario */

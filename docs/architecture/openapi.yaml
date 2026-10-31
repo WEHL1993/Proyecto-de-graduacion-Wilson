@@ -5785,8 +5785,10 @@ components:
           pattern: ^[0-9]+$
           title: Numero
         numero_autorizacion:
-          type: string
-          format: uuid
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
           title: Numero Autorizacion
         fecha_emision:
           type: string
@@ -5827,7 +5829,6 @@ components:
       required:
       - serie
       - numero
-      - numero_autorizacion
       - fecha_emision
       - items
       title: RecepcionCreate
@@ -5844,6 +5845,14 @@ components:
           - type: string
             pattern: ^(?!^[-+.]*$)[+-]?0*(?:\d{0,10}|(?=[\d.]{1,13}0*$)\d{0,10}\.\d{0,2}0*$)
           title: Cantidad Recibida
+        precio_unitario:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*(?:\d{0,10}|(?=[\d.]{1,15}0*$)\d{0,10}\.\d{0,4}0*$)
+          - type: 'null'
+          title: Precio Unitario
         observacion:
           type: string
           maxLength: 300
@@ -5864,6 +5873,12 @@ components:
           type: string
           pattern: ^(?!^[-+.]*$)[+-]?0*(?:\d{0,10}|(?=[\d.]{1,13}0*$)\d{0,10}\.\d{0,2}0*$)
           title: Cantidad Recibida
+        precio_unitario:
+          anyOf:
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*(?:\d{0,10}|(?=[\d.]{1,15}0*$)\d{0,10}\.\d{0,4}0*$)
+          - type: 'null'
+          title: Precio Unitario
         observacion:
           type: string
           maxLength: 300
@@ -5889,8 +5904,10 @@ components:
           pattern: ^[0-9]+$
           title: Numero
         numero_autorizacion:
-          type: string
-          format: uuid
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
           title: Numero Autorizacion
         fecha_emision:
           type: string
@@ -5937,7 +5954,6 @@ components:
       required:
       - serie
       - numero
-      - numero_autorizacion
       - fecha_emision
       - id
       - pedido_id
@@ -6569,19 +6585,27 @@ components:
           type: string
           title: Nombre
         proveedor_id:
-          type: string
-          format: uuid
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
           title: Proveedor Id
+          description: 'None si el producto no tiene proveedor activo: no se puede pedir'
         proveedor_nombre:
-          type: string
+          anyOf:
+          - type: string
+          - type: 'null'
           title: Proveedor Nombre
         lead_time_dias:
-          type: integer
+          anyOf:
+          - type: integer
+          - type: 'null'
           title: Lead Time Dias
         stock_actual:
           type: string
           pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
           title: Stock Actual
+          description: 'Stock disponible: actual menos reservado'
         stock_minimo:
           type: string
           pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
@@ -6595,7 +6619,7 @@ components:
           type: string
           pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
           title: Cantidad Sugerida
-          description: max(0, (demanda_proyectada + stock_minimo) - stock_actual)
+          description: max(0, (demanda_proyectada + stock_minimo) - stock_disponible)
         costo_unitario:
           type: string
           pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$

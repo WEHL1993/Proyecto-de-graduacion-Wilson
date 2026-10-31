@@ -14,14 +14,16 @@ class SugerenciaCompra(BaseModel):
     producto_id: UUID
     sku: str
     nombre: str
-    proveedor_id: UUID
-    proveedor_nombre: str
-    lead_time_dias: int
-    stock_actual: Decimal
+    proveedor_id: UUID | None = Field(
+        description="None si el producto no tiene proveedor activo: no se puede pedir"
+    )
+    proveedor_nombre: str | None
+    lead_time_dias: int | None
+    stock_actual: Decimal = Field(description="Stock disponible: actual menos reservado")
     stock_minimo: Decimal
     demanda_proyectada: Decimal = Field(description="Demanda agregada de los próximos N días")
     cantidad_sugerida: Decimal = Field(
-        description="max(0, (demanda_proyectada + stock_minimo) - stock_actual)"
+        description="max(0, (demanda_proyectada + stock_minimo) - stock_disponible)"
     )
     costo_unitario: Decimal
     pronostico_disponible: bool = Field(
@@ -97,6 +99,7 @@ class PedidoPage(BaseModel):
 class RecepcionItemIn(BaseModel):
     producto_id: UUID
     cantidad_recibida: Decimal = Field(ge=0, max_digits=12, decimal_places=2)
+    precio_unitario: Decimal | None = Field(default=None, ge=0, max_digits=14, decimal_places=4)
     observacion: str = Field(default="", max_length=300)
 
 
@@ -105,7 +108,7 @@ class FacturaFEL(BaseModel):
 
     serie: str = Field(min_length=1, max_length=50, pattern=r"\S")
     numero: str = Field(min_length=1, max_length=50, pattern=r"^[0-9]+$")
-    numero_autorizacion: UUID
+    numero_autorizacion: UUID | None = None
     fecha_emision: date
     condicion_pago: str | None = Field(default=None, max_length=150)
     serie_admin: str | None = Field(default=None, max_length=50)
