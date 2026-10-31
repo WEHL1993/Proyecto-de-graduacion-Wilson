@@ -110,3 +110,9 @@ CLAUDE.md
 respaldos/
 
 backend/importar_catalogos_*.csv
+
+# Paquete de despliegue (infra/deploy/empaquetar.sh): código, BD y modelos
+despliegue/
+
+# Artefactos del MCP de Playwright (capturas, snapshots, logs)
+.playwright-mcp/

@@ -1,0 +1,138 @@
+# Orquestación de producción — VM de Azure (Standard_B2ms, Ubuntu 24.04).
+# Diferencias con docker-compose.yml (desarrollo):
+#   - postgres y backend no publican puertos: solo Caddy escucha en 80/443.
+#   - el código va dentro de la imagen (sin montaje ni --reload).
+#   - Caddy obtiene el certificado HTTPS para ${DOMINIO} (DNS gratuito de Azure).
+# Uso en la VM, desde la raíz del proyecto (ver docs/DESPLIEGUE_AZURE.md):
+#   docker compose -f infra/docker-compose.prod.yml --env-file .env.prod up -d --build
+name: ds-predictive
+
+x-backend-env: &backend-env
+  POSTGRES_USER: ${POSTGRES_USER}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+  POSTGRES_DB: ${POSTGRES_DB}
+  POSTGRES_HOST: postgres
+  POSTGRES_PORT: 5432
+  JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+  JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-60}
+  CORS_ORIGINS: https://${DOMINIO}
+  ENVIRONMENT: production
+  ML_ARTIFACTS_DIR: /app/ml_artifacts
+  DATA_DIR: /app/data
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ds-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      TZ: UTC
+      PGTZ: UTC
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - ds-net
+
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    image: ds-predictive-backend:prod
+    container_name: ds-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment: *backend-env
+    command: >
+      sh -c "alembic upgrade head
+      && python -m app.db.seeds.seed_rbac
+      && uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2 --proxy-headers --forwarded-allow-ips='*'"
+    volumes:
+      - ml_artifacts:/app/ml_artifacts
+      - ../data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    networks:
+      - ds-net
+
+  # Worker Predictivo (ADR-04): evalúa MAPE en producción y ejecuta reentrenamientos de jobs_ml.
+  worker:
+    image: ds-predictive-backend:prod
+    container_name: ds-worker
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      <<: *backend-env
+      WORKER_POLL_SEGUNDOS: ${WORKER_POLL_SEGUNDOS:-15}
+      WORKER_EVALUACION_INTERVALO_SEGUNDOS: ${WORKER_EVALUACION_INTERVALO_SEGUNDOS:-21600}
+    command: python -m app.workers.main
+    volumes:
+      - ml_artifacts:/app/ml_artifacts
+      - ../data:/app/data
+    networks:
+      - ds-net
+
+  # SPA React servida por nginx; /api se reenvía al backend (mismo origen, sin CORS).
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    image: ds-predictive-frontend:prod
+    container_name: ds-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - ds-net
+
+  # Proxy inverso con HTTPS automático (Let's Encrypt) para el dominio *.cloudapp.azure.com.
+  caddy:
+    image: caddy:2.8-alpine
+    container_name: ds-caddy
+    restart: unless-stopped
+    depends_on:
+      - frontend
+    environment:
+      DOMINIO: ${DOMINIO}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - ds-net
+
+networks:
+  ds-net:
+    name: ds-net
+    driver: bridge
+
+volumes:
+  pgdata:
+    name: ds_pgdata
+  ml_artifacts:
+    name: ds_ml_artifacts
+  caddy_data:
+    name: ds_caddy_data
+  caddy_config:
+    name: ds_caddy_config

@@ -1,0 +1,6 @@
+# HTTPS automático para el dominio de Azure; todo se reenvía al nginx del frontend,
+# que sirve la SPA y hace de proxy de /api hacia el backend.
+{$DOMINIO} {
+	encode gzip zstd
+	reverse_proxy frontend:80
+}
