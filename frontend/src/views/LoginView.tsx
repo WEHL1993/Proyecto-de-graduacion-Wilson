@@ -43,7 +43,7 @@ export function LoginView() {
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/15">
               <BarChart3 className="h-5 w-5" aria-hidden />
             </span>
-            <span className="text-lg font-semibold tracking-tight">DS Predictive</span>
+            <span className="text-lg font-semibold tracking-tight">Desarrollos Comerciales de Sur, S.A.</span>
           </div>
           <img src={logoBigCola} alt="Big Cola" className="mx-auto h-52 w-auto" />
         </div>

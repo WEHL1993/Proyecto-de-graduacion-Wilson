@@ -75,6 +75,45 @@ def test_asignar_permisos_cambia_el_menu(e):
     assert claves == ["liquidaciones", "reportes"]  # en orden de menú
 
 
+def test_recepcion_se_autoriza_con_ajustar_y_se_retira_al_quitarlo(e):
+    assert _permisos(e, "inventario:ajustar").status_code == 200
+    menu = e.client.get(ME, headers=e.h_otro).json()["menu"]
+    assert [p["clave"] for p in menu] == ["compras", "recepcion"]
+    assert menu[1]["ruta"] == "/recepcion"
+    assert menu[1]["etiqueta"] == "Recepción de mercadería"
+    assert menu[1]["grupo"] == "Inventario"
+    assert _permisos(e, "inventario:leer").status_code == 200
+    menu = e.client.get(ME, headers=e.h_otro).json()["menu"]
+    assert "recepcion" not in {p["clave"] for p in menu}
+
+
+def test_menu_completo_en_el_orden_de_grupos_objetivo(e):
+    menu = e.client.get(ME, headers=e.h).json()["menu"]
+    assert [p["clave"] for p in menu] == [
+        "dashboard",
+        "liquidacion",
+        "liquidaciones",
+        "compras",
+        "recepcion",
+        "inventario",
+        "productos",
+        "reportes",
+        "monitoreo",
+        "catalogos",
+        "etl",
+        "politica_datos",
+        "usuarios",
+    ]
+    assert list(dict.fromkeys(p["grupo"] for p in menu)) == [
+        "Ventas",
+        "Inventario",
+        "Analítica",
+        "Catálogos",
+        "Datos",
+        "Administración",
+    ]
+
+
 def test_permiso_inexistente_y_rol_inexistente(e):
     r = _permisos(e, "x:y")
     assert r.status_code == 400 and r.json()["codigo"] == "PERMISO_INVALIDO"

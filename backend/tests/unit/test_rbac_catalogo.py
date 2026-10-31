@@ -28,6 +28,28 @@ def test_toda_pantalla_se_habilita_con_permisos_del_catalogo():
         assert permisos and set(permisos) <= set(PERMISOS), clave
 
 
+def test_catalogo_menu_ordenado_y_recepcion_con_permiso_de_ajuste():
+    pantallas = sorted(PANTALLAS, key=lambda p: p[5])
+    assert [p[0] for p in pantallas] == [
+        "dashboard",
+        "liquidacion",
+        "liquidaciones",
+        "compras",
+        "recepcion",
+        "inventario",
+        "productos",
+        "reportes",
+        "monitoreo",
+        "catalogos",
+        "etl",
+        "politica_datos",
+        "usuarios",
+    ]
+    recepcion = next(p for p in pantallas if p[0] == "recepcion")
+    assert recepcion[1:5] == ("Recepción de mercadería", "/recepcion", None, "Inventario")
+    assert recepcion[6] == ("inventario:ajustar",)
+
+
 def test_el_administrador_tiene_todo_y_hay_tres_roles_activos():
     assert set(MATRIZ_ROL_PERMISO[NombreRol.ADMINISTRADOR]) == set(PERMISOS)
     assert ROLES_ACTIVOS == {
