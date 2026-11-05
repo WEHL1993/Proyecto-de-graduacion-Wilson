@@ -46,6 +46,7 @@ test.describe.serial('Catálogos: rutas, personal y equipos', () => {
       await expect(dialogo).toBeHidden()
       await expect(page.getByRole('row', { name: new RegExp(nombre) })).toBeVisible()
     }
+    await capturar(page, '03-03-personal-de-ruta')
   })
 
   test('el equipo de ruta exige un reparto que sume 100 % y luego se guarda', async ({ page }) => {
@@ -80,6 +81,7 @@ test.describe.serial('Catálogos: rutas, personal y equipos', () => {
     await expect(page.getByRole('row', { name: /E2E-NORTE/ })).toHaveCount(0)
     await page.getByLabel('Mostrar rutas inactivas').check()
     await expect(page.getByRole('row', { name: /E2E-NORTE/ })).toBeVisible()
+    await capturar(page, '03-04-rutas-inactivas')
     await page.getByRole('button', { name: 'Activar E2E-NORTE' }).click()
     await expect(page.getByRole('button', { name: 'Desactivar E2E-NORTE' })).toBeVisible()
   })

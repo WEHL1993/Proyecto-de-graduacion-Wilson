@@ -75,6 +75,7 @@ test.describe.serial('Usuarios, roles y permisos', () => {
     await capturar(page, '02-06-matriz-de-permisos')
     await page.getByRole('tab', { name: 'Acceso por pantalla' }).click()
     await expect(page.getByText('Dashboard de Ventas').first()).toBeVisible()
+    await capturar(page, '02-07-acceso-por-pantalla')
   })
 
   test('filtrar usuarios por rol muestra solo los de ese rol', async ({ page }) => {

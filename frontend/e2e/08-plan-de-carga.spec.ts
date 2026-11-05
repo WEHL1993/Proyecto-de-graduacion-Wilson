@@ -19,6 +19,7 @@ test.describe.serial('Plan de carga: predicción, aprobación y rechazo', () => 
   test('genera el plan sugerido con la demanda del modelo y el stock disponible', async ({ page }) => {
     await consultar(page, 'ANTONIO Antonio')
     await expect(page.getByText(/Modelo activo: \w+ v[\d.]+/)).toBeVisible()
+    await capturar(page, '08-00-dashboard-sin-plan')
     await page.getByRole('button', { name: 'Generar plan sugerido' }).click()
     await expect(page.getByRole('heading', { name: `Plan de carga sugerido · ${FECHA_OPERACION}` })).toBeVisible()
     await expect(page.getByText('borrador', { exact: true })).toBeVisible()

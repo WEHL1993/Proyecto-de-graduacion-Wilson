@@ -52,6 +52,7 @@ test.describe.serial('Modelo de Machine Learning', () => {
     await page.getByRole('button', { name: '⟳ Reentrenar ahora' }).click()
     const dialogo = page.getByRole('dialog', { name: 'Confirmar reentrenamiento' })
     await expect(dialogo).toContainText('xgboost, sklearn')
+    await capturar(page, '06-03-confirmar-reentrenamiento')
     await dialogo.getByRole('button', { name: 'Reentrenar' }).click()
     await expect(page.getByText(/completado/)).toBeVisible({ timeout: 150_000 })
     // El candidato solo se promueve si mejora el MAPE del productivo; si no, queda descartado.

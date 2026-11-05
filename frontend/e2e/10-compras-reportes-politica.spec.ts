@@ -47,7 +47,10 @@ test.describe.serial('Abastecimiento, reportes, política de datos y alertas', (
 
   test('cerrar el arranque deshabilita la carga de Excel y se puede reabrir', async ({ page }) => {
     await page.goto('/politica-datos')
+    await expect(page.getByText('habilitada (arranque abierto)')).toBeVisible()
+    await capturar(page, '10-02b-politica-de-datos')
     await page.getByRole('button', { name: 'Cerrar arranque' }).click()
+    await capturar(page, '10-02c-confirmar-cierre-del-arranque')
     const confirmar = page.getByRole('dialog')
     await confirmar.getByRole('button', { name: /Cerrar arranque|Confirmar/ }).click()
     await expect(page.getByText(/deshabilitada/)).toBeVisible()

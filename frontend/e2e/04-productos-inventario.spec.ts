@@ -9,6 +9,8 @@ test.describe.serial('Productos e inventario (kardex)', () => {
   })
 
   test('crea un producto; el SKU se normaliza a mayúsculas', async ({ page }) => {
+    await expect(page.getByRole('heading', { name: 'Productos', level: 1 })).toBeVisible()
+    await capturar(page, '04-00-catalogo-de-productos')
     await page.getByRole('button', { name: '+ Nuevo producto' }).click()
     const d = page.getByRole('dialog', { name: 'Nuevo producto' })
     await d.getByLabel('SKU').fill('e2e-001')
@@ -92,6 +94,7 @@ test.describe.serial('Productos e inventario (kardex)', () => {
   test('da de baja y reactiva un producto', async ({ page }) => {
     await page.getByPlaceholder('SKU o nombre').fill(SKU)
     await page.getByRole('button', { name: `Dar de baja ${SKU}` }).click()
+    await capturar(page, '04-04-dar-de-baja-producto')
     await page.getByRole('dialog', { name: 'Dar de baja producto' }).getByRole('button', { name: 'Dar de baja' }).click()
     await expect(page.getByRole('row', { name: new RegExp(SKU) })).toHaveCount(0)
     await page.getByLabel('Estado').selectOption({ label: 'Dados de baja' })

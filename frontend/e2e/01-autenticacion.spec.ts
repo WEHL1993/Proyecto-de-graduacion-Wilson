@@ -58,6 +58,7 @@ test.describe('Autenticación y navegación', () => {
     await page.reload()
     await expect(page.getByRole('heading', { name: 'Dashboard de Ventas', level: 1 })).toBeVisible()
     await page.getByRole('button', { name: /Administrador del Sistema/ }).click()
+    await capturar(page, '01-04-menu-de-usuario')
     await page.getByRole('menuitem', { name: 'Cerrar sesión' }).click()
     await expect(page).toHaveURL(/\/login/)
     await page.goto('/usuarios')
