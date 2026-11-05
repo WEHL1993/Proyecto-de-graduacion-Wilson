@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test'
 
-import { expect, iniciarSesion, test, toast } from './apoyo'
+import { capturar, expect, iniciarSesion, test, toast } from './apoyo'
 
 /** Mercadería que recibe la planta central; da existencias para el plan de carga (08). */
 export const RECIBIDO = [
@@ -36,12 +36,14 @@ test.describe.serial('Recepción de mercadería con factura FEL', () => {
     await encabezadoFel(page, '000123')
     for (const p of RECIBIDO) await agregarProducto(page, p.sku, p.cantidad, p.precio)
     await expect(page.getByRole('row', { name: /^Total/ })).toContainText('Q 25,800.00')
+    await capturar(page, '07-01-recepcion-factura-fel')
     await page.getByRole('button', { name: 'Guardar recepción' }).click()
     await expect(toast(page, /recepción|registrad|guardad/i)).toBeVisible()
 
     await page.goto('/inventario')
     const fila = page.getByRole('row', { name: /BIG COLA PET NO RETORNABLE 3030 ML 6/ }).first()
     await expect(fila).toContainText('300')
+    await capturar(page, '07-02-inventario-tras-recepcion')
   })
 
   test('la misma factura (serie + número) no se acepta dos veces', async ({ page }) => {
@@ -49,6 +51,7 @@ test.describe.serial('Recepción de mercadería con factura FEL', () => {
     await agregarProducto(page, '500179', '10', '61')
     await page.getByRole('button', { name: 'Guardar recepción' }).click()
     await expect(toast(page, /factura/i)).toBeVisible()
+    await capturar(page, '07-03-factura-duplicada')
     // Lo capturado se conserva para corregir el número.
     await expect(page.getByLabel('Número FEL')).toHaveValue('000123')
   })

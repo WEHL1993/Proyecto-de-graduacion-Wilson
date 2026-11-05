@@ -1,4 +1,4 @@
-import { expect, iniciarSesion, test } from './apoyo'
+import { capturar, expect, iniciarSesion, test } from './apoyo'
 
 const PANTALLAS_ADMIN = [
   ['Dashboard de Ventas', /Dashboard de Ventas/],
@@ -21,6 +21,7 @@ test.describe('Autenticación y navegación', () => {
     await page.goto('/productos')
     await expect(page).toHaveURL(/\/login/)
     await expect(page.getByRole('button', { name: 'Ingresar' })).toBeVisible()
+    await capturar(page, '01-01-login')
   })
 
   test('credenciales incorrectas muestran un error y no inician sesión', async ({ page }) => {
@@ -29,6 +30,7 @@ test.describe('Autenticación y navegación', () => {
     await page.getByLabel('Contraseña', { exact: true }).fill('ClaveIncorrecta1')
     await page.getByRole('button', { name: 'Ingresar' }).click()
     await expect(page.getByRole('alert')).toBeVisible()
+    await capturar(page, '01-02-login-credenciales-incorrectas')
     await expect(page).toHaveURL(/\/login/)
   })
 
@@ -43,6 +45,7 @@ test.describe('Autenticación y navegación', () => {
   test('el Administrador ve las 13 pantallas del menú y todas cargan', async ({ page }) => {
     await iniciarSesion(page)
     await expect(page.getByRole('heading', { name: 'Dashboard de Ventas', level: 1 })).toBeVisible()
+    await capturar(page, '01-03-inicio-administrador-menu-completo')
     for (const [enlace, titulo] of PANTALLAS_ADMIN) {
       await page.getByRole('link', { name: enlace, exact: true }).click()
       await expect(page.getByRole('heading', { level: 1, name: titulo })).toBeVisible()

@@ -87,5 +87,9 @@ Ejecutar:
   npm run test:e2e:ui                    # modo interactivo
   npm run test:e2e:report                # informe HTML (trazas y videos de los fallos)
 
+Capturas: cada corrida guarda en frontend/e2e/capturas/ 36 imágenes con nombre de los momentos
+clave (p. ej. 08-02-plan-de-carga-aprobado.png), numeradas en el orden del flujo. La carpeta se
+vacía al iniciar cada corrida y también se adjuntan al informe HTML.
+
 Usan una BD propia (ds_e2e) que se BORRA y recrea en cada corrida, la API en el puerto 8001 y
 la web en el 5174: no tocan la BD ni los puertos de desarrollo. Otra BD: E2E_DATABASE_URL.

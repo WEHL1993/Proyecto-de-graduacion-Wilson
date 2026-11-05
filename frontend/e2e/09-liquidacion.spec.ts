@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test'
 
-import { expect, FECHA_OPERACION, iniciarSesion, test } from './apoyo'
+import { capturar, expect, FECHA_OPERACION, iniciarSesion, test } from './apoyo'
 
 async function abrir(page: Page, ruta = 'CESAR · Cesar') {
   await page.goto('/ventas/liquidacion')
@@ -23,6 +23,7 @@ test.describe.serial('Liquidación diaria de ventas', () => {
     await abrir(page)
     await unidades(page, '500179', { cargado: '10', vendido: '12' })
     await expect(page.getByRole('row', { name: /^500179/ })).toContainText('🔴 Excede')
+    await capturar(page, '09-01-liquidacion-fila-que-no-cuadra')
     await unidades(page, '500179', { cargado: '10', vendido: '6' })
     await expect(page.getByRole('row', { name: /^500179/ })).toContainText('🟡 Faltan')
   })
@@ -33,11 +34,14 @@ test.describe.serial('Liquidación diaria de ventas', () => {
     await unidades(page, '500179', { cargado: '35', vendido: '30', devuelto: '4', merma: '1' })
     await unidades(page, '599033', { cargado: '20', vendido: '20' })
     await expect(page.getByRole('row', { name: /^500179/ })).toContainText('🟢 Cuadra')
+    await page.getByRole('checkbox', { name: 'Solo con movimiento' }).check()
+    await capturar(page, '09-02-liquidacion-unidades')
 
     await page.getByRole('button', { name: '2 · Dinero' }).click()
     await page.getByLabel('Efectivo', { exact: true }).fill('1500')
     await page.getByLabel('Transferencia', { exact: true }).fill('720')
     await page.getByLabel('Efectivo entregado', { exact: true }).fill('1500')
+    await capturar(page, '09-03-liquidacion-dinero')
 
     await page.getByRole('button', { name: 'Guardar borrador' }).click()
     await expect(page.getByText(/borrador/i).first()).toBeVisible()
@@ -47,6 +51,7 @@ test.describe.serial('Liquidación diaria de ventas', () => {
     await expect(d).toContainText('50 unidades')
     await d.getByRole('button', { name: 'Confirmar' }).click()
     await expect(page.getByRole('button', { name: 'Corregir liquidación' })).toBeVisible()
+    await capturar(page, '09-04-liquidacion-cerrada')
   })
 
   test('el historial muestra la liquidación cerrada con su detalle', async ({ page }) => {
@@ -57,6 +62,7 @@ test.describe.serial('Liquidación diaria de ventas', () => {
     await expect(fila).toContainText('Liquidador E2E') // vendedor = usuario asignado a la ruta (02)
     await fila.getByRole('button', { name: /Ver detalle/ }).click()
     await expect(page.getByRole('dialog')).toContainText('500179')
+    await capturar(page, '09-05-historial-detalle')
   })
 
   test('corregir exige un motivo de al menos 5 caracteres', async ({ page }) => {

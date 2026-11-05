@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test'
 
-import { expect, FECHA_OPERACION, iniciarSesion, test, toast } from './apoyo'
+import { capturar, expect, FECHA_OPERACION, iniciarSesion, test, toast } from './apoyo'
 
 async function consultar(page: Page, ruta: string) {
   await page.goto('/')
@@ -23,6 +23,7 @@ test.describe.serial('Plan de carga: predicción, aprobación y rechazo', () => 
     await expect(page.getByRole('heading', { name: `Plan de carga sugerido · ${FECHA_OPERACION}` })).toBeVisible()
     await expect(page.getByText('borrador', { exact: true })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'KPIs' })).toBeVisible()
+    await capturar(page, '08-01-plan-de-carga-generado')
 
     // Regla ADR-07: sugerido = mín(demanda, stock). 598896 no tiene existencias → sugerido 0.
     const sinStock = page.getByRole('row', { name: /^Incluir 598896/ })
@@ -53,11 +54,15 @@ test.describe.serial('Plan de carga: predicción, aprobación y rechazo', () => 
     await page.getByRole('button', { name: '✔ Aprobar' }).click()
     await expect(page.getByText('aprobada', { exact: true })).toBeVisible()
     await expect(page.getByRole('button', { name: '↩ Revertir aprobación' })).toBeVisible()
+    await page.getByRole('heading', { name: `Plan de carga sugerido · ${FECHA_OPERACION}` }).scrollIntoViewIfNeeded()
+    await page.mouse.wheel(0, -300) // deja visibles el encabezado, el estado y las primeras filas
+    await capturar(page, '08-02-plan-de-carga-aprobado')
 
     await page.goto('/inventario')
     const fila = page.getByRole('row', { name: /BIG COLA PET NO RETORNABLE 3030 ML 6/ }).first()
     await expect(fila.getByRole('cell').nth(2)).toHaveText('25') // reservado
     await expect(fila.getByRole('cell').nth(3)).toHaveText('275') // disponible
+    await capturar(page, '08-03-stock-reservado')
   })
 
   test('rechazar un plan exige motivo', async ({ page }) => {
@@ -67,6 +72,7 @@ test.describe.serial('Plan de carga: predicción, aprobación y rechazo', () => 
     const d = page.getByRole('dialog', { name: 'Rechazar plan de carga' })
     await expect(d.getByRole('button', { name: 'Rechazar plan' })).toBeDisabled()
     await d.getByLabel('Motivo del rechazo (obligatorio)').fill('Camión en mantenimiento')
+    await capturar(page, '08-04-rechazo-con-motivo')
     await d.getByRole('button', { name: 'Rechazar plan' }).click()
     await expect(d).toBeHidden()
     // Un plan rechazado deja de estar vigente: se puede generar uno nuevo para esa ruta y fecha.
@@ -79,6 +85,8 @@ test.describe.serial('Plan de carga: predicción, aprobación y rechazo', () => 
     await page.getByRole('button', { name: 'Generar plan sugerido' }).click()
     await expect(page.getByRole('heading', { name: 'Demanda predicha' })).toBeVisible()
     await page.getByLabel('Producto del gráfico').selectOption({ label: '500179 · BIG COLA PET NO RETORNABLE 3030 ML 6' })
+    await page.getByRole('heading', { name: 'Demanda predicha' }).scrollIntoViewIfNeeded()
+    await capturar(page, '08-05-grafico-de-demanda-predicha')
     await expect(page.locator('.recharts-surface').first()).toBeVisible()
   })
 })

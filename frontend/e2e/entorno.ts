@@ -9,6 +9,8 @@ const AQUI = path.dirname(fileURLToPath(import.meta.url))
 export const FRONTEND_DIR = path.resolve(AQUI, '..')
 export const BACKEND_DIR = path.resolve(FRONTEND_DIR, '../backend')
 export const TMP_DIR = path.join(AQUI, '.tmp')
+/** Capturas con nombre de los momentos clave (se vacía al iniciar cada corrida). */
+export const CAPTURAS_DIR = path.join(AQUI, 'capturas')
 export const REPO_DIR = path.resolve(FRONTEND_DIR, '..')
 
 export const API_PORT = Number(process.env.E2E_API_PORT ?? 8001)

@@ -117,5 +117,6 @@ despliegue/
 # Artefactos del MCP de Playwright (capturas, snapshots, logs)
 .playwright-mcp/
 
-# Pruebas E2E (Playwright): BD sintética, artefactos ML, reportes, trazas y videos de cada corrida
+# Pruebas E2E (Playwright): BD sintética, artefactos ML, reportes, trazas, videos y capturas (se regeneran en cada corrida)
 frontend/e2e/.tmp/
+frontend/e2e/capturas/

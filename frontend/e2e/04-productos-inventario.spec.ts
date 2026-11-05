@@ -1,4 +1,4 @@
-import { expect, iniciarSesion, test, toast } from './apoyo'
+import { capturar, expect, iniciarSesion, test, toast } from './apoyo'
 
 const SKU = 'E2E-001'
 
@@ -20,6 +20,7 @@ test.describe.serial('Productos e inventario (kardex)', () => {
     await d.getByLabel('Unidades por paquete').fill('6')
     await d.getByLabel('Medida (ml, opcional)').fill('600')
     await d.getByLabel('Sabor (opcional)').fill('Cola')
+    await capturar(page, '04-01-nuevo-producto')
     await d.getByRole('button', { name: 'Crear producto' }).click()
     await expect(d).toBeHidden()
     await page.getByPlaceholder('SKU o nombre').fill('E2E')
@@ -56,6 +57,7 @@ test.describe.serial('Productos e inventario (kardex)', () => {
     await d.getByLabel('Cantidad').fill('50')
     await d.getByLabel('Motivo').fill('Ingreso inicial E2E')
     await expect(d.getByText('Stock resultante:')).toContainText('50')
+    await capturar(page, '04-02-ajuste-de-stock')
     await d.getByRole('button', { name: 'Aplicar ajuste' }).click()
     await expect(d).toBeHidden()
 
@@ -84,6 +86,7 @@ test.describe.serial('Productos e inventario (kardex)', () => {
     await filtro.selectOption(valor!)
     await expect(page.getByText('Ingreso inicial E2E')).toBeVisible()
     await expect(page.getByText('Conteo físico E2E')).toBeVisible()
+    await capturar(page, '04-03-kardex-con-ajustes')
   })
 
   test('da de baja y reactiva un producto', async ({ page }) => {

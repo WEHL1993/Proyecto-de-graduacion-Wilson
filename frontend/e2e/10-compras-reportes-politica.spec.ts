@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises'
 
-import { expect, iniciarSesion, test } from './apoyo'
+import { capturar, expect, iniciarSesion, test } from './apoyo'
 
 test.describe.serial('Abastecimiento, reportes, política de datos y alertas', () => {
   test.beforeEach(async ({ page }) => iniciarSesion(page))
@@ -9,6 +9,7 @@ test.describe.serial('Abastecimiento, reportes, política de datos y alertas', (
     await page.goto('/compras')
     await expect(page.getByText('Cantidad a pedir = máx(0, (demanda proyectada + stock mínimo) − stock disponible).')).toBeVisible()
     await expect(page.getByRole('region', { name: 'Sugerencias sin proveedor' })).toBeVisible({ timeout: 30_000 })
+    await capturar(page, '10-01-sugerencias-de-compra')
     await page.getByLabel('Horizonte de demanda').selectOption({ label: 'Próximos 14 días' })
     await expect(page.getByRole('region', { name: 'Sugerencias sin proveedor' })).toBeVisible({ timeout: 30_000 })
   })
@@ -22,6 +23,7 @@ test.describe.serial('Abastecimiento, reportes, política de datos y alertas', (
     await page.getByRole('combobox', { name: 'Ruta' }).selectOption({ label: 'CESAR · Cesar' })
     await page.getByRole('button', { name: 'Aplicar' }).click()
     await expect(page.getByText(/Periodo: 2025-03-01 → 2025-04-01/)).toBeVisible()
+    await capturar(page, '10-02-reportes-gerenciales', { completa: true })
 
     const descarga = page.waitForEvent('download')
     await page.getByRole('button', { name: '⬇ CSV' }).click()
@@ -52,6 +54,7 @@ test.describe.serial('Abastecimiento, reportes, política de datos y alertas', (
 
     await page.goto('/etl')
     await expect(page.getByText('Carga de Excel deshabilitada.')).toBeVisible()
+    await capturar(page, '10-03-etl-deshabilitado-por-politica')
 
     await page.goto('/politica-datos')
     await page.getByRole('button', { name: /Reabrir/ }).click()
@@ -65,6 +68,7 @@ test.describe.serial('Abastecimiento, reportes, política de datos y alertas', (
     const campana = page.getByRole('button', { name: /\d+ alertas/ })
     await expect(campana).not.toHaveAccessibleName('0 alertas')
     await campana.click()
+    await capturar(page, '10-04-alertas')
     await expect(page.getByText(/stock|quiebre|caja/i).first()).toBeVisible()
   })
 })

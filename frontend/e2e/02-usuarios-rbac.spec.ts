@@ -1,4 +1,4 @@
-import { expect, iniciarSesion, test, toast } from './apoyo'
+import { capturar, expect, iniciarSesion, test, toast } from './apoyo'
 
 export const LIQUIDADOR = {
   email: 'liquidador.e2e@ds.gt',
@@ -18,11 +18,13 @@ test.describe.serial('Usuarios, roles y permisos', () => {
     await dialogo.getByRole('textbox', { name: /^Contraseña/ }).fill(LIQUIDADOR.temporal)
     await dialogo.getByRole('checkbox', { name: 'Liquidador' }).check()
     await dialogo.getByRole('checkbox', { name: 'CESAR · Cesar' }).check()
+    await capturar(page, '02-01-nuevo-usuario-liquidador')
     await dialogo.getByRole('button', { name: 'Crear usuario' }).click()
     await expect(dialogo).toBeHidden()
     const fila = page.getByRole('row', { name: new RegExp(LIQUIDADOR.nombre) })
     await expect(fila).toBeVisible()
     await expect(fila).toContainText('CESAR')
+    await capturar(page, '02-02-usuario-creado')
   })
 
   test('no permite registrar dos usuarios con el mismo correo', async ({ page }) => {
@@ -43,6 +45,7 @@ test.describe.serial('Usuarios, roles y permisos', () => {
     await iniciarSesion(page, LIQUIDADOR.email, LIQUIDADOR.temporal)
     await expect(page).toHaveURL(/\/cambiar-password/)
     await expect(page.getByText('Su contraseña es temporal. Defina una nueva para continuar.')).toBeVisible()
+    await capturar(page, '02-03-cambio-obligatorio-de-contrasena')
     await page.getByRole('textbox', { name: 'Contraseña temporal' }).fill(LIQUIDADOR.temporal)
     await page.getByRole('textbox', { name: 'Nueva contraseña (mínimo 8 caracteres)' }).fill(LIQUIDADOR.definitiva)
     await page.getByRole('textbox', { name: 'Confirmar nueva contraseña' }).fill(LIQUIDADOR.definitiva)
@@ -56,10 +59,12 @@ test.describe.serial('Usuarios, roles y permisos', () => {
     await expect(menu.getByRole('link', { name: 'Liquidación Diaria' })).toBeVisible()
     await expect(menu.getByRole('link', { name: 'Usuarios y Roles' })).toHaveCount(0)
     await expect(menu.getByRole('link', { name: 'Productos' })).toHaveCount(0)
+    await capturar(page, '02-04-menu-del-liquidador')
     for (const ruta of ['/usuarios', '/productos', '/etl', '/monitoreo']) {
       await page.goto(ruta)
       await expect(page.getByRole('heading', { name: 'Acceso denegado' })).toBeVisible()
     }
+    await capturar(page, '02-05-acceso-denegado')
   })
 
   test('la matriz de permisos y el acceso por pantalla se muestran al Administrador', async ({ page }) => {
@@ -67,6 +72,7 @@ test.describe.serial('Usuarios, roles y permisos', () => {
     await page.goto('/usuarios')
     await page.getByRole('tab', { name: 'Matriz de permisos' }).click()
     await expect(page.getByText('usuarios:gestionar').first()).toBeVisible()
+    await capturar(page, '02-06-matriz-de-permisos')
     await page.getByRole('tab', { name: 'Acceso por pantalla' }).click()
     await expect(page.getByText('Dashboard de Ventas').first()).toBeVisible()
   })

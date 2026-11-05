@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process'
 
-import { expect, iniciarSesion, test } from './apoyo'
+import { capturar, expect, iniciarSesion, test } from './apoyo'
 import { BACKEND_DIR, ENV_BACKEND, PYTHON } from './entorno'
 
 test.describe.serial('Modelo de Machine Learning', () => {
@@ -24,6 +24,7 @@ test.describe.serial('Modelo de Machine Learning', () => {
     await page.goto('/monitoreo')
     await expect(page.getByText('Modelo en producción:')).toBeVisible()
     await expect(page.getByRole('listitem').filter({ hasText: '▶ PROD' })).toHaveCount(1)
+    await capturar(page, '06-01-modelo-en-produccion', { completa: true })
   })
 
   test('guarda el umbral de MAPE y persiste tras recargar', async ({ page }) => {
@@ -55,6 +56,7 @@ test.describe.serial('Modelo de Machine Learning', () => {
     await expect(page.getByText(/completado/)).toBeVisible({ timeout: 150_000 })
     // El candidato solo se promueve si mejora el MAPE del productivo; si no, queda descartado.
     await expect(page.getByText(/Último reentrenamiento: \d{4}-\d{2}-\d{2} \(candidato (descartado|promovido)/)).toBeVisible()
+    await capturar(page, '06-02-reentrenamiento-completado', { completa: true })
     await expect(page.getByRole('listitem').filter({ hasText: '▶ PROD' })).toHaveCount(1)
   })
 })

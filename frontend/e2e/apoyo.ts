@@ -1,7 +1,9 @@
 /** Fixtures y utilidades compartidas por las pruebas E2E. */
+import path from 'node:path'
+
 import { expect, test as base, type Page } from '@playwright/test'
 
-import { ADMIN } from './entorno'
+import { ADMIN, CAPTURAS_DIR } from './entorno'
 
 type Fallos = { erroresJs: string[]; errores5xx: string[] }
 
@@ -47,3 +49,16 @@ export const FECHA_OPERACION = '2025-04-01'
 /** Los errores y avisos de la app se muestran como *toasts* (role alert/status) fuera del modal. */
 export const toast = (page: Page, texto: string | RegExp) =>
   page.getByRole('alert').or(page.getByRole('status')).filter({ hasText: texto }).first()
+
+/**
+ * Captura con nombre de un momento clave del flujo (evidencia para la documentación).
+ * Se guarda en `e2e/capturas/<nombre>.png` y se adjunta al informe HTML de la prueba.
+ * Úsese un prefijo con el número del archivo para que queden en orden: `08-plan-aprobado`.
+ */
+export async function capturar(page: Page, nombre: string, opciones: { completa?: boolean } = {}) {
+  // Deja terminar animaciones y cargas pendientes antes de fotografiar.
+  await page.waitForLoadState('networkidle').catch(() => {})
+  const ruta = path.join(CAPTURAS_DIR, `${nombre}.png`)
+  await page.screenshot({ path: ruta, fullPage: opciones.completa ?? false, animations: 'disabled' })
+  await test.info().attach(nombre, { path: ruta, contentType: 'image/png' })
+}

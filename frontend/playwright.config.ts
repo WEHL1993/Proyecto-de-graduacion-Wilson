@@ -17,6 +17,7 @@ import { API_URL, WEB_PORT, WEB_URL } from './e2e/entorno'
  */
 export default defineConfig({
   testDir: './e2e',
+  globalSetup: './e2e/preparar-capturas.ts',
   outputDir: './e2e/.tmp/test-results',
   fullyParallel: false,
   workers: 1,
@@ -33,7 +34,13 @@ export default defineConfig({
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } } }],
+  projects: [
+    {
+      name: 'chromium',
+      // deviceScaleFactor 2: capturas nítidas para documentos (e2e/capturas).
+      use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 },
+    },
+  ],
   // La API (y el Worker) esperan a que el lanzador recree la BD; la web solo necesita el proxy.
   webServer: [
     {

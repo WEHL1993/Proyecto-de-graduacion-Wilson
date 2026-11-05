@@ -1,6 +1,6 @@
 import path from 'node:path'
 
-import { expect, iniciarSesion, test } from './apoyo'
+import { capturar, expect, iniciarSesion, test } from './apoyo'
 import { EXCEL_REAL, EXCEL_SINTETICO, TMP_DIR } from './entorno'
 
 test.describe.serial('Carga de datos históricos (ETL)', () => {
@@ -30,11 +30,13 @@ test.describe.serial('Carga de datos históricos (ETL)', () => {
     await expect(fila).toBeVisible({ timeout: 60_000 })
     await expect(fila).toContainText('cargado')
     await expect(fila).toContainText('1,267')
+    await capturar(page, '05-01-etl-excel-real-cargado')
   })
 
   test('el mismo archivo no se puede cargar dos veces (checksum)', async ({ page }) => {
     await subir(page, EXCEL_REAL, 'Parcial: carga las filas válidas')
     await expect(page.getByText(/duplicad/i).first()).toBeVisible({ timeout: 30_000 })
+    await capturar(page, '05-02-etl-lote-duplicado')
     await expect(page.getByRole('table', { name: 'Lotes ETL' }).getByRole('row', { name: /VENTAS DIARIAS/ })).toHaveCount(1)
   })
 
@@ -43,5 +45,6 @@ test.describe.serial('Carga de datos históricos (ETL)', () => {
     const fila = page.getByRole('table', { name: 'Lotes ETL' }).getByRole('row', { name: /historico_sintetico\.xlsx/ })
     await expect(fila).toContainText('cargado', { timeout: 60_000 })
     await expect(fila).toContainText('720')
+    await capturar(page, '05-03-etl-historial-de-lotes')
   })
 })

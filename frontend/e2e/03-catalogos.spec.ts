@@ -1,4 +1,4 @@
-import { expect, iniciarSesion, test, toast } from './apoyo'
+import { capturar, expect, iniciarSesion, test, toast } from './apoyo'
 
 test.describe.serial('Catálogos: rutas, personal y equipos', () => {
   test.beforeEach(async ({ page }) => iniciarSesion(page))
@@ -15,6 +15,7 @@ test.describe.serial('Catálogos: rutas, personal y equipos', () => {
     const fila = page.getByRole('row', { name: /E2E-NORTE/ })
     await expect(fila).toContainText('Ruta Norte E2E')
     await expect(fila).toContainText('Zona 18')
+    await capturar(page, '03-01-ruta-creada')
 
     await page.getByRole('button', { name: 'Editar E2E-NORTE' }).click()
     const edicion = page.getByRole('dialog')
@@ -64,6 +65,7 @@ test.describe.serial('Catálogos: rutas, personal y equipos', () => {
 
     await page.getByLabel('Porcentaje 2').fill('40')
     await expect(page.getByRole('status')).toContainText('100.00 %')
+    await capturar(page, '03-02-equipo-de-ruta-reparto-100')
     await page.getByRole('button', { name: 'Guardar equipo' }).click()
 
     await page.goto('/catalogos/rutas')
