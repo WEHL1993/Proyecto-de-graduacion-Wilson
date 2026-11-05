@@ -286,9 +286,20 @@ def seed_roles_y_permisos(session: Session) -> dict[str, Rol]:
 
 
 def seed_pantallas(session: Session) -> None:
-    """Crea las pantallas que falten con sus permisos; las existentes no se modifican."""
+    """Crea las pantallas que falten con sus permisos; las existentes no se modifican.
+
+    Excepción: una pantalla existente SIN ningún permiso recibe los suyos por defecto. En una BD
+    nueva las migraciones 0007/0012 crean las pantallas antes de que este seed cree los permisos,
+    por lo que sus INSERT en `pantallas_permisos` no enlazan nada y la pantalla queda invisible
+    para todos los roles. Una pantalla sin permisos nunca es una configuración útil.
+    """
     for clave, etiqueta, ruta, prefijo, grupo, orden, codigos in PANTALLAS:
-        if session.query(Pantalla).filter_by(clave=clave).one_or_none() is not None:
+        existente = session.query(Pantalla).filter_by(clave=clave).one_or_none()
+        if existente is not None:
+            if not existente.permisos:
+                existente.permisos = [
+                    session.query(Permiso).filter_by(codigo=codigo).one() for codigo in codigos
+                ]
             continue
         pantalla = Pantalla(
             clave=clave,

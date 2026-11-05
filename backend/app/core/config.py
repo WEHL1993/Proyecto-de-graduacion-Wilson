@@ -2,9 +2,10 @@
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Annotated
 
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 PROJECT_ROOT = BACKEND_DIR.parent
@@ -36,8 +37,11 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60
 
-    # CORS (frontend en fase posterior)
-    cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
+    # CORS (frontend en fase posterior). `NoDecode`: sin él, pydantic-settings intenta leer la
+    # variable como JSON antes del validador y `CORS_ORIGINS=http://a,http://b` rompe el arranque.
+    cors_origins: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["http://localhost:5173"]
+    )
 
     # Rutas de artefactos y datos
     ml_artifacts_dir: Path = PROJECT_ROOT / "ml_artifacts"

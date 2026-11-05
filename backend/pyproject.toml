@@ -13,7 +13,7 @@ dependencies = [
     "uvicorn[standard]>=0.30",
     "python-multipart>=0.0.9",      # multipart/form-data para /etl/upload-excel
     "pydantic>=2.7,<3.0",
-    "pydantic-settings>=2.3",
+    "pydantic-settings>=2.7",       # NoDecode (CORS_ORIGINS en CSV)
     "email-validator>=2.1",
     # Persistencia
     "sqlalchemy>=2.0.30,<2.1",
