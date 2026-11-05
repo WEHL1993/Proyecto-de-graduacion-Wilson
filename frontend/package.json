@@ -9,7 +9,10 @@
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
     "test": "vitest run",
-    "gen:api": "openapi-typescript ../docs/architecture/openapi.yaml -o src/types/openapi.d.ts"
+    "gen:api": "openapi-typescript ../docs/architecture/openapi.yaml -o src/types/openapi.d.ts",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:report": "playwright show-report e2e/.tmp/report"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.104.0",
@@ -21,6 +24,7 @@
     "recharts": "^3.10.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
     "@types/node": "^26.6.3",

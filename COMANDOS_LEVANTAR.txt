@@ -61,8 +61,31 @@ COMANDOS ÚTILES
   make openapi              # regenerar docs/architecture/openapi.yaml
   make frontend-test        # vitest
   make frontend-build       # tsc + vite build
+  make e2e                  # pruebas E2E con Playwright (ver sección siguiente)
   cd frontend; npm run gen:api   # regenerar tipos tras make openapi
 
   Sin make (Windows):
     cd backend; .venv/Scripts/python -m pytest
     cd backend; .venv/Scripts/python scripts/export_openapi.py
+
+
+PRUEBAS E2E CON PLAYWRIGHT (sistema completo en el navegador)
+-------------------------------------------------------------
+Recorren el flujo del negocio de punta a punta: login y permisos, usuarios, catálogos,
+productos/kardex, ETL (Excel real + histórico sintético), entrenamiento y reentrenamiento del
+modelo (con el Worker), recepción FEL, plan de carga, liquidación, compras, reportes y política.
+
+Requisitos (una sola vez):
+  - PostgreSQL en localhost:5432 con el usuario ds_user (basta el contenedor postgres:
+      docker compose -f infra/docker-compose.yml --env-file .env up -d postgres
+    con POSTGRES_PORT=5432 en .env)
+  - backend/.venv instalado (make install)
+  - cd frontend; npm install; npx playwright install chromium
+
+Ejecutar:
+  cd frontend; npm run test:e2e          # o: make e2e
+  npm run test:e2e:ui                    # modo interactivo
+  npm run test:e2e:report                # informe HTML (trazas y videos de los fallos)
+
+Usan una BD propia (ds_e2e) que se BORRA y recrea en cada corrida, la API en el puerto 8001 y
+la web en el 5174: no tocan la BD ni los puertos de desarrollo. Otra BD: E2E_DATABASE_URL.
