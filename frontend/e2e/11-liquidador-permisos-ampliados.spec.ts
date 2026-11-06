@@ -72,6 +72,7 @@ test.describe.serial('Liquidador con permisos ampliados (liquidador@ds.gt)', () 
     await page.getByRole('textbox', { name: 'Contraseña temporal' }).fill(OSCAR.temporal)
     await page.getByRole('textbox', { name: 'Nueva contraseña (mínimo 8 caracteres)' }).fill(OSCAR.nueva)
     await page.getByRole('textbox', { name: 'Confirmar nueva contraseña' }).fill(OSCAR.nueva)
+    await capturar(page, '11-02a-cambio-contrasena-liquidador')
     await page.getByRole('button', { name: 'Guardar contraseña' }).click()
     await expect(page).not.toHaveURL(/\/cambiar-password/)
 
@@ -95,6 +96,7 @@ test.describe.serial('Liquidador con permisos ampliados (liquidador@ds.gt)', () 
       await page.goto(ruta)
       await expect(page.getByRole('heading', { name: 'Acceso denegado' })).toBeVisible()
     }
+    await capturar(page, '11-02b-acceso-denegado-liquidador')
   })
 
   test('puede generar un plan de carga pero no aprobarlo', async ({ page }) => {
